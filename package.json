@@ -18,7 +18,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@byokit/accounts": "0.25.0",
+    "@byokit/accounts": "0.28.0",
     "@byokit/secrets": "0.5.2",
     "@earendil-works/pi-ai": "1.2.0"
   }
