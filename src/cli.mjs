@@ -2,7 +2,7 @@
 // first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
 import { make } from './make.mjs';
@@ -91,7 +91,7 @@ if (command === 'make') {
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out },
     ...(blocked.size && { blocked_remote: [...blocked] }),
     help: [blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
-      `Post them for review: sign-off-axi post --type design --title "<question>"${files.map((f, i) => ` --option ${'abcde'[i]}=<label> --mock ${'abcde'[i]}=<board-relative path to ${f.file}>`).join('')}`] }));
+      `Post them for review: sign-off-axi post --type design --title "<question>"${files.map((f, i) => ` --option ${'abcde'[i]}=<label> --mock ${'abcde'[i]}=${relative(resolve('.sign-off'), f.file)}`).join('')}`] }));
 } else if (command === 'doctor') {
   const rows = [{ status: 'ok', label: 'node', detail: process.version }];
   let c;
