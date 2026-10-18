@@ -25,7 +25,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
   const text = answer.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   const source = sourceOf(text);
   if (!source) throw new Error(`the model answered with no HTML page; it began: ${JSON.stringify(text.slice(0, 200))}`);
-  let html = source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`);
+  let html = /<head[^>]*>/i.test(source) ? source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (htmlTag) => `${htmlTag}<head>${POLICY}</head>`) : /<!doctype[^>]*>/i.test(source) ? source.replace(/<!doctype[^>]*>/i, (doctype) => `${doctype}<head>${POLICY}</head>`) : `<head>${POLICY}</head>${source}`;
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
   return { html, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2]).matchAll(REMOTE_URL)].map((url) => url[0])))],
     tokens_in: answer.usage?.input ?? 0, tokens_out: answer.usage?.output ?? 0 };

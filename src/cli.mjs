@@ -2,7 +2,7 @@
 // first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
 import { make } from './make.mjs';
@@ -79,7 +79,8 @@ if (command === 'make') {
     try {
       made = await make({ prompt, ...c, variation: count > 1 ? `${i + 1} of ${count}: ${VARIATIONS[i % VARIATIONS.length]}` : undefined });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
-    const out = resolve(count > 1 && !values.out.includes('{i}') ? values.out.replace(/(\.[^.]+)$/, `-${i + 1}$1`) : values.out.replace('{i}', String(i + 1)));
+    const numbered = values.out.includes('{i}') ? values.out.replace('{i}', String(i + 1)) : count > 1 ? values.out.slice(0, -extname(values.out).length || undefined) + `-${i + 1}` + extname(values.out) : values.out;
+    const out = resolve(numbered);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, made.html);
     files.push({ file: out, bytes: Buffer.byteLength(made.html) });

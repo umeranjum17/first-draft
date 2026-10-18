@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
-const PAGE = '<!doctype html><html><head><meta charset="utf-8"><title>Notes</title><style>body{font-family:system-ui}</style></head><body><h1>Sign in to your notes</h1><input placeholder="Email"></body></html>';
+const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><input placeholder="Email"></body></html>';
 
 // An OpenAI Responses stand-in answering every request with PAGE in an html block, streamed.
 function standIn(seen) {
@@ -55,8 +55,13 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.notEqual(seen[0].body.input, seen[1].body.input, 'the two options vary');
   assert.match(JSON.stringify(seen[0].body), /no remote URL/); // the system's own rules ride along
 
+  await run('make', 'a notes dashboard', '--out', join(dir, 'mocks/design'), '--count', '2');
+  assert.ok(readFileSync(join(dir, 'mocks/design-1'), 'utf8').includes('default-src'));
+  assert.ok(readFileSync(join(dir, 'mocks/design-2'), 'utf8').includes('default-src'));
+
   for (const n of [1, 2]) {
     const html = readFileSync(join(dir, `sign-in-${n}.html`), 'utf8');
+    assert.match(html, /<!doctype html><head><meta http-equiv="Content-Security-Policy"/i);
     assert.match(html, /default-src 'none'/);
     assert.match(html, /Sign in to your notes/);
     assert.doesNotMatch(html, /https?:\/\//);
