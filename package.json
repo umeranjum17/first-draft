@@ -1,0 +1,25 @@
+{
+  "name": "first-draft-axi",
+  "version": "0.1.0",
+  "description": "AXI CLI that turns a prompt into design mocks: self-contained HTML pages, made by the model you choose through BYOKit.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "first-draft-axi": "src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "skills"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@byokit/accounts": "0.25.0",
+    "@byokit/secrets": "0.5.2",
+    "@earendil-works/pi-ai": "1.2.0"
+  }
+}
