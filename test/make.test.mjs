@@ -2,7 +2,7 @@
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,11 +10,11 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
-const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img src=https://example.com/image.png><img srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
+const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
 
-// An OpenAI Responses stand-in answering every request with PAGE in an html block, streamed.
+// A local provider drives the actual upstream edit -> done -> final tool loop.
 function standIn(seen) {
-  const full = `Here it is.\n\`\`\`html\n${PAGE}\n\`\`\``;
+  const full = 'The design is ready.';
   const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
   const server = createServer((req, res) => {
     let body = '';
@@ -22,6 +22,15 @@ function standIn(seen) {
     req.on('end', () => {
       seen.push({ url: req.url, auth: req.headers.authorization, session: req.headers['x-opencode-session'], body: JSON.parse(body) });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const step = (seen.length - 1) % 3;
+      if (step < 2) {
+        const content = body.includes('script fixture') ? PAGE.replace('</body>', '<script>alert(1)</script></body>') : PAGE;
+        const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
+          arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: 'index.html' }) };
+        res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
+          + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 } } }));
+        return;
+      }
       res.end(ev({ type: 'response.created', response: { id: 'r1' } })
         + ev({ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'm1' } })
         + ev({ type: 'response.output_text.delta', output_index: 0, item_id: 'm1', content_index: 0, delta: full })
@@ -38,26 +47,32 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   const seen = [];
   const server = await standIn(seen);
   t.after(() => server.close());
-  const env = { ...process.env, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
 
   await assert.rejects(run('make', 'a sign-in page', '--out', join(dir, 'x.html')), (e) => /NO_AGENT/.test(e.stdout));
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-  assert.match((await run('doctor')).stdout, /"ready":true/);
+  const health = JSON.parse((await run('doctor')).stdout);
+  assert.equal(health.ready, true);
+  assert.ok(health.checks.some((c) => c.label === 'engine' && c.status === 'ok'));
+  assert.equal(seen.length, 0, 'doctor makes no paid call');
 
   const { stdout } = await run('make', 'a sign-in page for a notes app', '--out', join(dir, 'sign-in.html'), '--count', '2');
-  assert.match(stdout, /"tokens_out":44/);
+  assert.match(stdout, /"tokens_out":132/);
   const blocked = JSON.parse(stdout).blocked_remote;
   assert.ok(blocked.includes('https://example.com/submit'));
   assert.ok(blocked.includes('https://example.com/image.png'));
   assert.ok(blocked.includes('//cdn.example.com/a.png'));
   assert.ok(blocked.includes('https://cdn.example.com/b.png'));
 
-  assert.equal(seen.length, 2);
+  assert.equal(seen.length, 6);
   assert.equal(seen[0].auth, 'Bearer test-key');
   assert.ok(seen[0].session, 'every Go call names its conversation');
   assert.equal(seen[0].body.model, 'muse-spark-1.3-contributor');
-  assert.notEqual(seen[0].body.input, seen[1].body.input, 'the two options vary');
+  assert.notDeepEqual(seen[0].body.input, seen[3].body.input, 'the two options vary');
+  assert.ok(seen[0].body.tools.some((t) => t.name === 'str_replace_based_edit_tool'));
+  assert.match(JSON.stringify(seen[1].body.input), /Created index.html/);
+  assert.match(JSON.stringify(seen[2].body.input), /no syntactic issues/);
   assert.match(JSON.stringify(seen[0].body), /no remote URL/); // the system's own rules ride along
 
   await run('make', 'a notes dashboard', '--out', join(dir, 'mocks/design'), '--count', '2');
@@ -69,7 +84,38 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
     assert.match(html, /<head[^>]*>\s*<meta http-equiv="Content-Security-Policy"/i);
     assert.match(html, /default-src 'none'; form-action 'none'/);
     assert.match(html, /Sign in to your notes/);
-    assert.doesNotMatch(html, /script-src[^;]*unsafe-inline/);
+    assert.doesNotMatch(html, /script-src[^;]*unsafe-inline|<script\b/i);
     assert.ok(Buffer.byteLength(html) < 5_000_000, 'sign-off takes mocks of 5 MB or less');
   }
+  await assert.rejects(run('make', 'script fixture', '--out', join(dir, 'script.html')), (e) => /only script-free HTML/.test(e.stdout));
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'not-a-real-model');
+  await assert.rejects(run('doctor'), (e) => /lists no model/.test(e.stdout));
+
+  // Installed-CLI journey, through the published BYOKit adapters, with a private native fixture.
+  writeFileSync(join(dir, 'codex'), `#!${process.execPath}
+import { appendFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+const args = process.argv.slice(2);
+if (args[0] === 'app-server') {
+  createInterface({ input: process.stdin }).on('line', (line) => { const m = JSON.parse(line); console.log(JSON.stringify({ id: m.id, result: m.id === 1 ? {} : { account: { type: 'chatgpt', email: 'umer@example.test', planType: 'plus' } } })); });
+} else if (args[0] === 'login') { console.log('Logged in using ChatGPT'); }
+else {
+  appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-calls', args[args.indexOf('--model') + 1] + '\\n');
+  let input = ''; for await (const c of process.stdin) input += c;
+  if (input.includes('failure fixture')) process.exit(1);
+  const { messages } = JSON.parse(input), results = messages.filter((m) => m.role === 'toolResult');
+  const call = results.length === 0 ? { name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'index.html', file_text: ${JSON.stringify(PAGE)} }) } : results.length === 1 ? { name: 'done', arguments: JSON.stringify({ path: 'index.html' }) } : null;
+  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ text: call ? '' : 'Ready', calls: call ? [call] : [] }) } }));
+  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 7, output_tokens: 8 } }));
+}
+`, { mode: 0o700 });
+  env.PATH = `${dir}:${process.env.PATH}`;
+  await run('init', '--agent', 'byokit:codex', '--model', 'openai-codex/gpt-6-luna');
+  assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
+  assert.equal(seen.length, 15, 'CLI doctor does not use the plan-key provider');
+  await run('make', 'a sign-in page for Umer', '--out', join(dir, 'native.html'));
+  assert.match(readFileSync(join(dir, 'native.html'), 'utf8'), /Content-Security-Policy/);
+  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(3).fill('gpt-6-luna'));
+  await assert.rejects(run('make', 'failure fixture', '--out', join(dir, 'fail.html')), (e) => /model could not answer/.test(e.stdout));
+  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 4, 'failed boundary call is not retried');
 });

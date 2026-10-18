@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
-import { make } from './make.mjs';
+import { make, engineDoctor } from './make.mjs';
 
 const VERSION = '0.1.0';
 const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
@@ -53,10 +53,10 @@ const agentOrAsk = () => {
 
 const HELP = `usage: first-draft-axi <command> [flags]
 commands[3]:
-  make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one model call each)
+  make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
   doctor                              show whether the configured agent is ready, with no paid call
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
-The agent is the person's own choice: first-draft never picks one. A route is a BYOKit plan key route such as byokit:opencode-go.
+The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key route or byokit:codex for the installed subscription CLI.
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
@@ -93,14 +93,14 @@ if (command === 'make') {
     help: [blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
       `Post them for review: sign-off-axi post --type design --title "<question>"${files.map((f, i) => ` --option ${'abcde'[i]}=<label> --mock ${'abcde'[i]}=${relative(resolve('.sign-off'), f.file)}`).join('')}`] }));
 } else if (command === 'doctor') {
-  const rows = [{ status: 'ok', label: 'node', detail: process.version }];
+  const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor()];
   let c;
   try { c = read(); } catch (e) { fail('CONFIG', e.message, [`Fix ${CONFIG()}, then run \`first-draft-axi doctor\``]); }
   const unready = (check) => { console.log(JSON.stringify({ ready: false, checks: [...rows, check], help: ['Fix the failing checks, then run `first-draft-axi doctor` again'] })); process.exit(1); };
   if (!c.agent) unready({ status: 'fail', label: 'agent', detail: `no agent is set in ${CONFIG()}`, fix: ASK });
   if (!routeOf(c.agent)) unready({ status: 'fail', label: 'agent', detail: `${c.agent} is not byokit:<route>`, fix: ASK });
   rows.push(c.model ? { status: 'ok', label: 'model', detail: c.model } : { status: 'fail', label: 'model', detail: `no model is set for ${c.agent}`, fix: ASK });
-  rows.push(await routeDoctor(routeOf(c.agent)));
+  rows.push(await routeDoctor(routeOf(c.agent), c.model));
   const ready = rows.every((r) => r.status !== 'fail');
   console.log(JSON.stringify({ ready, checks: rows, help: [ready ? 'Run `first-draft-axi make "<prompt>" --out <file.html>`' : 'Fix the failing checks, then run `first-draft-axi doctor` again'] }));
   if (!ready) process.exit(1);

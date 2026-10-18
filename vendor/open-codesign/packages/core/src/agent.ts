@@ -907,6 +907,8 @@ function buildTurnPrompt(input: GenerateInput, fs: TextEditorFsCallbacks | undef
 export type { AgentEvent };
 
 export interface GenerateViaAgentDeps {
+  /** Host model boundary (first-draft uses BYOKit). */
+  streamFn?: NonNullable<ConstructorParameters<typeof Agent>[0]>['streamFn'];
   research?: ResearchHost | undefined;
   activeMessages?: ActiveRunMessages | undefined;
   /** Optional subscriber for Agent lifecycle + streaming events. */
@@ -1407,6 +1409,7 @@ async function generateViaAgentInternal(
               streamSimple(model, context, { ...options, timeoutMs: requestTimeoutMs }),
           }
         : {}),
+      ...(deps.streamFn ? { streamFn: deps.streamFn } : {}),
     });
     retryAgent.subscribe((event) => {
       deps.activeMessages?.handleEvent(event, () => {
