@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "AXI CLI that turns a prompt into design mocks: self-contained HTML pages, made by the model you choose through BYOKit.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umeranjum17/first-draft.git"
+  },
   "type": "module",
   "bin": {
     "first-draft-axi": "src/cli.mjs"
