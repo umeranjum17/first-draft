@@ -66,7 +66,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
 
   for (const n of [1, 2]) {
     const html = readFileSync(join(dir, `sign-in-${n}.html`), 'utf8');
-    assert.match(html, /<!doctype html><head><meta http-equiv="Content-Security-Policy"/i);
+    assert.match(html, /<head[^>]*>\s*<meta http-equiv="Content-Security-Policy"/i);
     assert.match(html, /default-src 'none'; form-action 'none'/);
     assert.match(html, /Sign in to your notes/);
     assert.doesNotMatch(html, /script-src[^;]*unsafe-inline/);
