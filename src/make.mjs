@@ -30,7 +30,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
   const output = await generateViaAgent({ prompt: variation ? `${prompt}\nVariation: ${variation}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
     systemPrompt: `${composeSystemPrompt({ mode: 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. Use system fonts, semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Use the supplied editor to write it, then done(path="index.html").`,
-  }, { fs, encourageToolUse: false, tools: [makeSetTodosTool(), makeTextEditorTool(fs), makeDoneTool(fs)],
+  }, { fs, encourageToolUse: false, tools: [makeSetTodosTool(), makeTextEditorTool(fs), { ...makeDoneTool(fs), executionMode: 'sequential' }],
     onEvent: (e) => {
       if (e.type === 'tool_execution_start' && e.toolName === 'str_replace_based_edit_tool' && e.args.command !== 'view') verified = false;
       if (e.type === 'tool_execution_end' && e.toolName === 'done') verified = !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html';

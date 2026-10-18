@@ -2,7 +2,7 @@
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +13,7 @@ const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
 
 // A local provider drives the actual upstream edit -> done -> final tool loop.
-function standIn(seen) {
+function standIn(seen, edit, doneFirst = true) {
   const full = 'The design is ready.';
   const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
   const server = createServer((req, res) => {
@@ -27,7 +27,9 @@ function standIn(seen) {
         const content = body.includes('script fixture') ? PAGE.replace('</body>', '<script>alert(1)</script></body>') : PAGE;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
           arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: 'index.html' }) };
-        res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
+        const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
+        const items = step === 1 && edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [item];
+        res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
           + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 } } }));
         return;
       }
@@ -40,6 +42,31 @@ function standIn(seen) {
   });
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
 }
+
+test('make requires verification after every batched mutation', async (t) => {
+  for (const edit of [
+    { command: 'create', file_text: PAGE.replace('Sign in', 'revised') },
+    { command: 'str_replace', old_str: 'Sign in', new_str: 'revised' },
+    { command: 'insert', insert_line: 0, new_str: '<!-- revised -->' },
+  ]) for (const doneFirst of [true, false]) await t.test(`${edit.command}, done ${doneFirst ? 'before' : 'after'} edit`, async (t) => {
+    const dir = mkdtempSync(join(process.cwd(), '.make-order-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const seen = [], server = await standIn(seen, edit, doneFirst);
+    t.after(() => server.close());
+    const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+    const out = join(dir, 'mock.html');
+    await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+    if (doneFirst) {
+      await assert.rejects(run('make', 'a notes page', '--out', out), (e) => /engine did not verify index.html with done/.test(e.stdout));
+      assert.equal(existsSync(out), false);
+    } else {
+      await run('make', 'a notes page', '--out', out);
+      assert.match(readFileSync(out, 'utf8'), /revised/);
+    }
+    assert.equal(seen.length, 3);
+  });
+});
 
 test('make writes self-contained mocks through the BYOKit Go route', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
