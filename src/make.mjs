@@ -12,7 +12,7 @@ function sourceOf(text) {
   return /<html[\s>]/i.test(text) ? text : undefined;
 }
 
-const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; form-action 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:" />`;
+const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; form-action 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:" />`;
 const REMOTE = /\b(?:src|href|srcset|action)\s*=\s*["']([^"']+)|url\(\s*["']?([^"')]+)["']?\s*\)/gi;
 const REMOTE_URL = /(?:https?:)?\/\/[^\s,]+/g;
 
