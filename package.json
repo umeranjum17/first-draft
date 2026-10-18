@@ -1,0 +1,36 @@
+{
+  "name": "first-draft-axi",
+  "version": "0.1.0",
+  "description": "AXI CLI that turns a prompt into a design mock: one self-contained HTML page, made by the model you choose.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "first-draft-axi": "dist/first-draft-axi.mjs"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "NOTICE",
+    "vendor/open-codesign/LICENSE",
+    "vendor/open-codesign/NOTICE"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@byokit/accounts": "0.25.0",
+    "@byokit/secrets": "0.5.2",
+    "@earendil-works/pi-ai": "1.2.0",
+    "axi-sdk-js": "0.1.13",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "zod": "4.4.2"
+  }
+}

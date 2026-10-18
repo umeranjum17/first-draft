@@ -1,0 +1,14 @@
+first-draft
+Copyright 2026 first-draft contributors
+
+This product includes software from Open CoDesign
+(https://github.com/OpenCoworkAI/open-codesign), MIT License,
+Copyright (c) 2026 OpenCoworkAI Contributors. Its packages are in
+vendor/open-codesign, with its own LICENSE and NOTICE beside them.
+
+Those packages carry builds of:
+- React and React DOM (https://react.dev), MIT License, Copyright (c) Meta
+  Platforms, Inc. and affiliates. Every mock page first-draft makes
+  includes them.
+- Babel standalone (https://babeljs.io), MIT License, Copyright (c) 2014-present
+  Sebastian McKenzie and other contributors. The built CLI includes it.
