@@ -5,9 +5,11 @@ Turn a prompt into design mocks: self-contained HTML pages that open anywhere wi
 ```sh
 first-draft-axi init --agent byokit:opencode-go --model muse-spark-1.3-contributor  # your choice, saved once
 first-draft-axi doctor                                                              # is that route ready? no paid call
-first-draft-axi make "A sign-in page for a notes app" --out mocks/sign-in.html --count 3
+first-draft-axi make "A sign-in page for a notes app" --out .sign-off/mocks/sign-in.html --count 3
 sign-off-axi post --type design --title "Pick the sign-in layout" --option a=Calm --mock a=mocks/sign-in-1.html --option b=Bold --mock b=mocks/sign-in-2.html --option c=Dense --mock c=mocks/sign-in-3.html
 ```
+
+Mock paths on the post are relative to the board file's folder (`.sign-off/`), so make into `.sign-off/mocks/`.
 
 ## Install
 
