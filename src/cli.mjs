@@ -26,7 +26,9 @@ const read = () => {
 };
 const save = ({ agent, model }) => {
   let c = {};
-  try { c = JSON.parse(readFileSync(CONFIG(), 'utf8')); } catch { /* fresh config */ }
+  try { c = JSON.parse(readFileSync(CONFIG(), 'utf8')); } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
   c = { ...c, agent, agent_config: { ...c.agent_config, [agent]: { model } } };
   mkdirSync(HOME(), { recursive: true });
   writeFileSync(CONFIG(), `${JSON.stringify(c, null, 2)}\n`);

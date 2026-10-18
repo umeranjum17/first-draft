@@ -13,7 +13,8 @@ function sourceOf(text) {
 }
 
 const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:" />`;
-const REMOTE = /\b(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)|url\(\s*["']?(https?:\/\/[^"')\s]+)/g;
+const REMOTE = /\b(?:src|href|srcset)\s*=\s*["']([^"']+)|url\(\s*["']?([^"')]+)["']?\s*\)/gi;
+const REMOTE_URL = /(?:https?:)?\/\/[^\s,]+/g;
 
 // One mock from a prompt: the page HTML, the remote addresses it names (kept from loading by
 // the policy), and the call's token counts. variation steers a different option of several.
@@ -26,6 +27,6 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
   if (!source) throw new Error(`the model answered with no HTML page; it began: ${JSON.stringify(text.slice(0, 200))}`);
   let html = source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
-  return { html, remote: [...new Set([...html.matchAll(REMOTE)].map((m) => m[1] ?? m[2]))],
+  return { html, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2]).matchAll(REMOTE_URL)].map((url) => url[0])))],
     tokens_in: answer.usage?.input ?? 0, tokens_out: answer.usage?.output ?? 0 };
 }
