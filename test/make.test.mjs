@@ -285,7 +285,7 @@ else {
   assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 4, 'failed boundary call is not retried');
 });
 
-test('the engine prompt instructs only the tools the host supplies', async (t) => {
+test('the engine prompt carries the export contract and the brand rule', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [], server = await standIn(seen, null);
@@ -298,5 +298,21 @@ test('the engine prompt instructs only the tools the host supplies', async (t) =
   assert.match(sent, /Host export contract/);
   assert.match(sent, /Only two tools exist/);
   assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
-  assert.doesNotMatch(sent, /\b(?:skill|scaffold|tweaks)\s*\(/);
+  assert.match(sent, /Brand values are data, not memory/);
+});
+
+test('script-free prose is exported, not mistaken for script', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const prose = '<!doctype html><html><head><title>JavaScript: The Good Parts</title><style nonce="n0nce">p{color:red}</style></head><body><h1 title="JavaScript: The Good Parts">JavaScript: The Good Parts</h1><p>Shop online = save 20%</p></body></html>';
+  const seen = [], server = await standIn(seen, null, true, 'index.html', prose);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'prose.html');
+  await run('make', 'a JavaScript guide page', '--out', out);
+  const html = readFileSync(out, 'utf8');
+  assert.match(html, /Shop online = save 20%/);
+  assert.match(html, /Content-Security-Policy/);
 });
