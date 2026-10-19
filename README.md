@@ -20,7 +20,7 @@ An agent skill that points at the CLI is in `skills/first-draft-axi/SKILL.md`.
 ## Commands
 
 - `make "<prompt>" --out <file.html> [--count N]`: one upstream engine run per mock (possibly several model turns), then N HTML pages (`--count 3` with `--out mocks/x.html` writes `mocks/x-1.html` …; use `{i}` in `--out` to place the number yourself). Each page is script-free and carries its own content security policy, so it loads nothing from the network when viewed; if a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty.
-- `doctor`: loads the built engine and prompts, checks Node, config, model metadata and the selected route (installed CLI status or a plan key) without a paid call. Server-side model availability is not probed.
+- `doctor`: loads the built engine and prompts, then checks Node, config, that a model is set, and the selected route (installed CLI sign-in status, or a plan key with the model checked against pi-ai's list) without a paid call. Server-side model availability is not probed.
 - `init --agent byokit:<route> --model <model>`: saves your agent and model. With no agent or model set, `make` stops and says to ask you.
 
 ## Config

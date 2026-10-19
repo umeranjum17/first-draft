@@ -28,14 +28,13 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
   };
   const done = makeDoneTool(fs);
   const failed = new AbortController(), signal = AbortSignal.any([failed.signal, AbortSignal.timeout(timeoutMs)]);
-  let turns = 0, verified = false;
+  let turns = 0, verified = null;
   const output = await generateViaAgent({ prompt: variation ? `${prompt}\nVariation: ${variation}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
     systemPrompt: `${composeSystemPrompt({ mode: 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. Use system fonts, semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Use the supplied editor to write it, then done(path="index.html").`,
   }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), { ...done, executionMode: 'sequential', execute: (id, params, ...rest) => done.execute(id, params.path ? { ...params, path: key(params.path) } : params, ...rest) }],
     onEvent: (e) => {
-      if (e.type === 'tool_execution_start' && e.toolName === 'str_replace_based_edit_tool' && e.args.command !== 'view') verified = false;
-      if (e.type === 'tool_execution_end' && e.toolName === 'done' && e.result.details?.path === 'index.html') verified = !e.isError && e.result.details.status === 'ok';
+      if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html') verified = files.get('index.html');
     },
     streamFn: (_model, context, options) => {
       const stream = createAssistantMessageEventStream();
@@ -54,9 +53,9 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
       })();
       return stream;
     } }).catch((e) => { throw failed.signal.reason ?? e; });
-  const source = output.artifacts.find((a) => a.entryPath === 'index.html')?.content;
+  const source = files.get('index.html');
   if (!source || !/<!doctype\s+html|<html[\s>]|<head[\s>]/i.test(source)) throw new Error('engine produced no complete index.html');
-  if (!verified) throw new Error('engine did not verify index.html with done');
+  if (verified === null || verified !== source) throw new Error('engine did not verify index.html with done');
   if (/<script\b|\son\w+\s*=|javascript\s*:/i.test(source)) throw new Error('engine output contains script; only script-free HTML is supported');
   const html = /<head[^>]*>/i.test(source) ? source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');

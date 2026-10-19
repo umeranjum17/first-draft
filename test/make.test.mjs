@@ -99,6 +99,25 @@ test('an unrelated done call keeps the verified export', async (t) => {
   assert.equal(seen.length, 3);
 });
 
+test('edits outside index.html keep the verified export', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const elsewhere = [
+    { type: 'function_call', id: 'fc-md', call_id: 'c-md', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'DESIGN.md', file_text: '# Design\n' }) },
+    { type: 'function_call', id: 'fc-jsx', call_id: 'c-jsx', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'App.jsx', file_text: 'export default () => null;\n' }) },
+    { type: 'function_call', id: 'fc-miss', call_id: 'c-miss', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'str_replace', path: 'index.html', old_str: 'no such text', new_str: 'x' }) },
+  ];
+  const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE, elsewhere);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'kept-edit.html');
+  await run('make', 'a notes page', '--out', out);
+  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
+  assert.equal(seen.length, 3);
+});
+
 test('make verifies an export path the model spells loosely', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
