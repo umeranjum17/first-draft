@@ -15,7 +15,7 @@ const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt=
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 
 // A local provider drives the actual upstream edit -> done -> final tool loop.
-function standIn(seen, edit, doneFirst = true, donePath = 'index.html') {
+function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = PAGE, extra = null) {
   const full = 'The design is ready.';
   const server = createServer((req, res) => {
     let body = '';
@@ -25,11 +25,11 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html') {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const step = (seen.length - 1) % 3;
       if (step < 2) {
-        const content = body.includes('script fixture') ? PAGE.replace('</body>', '<script>alert(1)</script></body>') : PAGE;
+        const content = body.includes('script fixture') ? page.replace('</body>', '<script>alert(1)</script></body>') : page;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
           arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
-        const items = step === 1 && edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [item];
+        const items = step !== 1 ? [item] : edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [item, ...(extra ?? [])];
         res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
           + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 } } }));
         return;
@@ -67,6 +67,36 @@ test('make requires verification after every batched mutation', async (t) => {
     }
     assert.equal(seen.length, 3);
   });
+});
+
+test('make accepts a headless HTML5 document and injects the policy', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null, true, 'index.html', '<!doctype html><title>Notes</title><body><h1>Sign in to your notes</h1></body>');
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'headless.html');
+  await run('make', 'a notes page', '--out', out);
+  const html = readFileSync(out, 'utf8');
+  assert.match(html, /^<!doctype html><head><meta http-equiv="Content-Security-Policy"/i);
+  assert.match(html, /Sign in to your notes/);
+});
+
+test('an unrelated done call keeps the verified export', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const elsewhere = { type: 'function_call', id: 'fc-elsewhere', call_id: 'c-elsewhere', name: 'done', arguments: JSON.stringify({ path: 'App.jsx' }) };
+  const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE, [elsewhere]);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'kept.html');
+  await run('make', 'a notes page', '--out', out);
+  assert.match(readFileSync(out, 'utf8'), /Content-Security-Policy/);
+  assert.equal(seen.length, 3);
 });
 
 test('make verifies an export path the model spells loosely', async (t) => {

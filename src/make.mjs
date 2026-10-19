@@ -35,7 +35,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
   }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), { ...done, executionMode: 'sequential', execute: (id, params, ...rest) => done.execute(id, params.path ? { ...params, path: key(params.path) } : params, ...rest) }],
     onEvent: (e) => {
       if (e.type === 'tool_execution_start' && e.toolName === 'str_replace_based_edit_tool' && e.args.command !== 'view') verified = false;
-      if (e.type === 'tool_execution_end' && e.toolName === 'done') verified = !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html';
+      if (e.type === 'tool_execution_end' && e.toolName === 'done' && e.result.details?.path === 'index.html') verified = !e.isError && e.result.details.status === 'ok';
     },
     streamFn: (_model, context, options) => {
       const stream = createAssistantMessageEventStream();
@@ -55,10 +55,10 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
       return stream;
     } }).catch((e) => { throw failed.signal.reason ?? e; });
   const source = output.artifacts.find((a) => a.entryPath === 'index.html')?.content;
-  if (!source || !/<html[\s>]/i.test(source)) throw new Error('engine produced no complete index.html');
+  if (!source || !/<!doctype\s+html|<html[\s>]|<head[\s>]/i.test(source)) throw new Error('engine produced no complete index.html');
   if (!verified) throw new Error('engine did not verify index.html with done');
   if (/<script\b|\son\w+\s*=|javascript\s*:/i.test(source)) throw new Error('engine output contains script; only script-free HTML is supported');
-  const html = /<head[^>]*>/i.test(source) ? source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`) : source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
+  const html = /<head[^>]*>/i.test(source) ? source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
   return { html, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').matchAll(REMOTE_URL)].map((url) => url[0])))],
     tokens_in: output.inputTokens, tokens_out: output.outputTokens };
