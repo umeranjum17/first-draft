@@ -27,7 +27,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
     strReplace: (path, old, text) => { const s = get(path), hits = s.split(old).length - 1; if (hits !== 1) throw new Error(hits === 0 ? `old_str not found in ${key(path)}` : `old_str is ambiguous in ${key(path)}; provide more context`); return put(path, s.replace(old, () => text)); },
     insert: (path, line, text) => { const lines = get(path).split('\n'); if (!Number.isInteger(line) || line < 0 || line > lines.length) throw new Error('insert_line is outside the file'); lines.splice(line, 0, text); return put(path, lines.join('\n')); },
   };
-  const done = makeDoneTool(fs);
+  const done = makeDoneTool({ ...fs, view: (path) => key(path) === 'index.html' ? fs.view(path) : null, listDir: (dir) => fs.listDir(dir).filter((p) => key(p) === 'index.html') });
   const failed = new AbortController(), signal = AbortSignal.any([failed.signal, AbortSignal.timeout(timeoutMs)]);
   let turns = 0, verified = null;
   const answer = (_model, context, options) => {

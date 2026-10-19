@@ -15,7 +15,7 @@ const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt=
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 
 // A local provider drives the actual upstream edit -> done -> final tool loop.
-function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = PAGE, extra = null) {
+function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = PAGE, extra = null, pre = null) {
   const full = 'The design is ready.';
   const server = createServer((req, res) => {
     let body = '';
@@ -29,7 +29,7 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
           arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
-        const items = step !== 1 ? [item] : edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [item, ...(extra ?? [])];
+        const items = step !== 1 ? [item] : edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [...(pre ?? []), item, ...(extra ?? [])];
         res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
           + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 } } }));
         return;
@@ -113,6 +113,21 @@ test('edits outside index.html keep the verified export', async (t) => {
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'kept-edit.html');
+  await run('make', 'a notes page', '--out', out);
+  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
+  assert.equal(seen.length, 3);
+});
+
+test('a stray DESIGN.md does not block verifying a valid index.html', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const design = { type: 'function_call', id: 'fc-md', call_id: 'c-md', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'DESIGN.md', file_text: '# Design\n' }) };
+  const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE, null, [design]);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'stray-design.html');
   await run('make', 'a notes page', '--out', out);
   assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
   assert.equal(seen.length, 3);
