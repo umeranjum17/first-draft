@@ -56,10 +56,10 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
       if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html') verified = files.get('index.html');
     } }).catch((e) => { throw failed.signal.reason ?? e; });
   const source = files.get('index.html');
-  if (!source || !/<!doctype\s+html|<html[\s>]|<head[\s>]/i.test(source)) throw new Error('engine produced no complete index.html');
+  if (!source || !/<head(?:\s[^>]*)?>|<html[^>]*>|<!doctype[^>]*>/i.test(source)) throw new Error('engine produced no complete index.html');
   if (verified === null || verified !== source) throw new Error('engine did not verify index.html with done');
   if (/<script\b|\son\w+\s*=|javascript\s*:/i.test(source)) throw new Error('engine output contains script; only script-free HTML is supported');
-  const html = /<head[^>]*>/i.test(source) ? source.replace(/<head[^>]*>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
+  const html = /<head(?:\s[^>]*)?>/i.test(source) ? source.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
   return { html, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').matchAll(REMOTE_URL)].map((url) => url[0])))],
     tokens_in: output.inputTokens, tokens_out: output.outputTokens };

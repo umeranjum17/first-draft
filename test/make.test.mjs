@@ -84,6 +84,23 @@ test('make accepts a headless HTML5 document and injects the policy', async (t) 
   assert.match(html, /Sign in to your notes/);
 });
 
+test('a headless export with a page header still carries the policy inside head', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null, true, 'index.html', '<!doctype html><body><header><nav>Notes</nav></header><main><h1>Sign in to your notes</h1></main></body>');
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'headless-header.html');
+  await run('make', 'a notes page', '--out', out);
+  const html = readFileSync(out, 'utf8');
+  const headStart = html.search(/<head[\s>]/i), headEnd = html.search(/<\/head>/i), policy = html.indexOf('Content-Security-Policy'), header = html.indexOf('<header>');
+  assert.ok(headStart >= 0, html);
+  assert.ok(policy > headStart && policy < headEnd, 'the policy is inside the head element');
+  assert.ok(header > headEnd, 'the page header stays outside head');
+});
+
 test('an unrelated done call keeps the verified export', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
