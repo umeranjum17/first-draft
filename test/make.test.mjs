@@ -50,7 +50,7 @@ test('make requires verification after every batched mutation', async (t) => {
     { command: 'str_replace', old_str: 'Sign in', new_str: 'revised' },
     { command: 'insert', insert_line: 0, new_str: '<!-- revised -->' },
   ]) for (const doneFirst of [true, false]) await t.test(`${edit.command}, done ${doneFirst ? 'before' : 'after'} edit`, async (t) => {
-    const dir = mkdtempSync(join(process.cwd(), '.make-order-'));
+    const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     const seen = [], server = await standIn(seen, edit, doneFirst);
     t.after(() => server.close());
@@ -226,6 +226,7 @@ import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 const args = process.argv.slice(2);
 if (args[0] === 'app-server') {
+  appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-probes', 'probe\\n');
   createInterface({ input: process.stdin }).on('line', (line) => { const m = JSON.parse(line); console.log(JSON.stringify({ id: m.id, result: m.id === 1 ? {} : { account: { type: 'chatgpt', email: 'umer@example.test', planType: 'plus' } } })); });
 } else if (args[0] === 'login') { console.log('Logged in using ChatGPT'); }
 else {
@@ -242,8 +243,11 @@ else {
   await run('init', '--agent', 'byokit:codex', '--model', 'openai-codex/gpt-6-luna');
   assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
   assert.equal(seen.length, 15, 'CLI doctor does not use the plan-key provider');
+  const probes = () => readFileSync(join(dir, 'native-probes'), 'utf8').trim().split('\n').length;
+  const before = probes();
   await run('make', 'a sign-in page for Umer', '--out', join(dir, 'native.html'));
   assert.match(readFileSync(join(dir, 'native.html'), 'utf8'), /Content-Security-Policy/);
+  assert.equal(probes() - before, 1, 'one CLI status probe per engine run, not per turn');
   assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(3).fill('gpt-6-luna'));
   await assert.rejects(run('make', 'failure fixture', '--out', join(dir, 'fail.html')), (e) => /model could not answer/.test(e.stdout));
   assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 4, 'failed boundary call is not retried');

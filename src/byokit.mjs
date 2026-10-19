@@ -3,13 +3,22 @@ import { accessSync, constants, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
 const codexBin = () => process.env.PATH?.split(delimiter).map((p) => resolve(p, 'codex')).find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
+let cli, launched;
 async function installed() {
+  if (cli) return cli;
   const bin = codexBin();
   if (!bin) throw new Error('codex is not installed on PATH');
   const stateDir = join(process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft'), 'cli');
   mkdirSync(stateDir, { recursive: true });
   const { cliAccounts } = await import('@byokit/accounts/cli');
-  return { bin, accounts: cliAccounts({ stateDir, bins: { codex: bin }, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))), installed: true }) };
+  return cli = { bin, accounts: cliAccounts({ stateDir, bins: { codex: bin }, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))), installed: true }) };
+}
+async function launch() {
+  if (launched) return launched;
+  const { bin, accounts } = await installed();
+  const account = await accounts.launch('installed-codex');
+  if (!account.ok) throw new Error(account.message);
+  return launched = { bin, account };
 }
 const MEMBER = 'first-draft';
 
@@ -35,9 +44,7 @@ async function check(route) {
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
 export async function respond({ route, model, context, maxTokens, signal, timeoutMs }) {
   if (route === 'codex') {
-    const { bin, accounts } = await installed();
-    const account = await accounts.launch('installed-codex');
-    if (!account.ok) throw new Error(account.message);
+    const { bin, account } = await launch();
     const { codex } = await import('@byokit/decide/codex');
     const schema = { type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
       text: { type: 'string' }, calls: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {

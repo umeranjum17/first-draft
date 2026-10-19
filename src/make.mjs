@@ -14,7 +14,7 @@ const REMOTE_URL = /(?:https?:)?\/\/[^\s,]+/g;
 
 export async function make({ prompt, agent, model, timeoutMs, variation }) {
   const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool } = await engine();
-  const key = (path) => { const k = path.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\/+/, ''); return k === '' ? '.' : k; };
+  const key = (path) => path.trim().replace(/\\/g, '/').split('/').filter((p) => p && p !== '.').join('/') || '.';
   const files = new Map();
   const put = (path, content) => {
     if (Buffer.byteLength(content) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
