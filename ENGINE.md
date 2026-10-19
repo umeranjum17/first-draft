@@ -9,14 +9,16 @@ Required packages: `@open-codesign/core`, `@open-codesign/providers`, `@open-cod
 original `packages/core`, `packages/providers`, `packages/shared`, `LICENSE` and
 `NOTICE` paths. Filter commit: `c838ca9`. Import commit: `56d3a2c`. All imported
 file blobs match the fixed source; no `apps`, runtime/vendor, or other packages
-are included. The next commit adds one optional `streamFn` injection (three
-lines) in core; there are no other upstream edits.
+are included. The subtree is unmodified: every import path and file matches the
+fixed source, and no upstream edit follows. The model boundary lives in our glue,
+which registers itself as the engine's model transport before the engine runs.
 
 `make` runs core's `generateViaAgent`, prompt composer, editor and static
 `done` tools. Core uses providers' model/reasoning/error helpers and shared's
 schemas, artifact and design validation. `scripts/build.mjs` bundles those three
 packages with their upstream prompt sections; the package includes the bundle,
-LICENSE and NOTICE. BYOKit, not the upstream provider transport, answers every
+LICENSE and NOTICE. `src/make.mjs` registers BYOKit as the transport for the
+engine's model api, so BYOKit, not the upstream provider transport, answers every
 engine turn. No BYOKit fork or copied credential is used.
 
 The first slice exports one script-free `index.html` from a bounded, in-memory

@@ -1,3 +1,4 @@
+import { createAssistantMessageEventStream, registerApiProvider } from '@mariozechner/pi-ai';
 import { respond, routeOf } from './byokit.mjs';
 const engine = () => import('../dist/engine.mjs');
 export async function engineDoctor() {
@@ -12,7 +13,7 @@ const REMOTE = /\b(?:src|href|srcset|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>
 const REMOTE_URL = /(?:https?:)?\/\/[^\s,]+/g;
 
 export async function make({ prompt, agent, model, timeoutMs, variation }) {
-  const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool, createAssistantMessageEventStream } = await engine();
+  const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool } = await engine();
   const key = (path) => { const k = path.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\/+/, ''); return k === '' ? '.' : k; };
   const files = new Map();
   const put = (path, content) => {
@@ -29,29 +30,30 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
   const done = makeDoneTool(fs);
   const failed = new AbortController(), signal = AbortSignal.any([failed.signal, AbortSignal.timeout(timeoutMs)]);
   let turns = 0, verified = null;
+  const answer = (_model, context, options) => {
+    const stream = createAssistantMessageEventStream();
+    (async () => {
+      try {
+        signal.throwIfAborted();
+        if (++turns > 12) throw new Error('engine exceeded 12 model turns'); // ponytail: bounded first slice; expand only with measured need.
+        const message = await respond({ route: routeOf(agent), model, context, maxTokens: 16000, signal: AbortSignal.any([signal, ...(options?.signal ? [options.signal] : [])]), timeoutMs });
+        if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
+        stream.push({ type: 'done', reason: message.stopReason, message }); stream.end(message);
+      } catch (e) {
+        failed.abort(e); // No engine/provider retry after a failed boundary call.
+        const error = { role: 'assistant', content: [], stopReason: 'error', errorMessage: e.message, timestamp: Date.now() };
+        stream.push({ type: 'error', reason: 'error', error }); stream.end(error);
+      }
+    })();
+    return stream;
+  };
+  registerApiProvider({ api: 'openai-completions', stream: answer, streamSimple: answer }, 'first-draft');
   const output = await generateViaAgent({ prompt: variation ? `${prompt}\nVariation: ${variation}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
     systemPrompt: `${composeSystemPrompt({ mode: 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. Use system fonts, semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Use the supplied editor to write it, then done(path="index.html").`,
   }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), { ...done, executionMode: 'sequential', execute: (id, params, ...rest) => done.execute(id, params.path ? { ...params, path: key(params.path) } : params, ...rest) }],
     onEvent: (e) => {
       if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html') verified = files.get('index.html');
-    },
-    streamFn: (_model, context, options) => {
-      const stream = createAssistantMessageEventStream();
-      (async () => {
-        try {
-          signal.throwIfAborted();
-          if (++turns > 12) throw new Error('engine exceeded 12 model turns'); // ponytail: bounded first slice; expand only with measured need.
-          const message = await respond({ route: routeOf(agent), model, context, maxTokens: 16000, signal: AbortSignal.any([signal, ...(options?.signal ? [options.signal] : [])]), timeoutMs });
-          if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
-          stream.push({ type: 'done', reason: message.stopReason, message }); stream.end(message);
-        } catch (e) {
-          failed.abort(e); // No engine/provider retry after a failed boundary call.
-          const error = { role: 'assistant', content: [], stopReason: 'error', errorMessage: e.message, timestamp: Date.now() };
-          stream.push({ type: 'error', reason: 'error', error }); stream.end(error);
-        }
-      })();
-      return stream;
     } }).catch((e) => { throw failed.signal.reason ?? e; });
   const source = files.get('index.html');
   if (!source || !/<!doctype\s+html|<html[\s>]|<head[\s>]/i.test(source)) throw new Error('engine produced no complete index.html');
