@@ -12,10 +12,11 @@ import { promisify } from 'node:util';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
 
+const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
+
 // A local provider drives the actual upstream edit -> done -> final tool loop.
-function standIn(seen, edit, doneFirst = true) {
+function standIn(seen, edit, doneFirst = true, donePath = 'index.html') {
   const full = 'The design is ready.';
-  const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
@@ -26,7 +27,7 @@ function standIn(seen, edit, doneFirst = true) {
       if (step < 2) {
         const content = body.includes('script fixture') ? PAGE.replace('</body>', '<script>alert(1)</script></body>') : PAGE;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
-          arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: 'index.html' }) };
+          arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
         const items = step === 1 && edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [item];
         res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
@@ -66,6 +67,58 @@ test('make requires verification after every batched mutation', async (t) => {
     }
     assert.equal(seen.length, 3);
   });
+});
+
+test('make verifies an export path the model spells loosely', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null, true, './index.html');
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'loose.html');
+  await run('make', 'a notes page', '--out', out);
+  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
+});
+
+// A local provider that keeps guessing old_str, so the editor must escalate to create.
+function guesser(seen) {
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      seen.push(JSON.parse(body));
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const n = seen.length - 1;
+      if (n < 4) {
+        const item = { type: 'function_call', id: `fc${n}`, call_id: `c${n}`, name: 'str_replace_based_edit_tool',
+          arguments: JSON.stringify(n === 0 ? { command: 'create', path: 'index.html', file_text: PAGE } : { command: 'str_replace', path: 'index.html', old_str: `guess ${n}`, new_str: 'x' }) };
+        res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
+          + ev({ type: 'response.completed', response: { id: `r${n}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
+        return;
+      }
+      res.end(ev({ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'm1' } })
+        + ev({ type: 'response.output_text.delta', output_index: 0, item_id: 'm1', content_index: 0, delta: 'Stuck.' })
+        + ev({ type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'm1', status: 'completed', content: [{ type: 'output_text', text: 'Stuck.', annotations: [] }] } })
+        + ev({ type: 'response.completed', response: { id: 'r9', status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
+    });
+  });
+  return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
+}
+
+test('the editor escalates to create after three failed exact edits', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await guesser(seen);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'guess.html');
+  await assert.rejects(run('make', 'a notes page', '--out', out), (e) => /engine did not verify index.html with done/.test(e.stdout));
+  assert.equal(existsSync(out), false);
+  assert.match(JSON.stringify(seen[4].input), /Too many failed exact edits/);
 });
 
 test('make writes self-contained mocks through the BYOKit Go route', async (t) => {

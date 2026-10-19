@@ -12,25 +12,27 @@ const REMOTE = /\b(?:src|href|srcset|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>
 const REMOTE_URL = /(?:https?:)?\/\/[^\s,]+/g;
 
 export async function make({ prompt, agent, model, timeoutMs, variation }) {
-  const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool, makeSetTodosTool, createAssistantMessageEventStream } = await engine();
+  const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool, createAssistantMessageEventStream } = await engine();
+  const key = (path) => { const k = path.trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\/+/, ''); return k === '' ? '.' : k; };
   const files = new Map();
   const put = (path, content) => {
     if (Buffer.byteLength(content) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
-    files.set(path, content); return { path };
+    files.set(key(path), content); return { path: key(path) };
   };
-  const get = (path) => { if (!files.has(path)) throw new Error(`File not found: ${path}`); return files.get(path); };
+  const get = (path) => { if (!files.has(key(path))) throw new Error(`File not found: ${key(path)}`); return files.get(key(path)); };
   const fs = {
-    view: (path) => files.has(path) ? { content: get(path), numLines: get(path).split('\n').length } : null,
-    listDir: (dir) => [...files.keys()].filter((p) => dir === '.' || p.startsWith(`${dir}/`)), create: put,
-    strReplace: (path, old, text) => { const s = get(path); if (!old || s.split(old).length !== 2) throw new Error(`old_str missing or ambiguous in ${path}`); return put(path, s.replace(old, () => text)); },
+    view: (path) => files.has(key(path)) ? { content: get(path), numLines: get(path).split('\n').length } : null,
+    listDir: (dir) => [...files.keys()].filter((p) => key(dir) === '.' || p.startsWith(`${key(dir)}/`)), create: put,
+    strReplace: (path, old, text) => { const s = get(path), hits = s.split(old).length - 1; if (hits !== 1) throw new Error(hits === 0 ? `old_str not found in ${key(path)}` : `old_str is ambiguous in ${key(path)}; provide more context`); return put(path, s.replace(old, () => text)); },
     insert: (path, line, text) => { const lines = get(path).split('\n'); if (!Number.isInteger(line) || line < 0 || line > lines.length) throw new Error('insert_line is outside the file'); lines.splice(line, 0, text); return put(path, lines.join('\n')); },
   };
+  const done = makeDoneTool(fs);
   const failed = new AbortController(), signal = AbortSignal.any([failed.signal, AbortSignal.timeout(timeoutMs)]);
   let turns = 0, verified = false;
   const output = await generateViaAgent({ prompt: variation ? `${prompt}\nVariation: ${variation}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
     systemPrompt: `${composeSystemPrompt({ mode: 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. Use system fonts, semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Use the supplied editor to write it, then done(path="index.html").`,
-  }, { fs, encourageToolUse: false, tools: [makeSetTodosTool(), makeTextEditorTool(fs), { ...makeDoneTool(fs), executionMode: 'sequential' }],
+  }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), { ...done, executionMode: 'sequential', execute: (id, params, ...rest) => done.execute(id, params.path ? { ...params, path: key(params.path) } : params, ...rest) }],
     onEvent: (e) => {
       if (e.type === 'tool_execution_start' && e.toolName === 'str_replace_based_edit_tool' && e.args.command !== 'view') verified = false;
       if (e.type === 'tool_execution_end' && e.toolName === 'done') verified = !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html';
