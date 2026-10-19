@@ -284,3 +284,19 @@ else {
   await assert.rejects(run('make', 'failure fixture', '--out', join(dir, 'fail.html')), (e) => /model could not answer/.test(e.stdout));
   assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 4, 'failed boundary call is not retried');
 });
+
+test('the engine prompt instructs only the tools the host supplies', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  await run('make', 'a notes page', '--out', join(dir, 'tools.html'));
+  const sent = JSON.stringify(seen[0].body);
+  assert.match(sent, /Host export contract/);
+  assert.match(sent, /Only two tools exist/);
+  assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
+  assert.doesNotMatch(sent, /\b(?:skill|scaffold|tweaks)\s*\(/);
+});

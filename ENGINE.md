@@ -14,7 +14,10 @@ fixed source, and no upstream edit follows. The model boundary lives in our glue
 which registers itself as the engine's model transport before the engine runs.
 
 `make` runs core's `generateViaAgent`, prompt composer, editor and static
-`done` tools. Core uses providers' model/reasoning/error helpers and shared's
+`done` tools. It keeps the composed prompt minus any section that instructs a
+tool call the host does not register (`skill`, `scaffold`, `tweaks`), so the
+prompt matches the two tools it supplies. Core uses providers'
+model/reasoning/error helpers and shared's
 schemas, artifact and design validation. `scripts/build.mjs` bundles those three
 packages with their upstream prompt sections; the package includes the bundle,
 LICENSE and NOTICE. `src/make.mjs` registers BYOKit as the transport for the
