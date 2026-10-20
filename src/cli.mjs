@@ -10,6 +10,7 @@ import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 
 const VERSION = '0.1.0';
+const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
@@ -128,6 +129,7 @@ if (command === 'make') {
   if (!ready) process.exit(1);
 } else if (command === 'init') {
   const { values } = flags(rest, { agent: { type: 'string' }, model: { type: 'string' } });
+  values.model ??= DEFAULT_MODEL[values.agent]; // only the routes named here have a shipped default
   if (!values.agent || !values.model) fail('USAGE', `init needs the user's --agent byokit:<route> and --model <model>`, [ASK, `BYOKit routes: ${(await readyRoutes().catch(() => [])).map((r) => `byokit:${r}`).join(', ')}`]);
   if (!routeOf(values.agent)) fail('BAD_AGENT', `agent ${values.agent} is not byokit:<route>`, [ASK]);
   save(values);

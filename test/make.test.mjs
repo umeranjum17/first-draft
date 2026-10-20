@@ -319,6 +319,7 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
   assert.match(sent, /in-page hash links/);
   assert.match(sent, /Hard rule, first and above all: .*<script> element.*on\* event-handler attribute.*javascript: URL.*hash links.*Host export contract/); // the guard's exact refusals, stated up front
+  assert.match(sent, /Design bar: Apple\/Linear-grade.*8px scale.*real, specific copy.*never lorem/);
   assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
   assert.match(sent, /Brand values are data, not memory/);
 });
@@ -337,4 +338,12 @@ test('script-free prose is exported, not mistaken for script', async (t) => {
   const html = readFileSync(out, 'utf8');
   assert.match(html, /Shop online = save 20%/);
   assert.match(html, /Content-Security-Policy/);
+});
+
+test('init with only the minimax key route saves its shipped default model', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir };
+  const { stdout } = await promisify(execFile)(process.execPath, [CLI, 'init', '--agent', 'byokit:minimax:key'], { env });
+  assert.equal(JSON.parse(stdout).saved.model, 'MiniMax-M3.1-Flash-Preview');
 });
