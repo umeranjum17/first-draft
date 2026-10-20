@@ -73,7 +73,7 @@ code in `src/view/`, bundled by esbuild into `dist/view/`:
   `computeFitPreviewZoom` becomes `fitCanvas`, which fits the phone and desktop
   artboards on one row and stacks them, each fitted to the width, below 45%.
   Options load by URL from the second origin, not `srcdoc`. Tabs, comments,
-  pins, source edit, tweaks and the store are not ported.
+  pins (see Comment pins), source edit, tweaks and the store are not ported.
 - `components/PhoneFrame.tsx`: `phoneFrame()` plus CSS, with the phone tokens
   from `packages/ui/src/tokens.css`. The screen is 390x844, not 375x812.
 - `components/CanvasErrorBar.tsx`: `errorBar()`, without i18n or
@@ -99,10 +99,21 @@ unchanged, and the view posts with target `*` because the sandboxed option has n
 `make`'s export contract now asks for this screen-link contract (`data-oc-screen`
 sections, hash links, no script); output stays script-free.
 
+### Comment pins
+
+Read-only, from `components/comment/PinOverlay.tsx` as plain code in `src/view/app.js` (`pinLayer`) and
+`view.css`: a layer of numbered round note pins (the `note` variant's warning-soft fill and border) over the
+preview, `pointer-events` off on the layer and on for each pin, the pin's text shown on click or tap. Changed:
+a pin sits at a fraction of the frame (`x`, `y`) instead of an element rect plus zoom, 28px for a thumb, and the
+layer is a sibling of the scaled frame, so pin size does not scale. Not ported: `CommentBubble`, `CommentsPanel`,
+`InlineCommentComposer`, the comments store slice, live rects, edit and applied variants. Comments come from
+`<design>.comments.json` beside the design (`src/view.mjs` `readPins`), read on each page load; no file, no pins.
+Pins are drawn by the view page above the iframe, never inside the sandboxed option, which gains no permission.
+
 `packages/core/src/frames` holds JSX device snippets for the agent; the view
 renders HTML only and does not use them.
 
 Not in this slice: JSX/runtime exports, external assets, image generation,
-workspace persistence, revision, comments,
+workspace persistence, revision, editing comments,
 sign-off links, or new publication. The first PR
 target remains **2026-10-20**; merge and publication require Main's approval.

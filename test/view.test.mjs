@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { FRAMES, fitCanvas, fitPlay, pageFor, playDevice } from '../src/view/canvas.js';
-import { designFiles, serve } from '../src/view.mjs';
+import { commentsPath, designFiles, serve } from '../src/view.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const MOCK = `<!doctype html><html lang="en"><head>\n<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" /><title>Notes</title></head><body><h1>Sign in to your notes</h1></body></html>`;
@@ -183,4 +183,32 @@ test('a malformed request target gets an answer and the view keeps serving', asy
   assert.match(await raw(Number(new URL(v.url).port), '//['), /^HTTP\/1\.1 404 /);
   assert.equal((await fetch(`${v.frames}/o/1`)).status, 200);
   assert.equal((await fetch(v.url)).status, 200);
+});
+
+test('comment pins load read-only from <design>.comments.json; no file means none, a bad file says why', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  const open = async () => {
+    const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0, comments: commentsPath(join(dir, 'a.html')) });
+    t.after(v.close);
+    return JSON.parse((await (await fetch(v.url)).text()).match(/<script type="application\/json" id="design">(.*?)<\/script>/)[1]);
+  };
+  assert.equal(commentsPath(join(dir, 'a.html')), join(dir, 'a.comments.json'));
+  assert.deepEqual([(await open()).pins, (await open()).pinsError], [[], undefined]);
+
+  writeFileSync(join(dir, 'a.comments.json'), JSON.stringify([{ option: 1, x: 0.25, y: 0.5, text: 'Make this bigger', extra: 1 }, { option: 1, x: 2, y: 0, text: 'off the frame' }, { option: 1, x: 0, y: 0 }, null]));
+  const ok = await open();
+  assert.deepEqual(ok.pins, [{ option: 1, x: 0.25, y: 0.5, text: 'Make this bigger' }]);
+  assert.equal(ok.pinsError, undefined);
+
+  writeFileSync(join(dir, 'a.comments.json'), '{"nope"');
+  assert.match((await open()).pinsError, /a\.comments\.json is not valid comments/);
+  writeFileSync(join(dir, 'a.comments.json'), '{}');
+  assert.match((await open()).pinsError, /expected an array/);
+
+  // the frame gains nothing: pins are drawn by the view page, so the option's policy and body are the same with or without them
+  writeFileSync(join(dir, 'a.comments.json'), JSON.stringify([{ option: 1, x: 0.5, y: 0.5, text: 'Make this bigger' }]));
+  const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0, comments: join(dir, 'a.comments.json') });
+  t.after(v.close);
+  assert.doesNotMatch(await (await fetch(`${v.frames}/o/1`)).text(), /Make this bigger/);
 });
