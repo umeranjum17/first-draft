@@ -33,6 +33,7 @@ export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; st
 export const framePolicy = (view) => `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors ${view}`;
 const COMMON = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
 
+const pathOf = (req) => req.url.split('?')[0];
 const listen = (server, port, host) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, host, () => { server.off('error', fail); ok(); }); });
 
 export async function serve({ files, name, host, port, framePort }) {
@@ -54,7 +55,7 @@ export async function serve({ files, name, host, port, framePort }) {
   };
   const view = createServer((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
-    const path = new URL(req.url, 'http://view').pathname;
+    const path = pathOf(req);
     if (path === '/') return send(res, 200, 'text/html; charset=utf-8', page(), { 'content-security-policy': viewPolicy(frameOrigin) });
     if (path === '/view.js' || path === '/view.css') {
       try { return send(res, 200, path.endsWith('.js') ? 'text/javascript' : 'text/css', readFileSync(new URL(path.slice(1), DIST))); }
@@ -64,7 +65,7 @@ export async function serve({ files, name, host, port, framePort }) {
   });
   const frames = createServer((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
-    const o = options[Number(new URL(req.url, 'http://frames').pathname.match(/^\/o\/(\d+)$/)?.[1]) - 1];
+    const o = options[Number(pathOf(req).match(/^\/o\/(\d+)$/)?.[1]) - 1];
     if (!o) return send(res, 404, 'text/plain', 'not found');
     const error = sizeError(o);
     if (error) return send(res, error.status, 'text/plain', error.message);

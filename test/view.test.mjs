@@ -2,6 +2,7 @@
 // the canvas fit, and the CLI's host choice. No browser and no model call.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
+import { connect as netConnect } from 'node:net';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -100,4 +101,22 @@ test('view binds the tailnet address from tailscale, or the given host', async (
   assert.equal((await fetch(out.viewing.options[0].url)).status, 200);
 
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'view', join(dir, 'none.html')], { env }), (e) => JSON.parse(e.stdout).error.code === 'NO_OPTIONS');
+});
+
+test('a malformed request target gets an answer and the view keeps serving', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
+  t.after(v.close);
+  const raw = (port, target) => new Promise((ok, fail) => {
+    const s = netConnect({ host: '127.0.0.1', port }, () => s.write(`GET ${target} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`));
+    let data = '';
+    s.on('data', (c) => { data += c; });
+    s.on('end', () => ok(data));
+    s.on('error', fail);
+  });
+  assert.match(await raw(Number(new URL(v.frames).port), '//['), /^HTTP\/1\.1 404 /);
+  assert.match(await raw(Number(new URL(v.url).port), '//['), /^HTTP\/1\.1 404 /);
+  assert.equal((await fetch(`${v.frames}/o/1`)).status, 200);
+  assert.equal((await fetch(v.url)).status, 200);
 });
