@@ -10,14 +10,15 @@ const DIST = new URL('../dist/view/', import.meta.url);
 const natural = (a, b) => a.localeCompare(b, undefined, { numeric: true });
 
 // A design is a folder of options, option files, or the --out path `make --count N` numbered (x.html -> x-1.html ... x-N.html).
+const listDir = (d) => { try { return readdirSync(d); } catch { return []; } };
+
 export function designFiles(args) {
   return [...new Set(args.flatMap((arg) => {
     const p = resolve(arg);
-    if (existsSync(p) && statSync(p).isDirectory()) return readdirSync(p).filter((f) => /\.html?$/i.test(f)).sort(natural).map((f) => join(p, f));
+    if (existsSync(p) && statSync(p).isDirectory()) return listDir(p).filter((f) => /\.html?$/i.test(f)).sort(natural).map((f) => join(p, f));
     if (existsSync(p)) return [p];
     const ext = extname(p), base = basename(p, ext);
-    if (!existsSync(dirname(p))) return [];
-    return readdirSync(dirname(p)).filter((f) => f.startsWith(`${base}-`) && f.endsWith(ext) && /^\d+$/.test(f.slice(base.length + 1, f.length - ext.length))).sort(natural).map((f) => join(dirname(p), f));
+    return listDir(dirname(p)).filter((f) => f.startsWith(`${base}-`) && f.endsWith(ext) && /^\d+$/.test(f.slice(base.length + 1, f.length - ext.length))).sort(natural).map((f) => join(dirname(p), f));
   }))];
 }
 

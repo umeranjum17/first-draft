@@ -26,6 +26,12 @@ test('a design is a folder, the numbered --out path, or option files', (t) => {
   assert.deepEqual(names([join(dir, 'missing/y.html')]), []);
 });
 
+test('a path under a file is no design, not a crash', (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'notes.txt'), MOCK);
+  assert.deepEqual(designFiles([join(dir, 'notes.txt', 'x.html')]), []);
+});
+
 test('the canvas puts phone and desktop side by side at 1280 and stacks them at 390', () => {
   const wide = fitCanvas(1280);
   assert.equal(wide.stacked, false);
