@@ -267,6 +267,19 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
     assert.doesNotMatch(html, /script-src[^;]*unsafe-inline|<script\b/i);
     assert.ok(Buffer.byteLength(html) < 5_000_000, 'sign-off takes mocks of 5 MB or less');
   }
+  // Refine: the chosen option is the starting file, the follow-up prompt the change, the result a new option.
+  const option = join(dir, 'sign-in-1.html'), original = readFileSync(option, 'utf8'), warm = [];
+  const warmServer = await standIn(warm, null, true, 'index.html', PAGE.replace('Sign in to your notes', 'Welcome back, warm and cosy'));
+  t.after(() => warmServer.close());
+  const warmRun = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env: { ...env, FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${warmServer.address().port}` } });
+  const refined = JSON.parse((await warmRun('refine', option, 'warmer palette, add an empty state', '--out', join(dir, 'warm.html'))).stdout).refined;
+  assert.equal(refined.from, option);
+  assert.match(JSON.stringify(warm[0].body), /Revise this index\.html: warmer palette, add an empty state.*Current index\.html:.*Sign in to your notes/);
+  assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /Welcome back, warm and cosy/);
+  assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /default-src 'none'/);
+  assert.equal(readFileSync(option, 'utf8'), original, 'the refined option is untouched');
+  await assert.rejects(run('refine', option, 'no change', '--out', option), (e) => /USAGE/.test(e.stdout));
+  await assert.rejects(run('refine', option, 'no change', '--out', join(dir, 'same.html')), (e) => /left the option unchanged/.test(e.stdout));
   await assert.rejects(run('make', 'script fixture', '--out', join(dir, 'script.html')), (e) => /only script-free HTML/.test(e.stdout));
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'not-a-real-model');
   assert.doesNotMatch(await run('doctor').then((r) => r.stdout, (e) => e.stdout), /lists no model/); // the model id passes straight through to the provider
@@ -293,7 +306,7 @@ else {
   env.PATH = `${dir}:${process.env.PATH}`;
   await run('init', '--agent', 'byokit:codex', '--model', 'openai-codex/gpt-6-luna');
   assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
-  assert.equal(seen.length, 15, 'CLI doctor does not use the plan-key provider');
+  assert.equal(seen.length, 18, 'CLI doctor does not use the plan-key provider');
   const probes = () => readFileSync(join(dir, 'native-probes'), 'utf8').trim().split('\n').length;
   const before = probes();
   await run('make', 'a sign-in page for Umer', '--out', join(dir, 'native.html'));
