@@ -26,18 +26,49 @@ function frame(option, title, lazy, query = '') {
 }
 
 // PreviewPane.tsx ScaledPreviewFrame: lay the artboard out at its real size and scale it down.
-function scaled(width, height, child) {
+// `pins` (this option's comments) are drawn in a layer over the frame, in this page, outside the iframe; `pad` is the bezel around the screen.
+function scaled(width, height, child, pins = [], pad = 0) {
   const inner = el('div', { class: 'scaled-inner' }, child);
   inner.style.width = `${width}px`;
   inner.style.height = `${height}px`;
-  const outer = el('div', { class: 'scaled' }, inner);
+  const layer = pins.length ? pinLayer(pins) : null;
+  const outer = el('div', { class: 'scaled' }, inner, ...(layer ? [layer] : []));
   outer.rescale = (scale) => {
+    if (layer) Object.assign(layer.style, { left: `${pad * scale}px`, top: `${pad * scale}px`, width: `${(width - pad * 2) * scale}px`, height: `${(height - pad * 2) * scale}px` });
     outer.style.width = `${width * scale}px`;
     outer.style.height = `${height * scale}px`;
     inner.style.transform = `scale(${scale})`;
   };
   return outer;
 }
+
+// PinOverlay.tsx: numbered round pins over the preview, read-only. Placed by fraction of the frame instead of an element rect,
+// so they hold at any scale; a pin shows its comment text when clicked or tapped.
+function pinLayer(pins) {
+  const layer = el('div', { class: 'pins' });
+  pins.forEach((p, i) => {
+    const pin = el('button', { type: 'button', class: 'pin', 'aria-label': `Comment ${i + 1}`, 'aria-expanded': 'false', 'data-i': i }, String(i + 1));
+    const bubble = el('div', { class: `pin-bubble${p.y > 0.6 ? ' up' : ''}`, role: 'note', hidden: '' }, p.text);
+    const wrap = el('div', { class: 'pin-wrap' }, pin);
+    wrap.style.left = `${p.x * 100}%`; // the bubble is placed from --x by CSS, so it stays inside the frame
+    wrap.style.top = `${p.y * 100}%`;
+    bubble.style.setProperty('--x', `${p.x * 100}%`);
+    bubble.style.setProperty('--y', `${p.y * 100}%`);
+    pin.bubble = bubble;
+    pin.onclick = () => {
+      const open = pin.getAttribute('aria-expanded') !== 'true';
+      document.querySelectorAll('.pin').forEach((o) => { // the phone and desktop frames show the same comment together
+        const on = open && o.getAttribute('data-i') === String(i);
+        o.setAttribute('aria-expanded', String(on));
+        o.bubble.hidden = !on;
+      });
+    };
+    layer.append(wrap, bubble);
+  });
+  return layer;
+}
+const pinsFor = (o) => design.pins.filter((p) => p.option === o.n);
+const pinsNotice = () => design.pinsError ? [el('div', { class: 'error-bar', role: 'alert' }, el('div', {}, design.pinsError))] : [];
 
 // PhoneFrame.tsx: bezel, screen, Dynamic Island and home indicator around the iframe.
 const phoneFrame = (iframe) => el('div', { class: 'phone' }, el('div', { class: 'phone-screen' }, iframe),
@@ -74,8 +105,8 @@ function canvas(o) {
   if (o.error) {
     board = el('div', { class: 'thumb-error' }, o.error);
   } else {
-    const phone = scaled(FRAMES.phone.width + FRAMES.phone.bezel * 2, FRAMES.phone.height + FRAMES.phone.bezel * 2, phoneFrame(frame(o, `Option ${o.n} at ${FRAMES.phone.width}px`)));
-    const desktop = scaled(FRAMES.desktop.width, FRAMES.desktop.height, el('div', { class: 'artboard' }, frame(o, `Option ${o.n} at ${FRAMES.desktop.width}px`)));
+    const phone = scaled(FRAMES.phone.width + FRAMES.phone.bezel * 2, FRAMES.phone.height + FRAMES.phone.bezel * 2, phoneFrame(frame(o, `Option ${o.n} at ${FRAMES.phone.width}px`)), pinsFor(o), FRAMES.phone.bezel);
+    const desktop = scaled(FRAMES.desktop.width, FRAMES.desktop.height, el('div', { class: 'artboard' }, frame(o, `Option ${o.n} at ${FRAMES.desktop.width}px`)), pinsFor(o));
     board = el('div', { class: 'board' },
       el('figure', {}, phone, el('figcaption', {}, `Phone · ${FRAMES.phone.width}`)),
       el('figure', {}, desktop, el('figcaption', {}, `Desktop · ${FRAMES.desktop.width}`)));
@@ -91,7 +122,7 @@ function canvas(o) {
   return { body: [el('header', { class: 'bar' }, link('#/', '← All options', 'button'),
     el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · ${i + 1} of ${count}`)),
     el('nav', {}, link(`#/o/${prev.n}`, '‹', 'button icon'), link(`#/o/${next.n}`, '›', 'button icon'), ...fullscreen)),
-  errorBar(o.n), area], fit };
+  errorBar(o.n), ...pinsNotice(), area], fit };
 }
 
 function full(o) {
@@ -121,11 +152,12 @@ function play(o, device) {
   const iframe = frame(o, `Option ${o.n} Play at ${f.width}px`, false, '?play');
   playing = { iframe, screens: [], current: null, canBack: false };
   const controls = el('div', { class: 'play-controls' }, ...playControls());
-  const art = dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe)) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe));
+  const pins = pinsFor(o);
+  const art = dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe), pins);
   const stage = el('main', { class: 'stage' }, art);
   const tabs = ['phone', 'desktop'].map((d) => el('a', { href: `#/o/${o.n}/play/${d}`, class: 'button', 'aria-current': d === dev ? 'true' : undefined }, `${d === 'phone' ? 'Phone' : 'Desktop'} · ${FRAMES[d].width}`));
   return { body: [el('header', { class: 'bar' }, link(`#/o/${o.n}`, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), el('nav', {}, ...tabs)),
-    controls, errorBar(o.n), stage], fit: () => art.rescale(fitPlay(dev, stage.clientWidth, stage.clientHeight)) };
+    controls, errorBar(o.n), ...pinsNotice(), stage], fit: () => art.rescale(fitPlay(dev, stage.clientWidth, stage.clientHeight)) };
 }
 
 function render() {

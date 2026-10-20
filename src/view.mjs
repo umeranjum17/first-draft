@@ -22,6 +22,21 @@ export function designFiles(args) {
   }))];
 }
 
+// Comment pins, read-only: `<design>.comments.json` next to the design (`mocks/x.html` or `mocks/x` -> `mocks/x.comments.json`),
+// an array of { option, x, y, text } with x and y as fractions (0-1) of the frame. No file means no pins.
+export const commentsPath = (arg) => { const p = resolve(arg); return join(dirname(p), `${basename(p, extname(p))}.comments.json`); };
+export function readPins(file) {
+  if (!file) return { pins: [] };
+  let raw;
+  try { raw = readFileSync(file, 'utf8'); } catch (e) { return e.code === 'ENOENT' ? { pins: [] } : { pins: [], error: `${basename(file)} cannot be read: ${e.code ?? e.message}` }; }
+  try {
+    const list = JSON.parse(raw);
+    if (!Array.isArray(list)) throw new Error('expected an array of { option, x, y, text }');
+    const frac = (v) => typeof v === 'number' && v >= 0 && v <= 1;
+    return { pins: list.filter((c) => Number.isInteger(c?.option) && frac(c.x) && frac(c.y) && typeof c.text === 'string' && c.text).map(({ option, x, y, text }) => ({ option, x, y, text })) };
+  } catch (e) { return { pins: [], error: `${basename(file)} is not valid comments: ${e.message}` }; }
+}
+
 export async function tailnetHost() {
   try {
     const { stdout } = await promisify(execFile)('tailscale', ['ip', '-4'], { timeout: 3000 });
@@ -59,7 +74,7 @@ else if(e.data.type==='BACK'&&stack.length>1){stack.pop();back=true;go(stack[sta
 const pathOf = (req) => req.url.split('?')[0];
 const listen = (server, port, host) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, host, () => { server.off('error', fail); ok(); }); });
 
-export async function serve({ files, name, host, advertise = host, port, framePort }) {
+export async function serve({ files, name, host, advertise = host, port, framePort, comments }) {
   const options = files.map((file, i) => ({ n: i + 1, label: basename(file, extname(file)), file }));
   const { buildPreviewDocument } = await import('../dist/engine.mjs');
   let viewOrigin, frameOrigin;
@@ -72,7 +87,8 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     } catch (e) { return { status: 404, message: `${basename(o.file)} cannot be read: ${e.code ?? e.message}` }; }
   };
   const page = () => {
-    const data = { name, frames: frameOrigin, options: options.map((o) => ({ n: o.n, label: o.label, error: sizeError(o)?.message })) };
+    const { pins, error: pinsError } = readPins(comments);
+    const data = { name, frames: frameOrigin, pins, pinsError, options: options.map((o) => ({ n: o.n, label: o.label, error: sizeError(o)?.message })) };
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="stylesheet" href="/view.css"></head>`
       + `<body><div id="app"></div><script type="application/json" id="design">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script><script src="/view.js"></script></body></html>`;
   };
