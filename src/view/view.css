@@ -72,7 +72,6 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .pin { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1.5px solid #ca8a04; border-radius: 9999px; background: #fde68a; color: #1d1c1a; font: 600 12px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgb(0 0 0 / 0.25); cursor: pointer; pointer-events: auto; }
 .pin[aria-expanded="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
 .pin:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.pin-bubble { position: absolute; left: 18px; top: 18px; z-index: 6; width: max-content; max-width: min(260px, 60vw); padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 14px; box-shadow: var(--shadow); pointer-events: auto; overflow-wrap: anywhere; }
-.pin-bubble.left { left: auto; right: 18px; }
-.pin-bubble.up { top: auto; bottom: 18px; }
+.pin-bubble { --w: min(320px, calc(100% - 16px)); position: absolute; z-index: 6; width: var(--w); left: clamp(8px, calc(var(--x) - var(--w) / 2), calc(100% - 8px - var(--w))); top: calc(var(--y) + 18px); padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 14px; box-shadow: var(--shadow); pointer-events: auto; overflow-wrap: anywhere; }
+.pin-bubble.up { top: auto; bottom: calc(100% - var(--y) + 18px); }
 .pin-bubble[hidden] { display: none; }

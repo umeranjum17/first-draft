@@ -48,19 +48,22 @@ function pinLayer(pins) {
   const layer = el('div', { class: 'pins' });
   pins.forEach((p, i) => {
     const pin = el('button', { type: 'button', class: 'pin', 'aria-label': `Comment ${i + 1}`, 'aria-expanded': 'false', 'data-i': i }, String(i + 1));
-    const bubble = el('div', { class: `pin-bubble${p.x > 0.5 ? ' left' : ''}${p.y > 0.6 ? ' up' : ''}`, role: 'note', hidden: '' }, p.text);
-    const wrap = el('div', { class: 'pin-wrap' }, pin, bubble);
-    wrap.style.left = `${p.x * 100}%`;
+    const bubble = el('div', { class: `pin-bubble${p.y > 0.6 ? ' up' : ''}`, role: 'note', hidden: '' }, p.text);
+    const wrap = el('div', { class: 'pin-wrap' }, pin);
+    wrap.style.left = `${p.x * 100}%`; // the bubble is placed from --x by CSS, so it stays inside the frame
     wrap.style.top = `${p.y * 100}%`;
+    bubble.style.setProperty('--x', `${p.x * 100}%`);
+    bubble.style.setProperty('--y', `${p.y * 100}%`);
+    pin.bubble = bubble;
     pin.onclick = () => {
       const open = pin.getAttribute('aria-expanded') !== 'true';
       document.querySelectorAll('.pin').forEach((o) => { // the phone and desktop frames show the same comment together
         const on = open && o.getAttribute('data-i') === String(i);
         o.setAttribute('aria-expanded', String(on));
-        o.nextElementSibling.hidden = !on;
+        o.bubble.hidden = !on;
       });
     };
-    layer.append(wrap);
+    layer.append(wrap, bubble);
   });
   return layer;
 }
