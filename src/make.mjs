@@ -42,6 +42,8 @@ export async function make({ prompt, agent, model, timeoutMs, variation }) {
         if (++turns > 12) throw new Error('engine exceeded 12 model turns'); // ponytail: bounded first slice; expand only with measured need.
         const message = await respond({ route: routeOf(agent), model, context, maxTokens: 16000, signal: AbortSignal.any([signal, ...(options?.signal ? [options.signal] : [])]), timeoutMs });
         if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
+        // MiniMax M3.1 Flash sometimes sends command "view" together with file_text; a view carries no text, so it is a create.
+        for (const c of message.content) if (c.type === 'toolCall' && c.name === 'str_replace_based_edit_tool' && c.arguments.command === 'view' && typeof c.arguments.file_text === 'string') c.arguments.command = 'create';
         stream.push({ type: 'done', reason: message.stopReason, message }); stream.end(message);
       } catch (e) {
         failed.abort(e); // No engine/provider retry after a failed boundary call.

@@ -26,10 +26,10 @@
     "test": "npm run build && node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@byokit/accounts": "0.28.2",
+    "@byokit/accounts": "0.28.1",
     "@byokit/decide": "0.12.1",
     "@byokit/secrets": "0.5.2",
-    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-ai": "^1.3.0",
     "@mariozechner/pi-agent-core": "0.72.1",
     "@mariozechner/pi-ai": "0.72.1",
     "@mariozechner/pi-coding-agent": "0.72.1",

@@ -27,7 +27,7 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
       if (step < 2) {
         const content = body.includes('script fixture') ? page.replace('</body>', '<script>alert(1)</script></body>') : page;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
-          arguments: JSON.stringify(step === 0 ? { command: 'create', path: 'index.html', file_text: content } : { path: donePath }) };
+          arguments: JSON.stringify(step === 0 ? { command: body.includes('view fixture') ? 'view' : 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
         const items = step !== 1 ? [item] : edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [...(pre ?? []), item, ...(extra ?? [])];
         res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
@@ -269,7 +269,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   }
   await assert.rejects(run('make', 'script fixture', '--out', join(dir, 'script.html')), (e) => /only script-free HTML/.test(e.stdout));
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'not-a-real-model');
-  await assert.rejects(run('doctor'), (e) => /lists no model/.test(e.stdout));
+  assert.doesNotMatch(await run('doctor').then((r) => r.stdout, (e) => e.stdout), /lists no model/); // the model id passes straight through to the provider
 
   // Installed-CLI journey, through the published BYOKit adapters, with a private native fixture.
   writeFileSync(join(dir, 'codex'), `#!${process.execPath}
@@ -340,10 +340,23 @@ test('script-free prose is exported, not mistaken for script', async (t) => {
   assert.match(html, /Content-Security-Policy/);
 });
 
+test('a view call that carries file_text is made as a create', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'view.html');
+  await run('make', 'view fixture page', '--out', out);
+  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
+});
+
 test('init with only the minimax key route saves its shipped default model', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir };
   const { stdout } = await promisify(execFile)(process.execPath, [CLI, 'init', '--agent', 'byokit:minimax:key'], { env });
-  assert.equal(JSON.parse(stdout).saved.model, 'MiniMax-M3');
+  assert.equal(JSON.parse(stdout).saved.model, 'MiniMax-M3.1-Flash-Preview');
 });

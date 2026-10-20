@@ -43,6 +43,16 @@ async function check(route) {
   if (!await planKey(route)) return `byokit:${route} is not a BYOKit plan or api key route: use one of: ${(await readyRoutes()).map((r) => `byokit:${r}`).join(', ')}`;
 }
 
+// The model id goes straight to the provider: pi-ai's list is only a template for the call shape, never a gate on which ids exist.
+async function modelFor(provider, id) {
+  const { getBuiltinModel, getBuiltinModels } = await import('@earendil-works/pi-ai/providers/all');
+  const found = getBuiltinModel(provider, id);
+  if (found) return found;
+  const [template] = getBuiltinModels(provider);
+  if (!template) throw new Error(`pi-ai has no call shape for provider ${provider}`);
+  return { ...template, id, name: id };
+}
+
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
 export async function respond({ route, model, context, maxTokens, signal, timeoutMs }) {
   if (route === 'codex') {
@@ -64,10 +74,8 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
   const key = await planKey(route);
   const secret = process.env[key.upstream.method];
   if (!secret) throw new Error(`${key.upstream.method} is not set: ${await signIn(key)}`);
-  const [{ Accounts, memoryStore }, { overrideStore }, { getBuiltinModel }] = await Promise.all([
-    import('@byokit/accounts'), import('@byokit/secrets'), import('@earendil-works/pi-ai/providers/all')]);
-  const found = getBuiltinModel(key.upstream.id, model);
-  if (!found) throw new Error(`pi-ai lists no model ${model} for ${key.upstream.id}`);
+  const [{ Accounts, memoryStore }, { overrideStore }, found] = await Promise.all([
+    import('@byokit/accounts'), import('@byokit/secrets'), modelFor(key.upstream.id, model)]);
   const base = process.env.FIRST_DRAFT_TEST_BYOKIT_BASE; // tests only: a stand-in for the provider
   const account = `${key.id}.${MEMBER}`, index = memoryStore();
   const accounts = new Accounts({ store: () => index, keyStore: () => overrideStore({ [`accounts.${account}`]: secret }) });
@@ -97,8 +105,7 @@ export async function doctor(route, model) {
     } catch (e) { return { label, status: 'fail', detail: e.message }; }
   }
   const key = await planKey(route);
-  const { getBuiltinModel } = await import('@earendil-works/pi-ai/providers/all');
-  if (!getBuiltinModel(key.upstream.id, model)) return { status: 'fail', label, detail: `pi-ai lists no model ${model} for ${key.upstream.id}` };
+  try { await modelFor(key.upstream.id, model); } catch (e) { return { status: 'fail', label, detail: e.message }; }
   const set = Boolean(process.env[key.upstream.method]);
   return { status: set ? 'ok' : 'fail', label, detail: `${key.upstream.method} is ${set ? '' : 'not '}set`, ...(!set && { fix: await signIn(key) }) };
 }
