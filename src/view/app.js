@@ -1,7 +1,7 @@
 // The first-draft view: every option of a design as a grid, one option on a canvas (phone and desktop side by side), and fullscreen.
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors and Escape back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, SANDBOX, fitCanvas, formatIframeError, isTrustedPreviewMessageSource } from './canvas.js';
+import { FRAMES, SANDBOX, fitCanvas, formatIframeError, isTrustedPreviewMessageSource, pageFor } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -70,21 +70,27 @@ function grid() {
 function canvas(o) {
   const i = design.options.indexOf(o), count = design.options.length;
   const prev = design.options[(i - 1 + count) % count], next = design.options[(i + 1) % count];
-  const phone = scaled(FRAMES.phone.width + FRAMES.phone.bezel * 2, FRAMES.phone.height + FRAMES.phone.bezel * 2, phoneFrame(frame(o, `Option ${o.n} at ${FRAMES.phone.width}px`)));
-  const desktop = scaled(FRAMES.desktop.width, FRAMES.desktop.height, el('div', { class: 'artboard' }, frame(o, `Option ${o.n} at ${FRAMES.desktop.width}px`)));
-  const board = el('div', { class: 'board' },
-    el('figure', {}, phone, el('figcaption', {}, `Phone · ${FRAMES.phone.width}`)),
-    el('figure', {}, desktop, el('figcaption', {}, `Desktop · ${FRAMES.desktop.width}`)));
+  let board, fit;
+  if (o.error) {
+    board = el('div', { class: 'thumb-error' }, o.error);
+  } else {
+    const phone = scaled(FRAMES.phone.width + FRAMES.phone.bezel * 2, FRAMES.phone.height + FRAMES.phone.bezel * 2, phoneFrame(frame(o, `Option ${o.n} at ${FRAMES.phone.width}px`)));
+    const desktop = scaled(FRAMES.desktop.width, FRAMES.desktop.height, el('div', { class: 'artboard' }, frame(o, `Option ${o.n} at ${FRAMES.desktop.width}px`)));
+    board = el('div', { class: 'board' },
+      el('figure', {}, phone, el('figcaption', {}, `Phone · ${FRAMES.phone.width}`)),
+      el('figure', {}, desktop, el('figcaption', {}, `Desktop · ${FRAMES.desktop.width}`)));
+    fit = () => {
+      const f = fitCanvas(area.clientWidth);
+      board.classList.toggle('stacked', f.stacked);
+      phone.rescale(f.phone);
+      desktop.rescale(f.desktop);
+    };
+  }
   const area = el('main', { class: 'canvas' }, board);
-  const fit = () => {
-    const f = fitCanvas(area.clientWidth);
-    board.classList.toggle('stacked', f.stacked);
-    phone.rescale(f.phone);
-    desktop.rescale(f.desktop);
-  };
+  const fullscreen = o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button primary')];
   return { body: [el('header', { class: 'bar' }, link('#/', '← All options', 'button'),
     el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · ${i + 1} of ${count}`)),
-    el('nav', {}, link(`#/o/${prev.n}`, '‹', 'button icon'), link(`#/o/${next.n}`, '›', 'button icon'), link(`#/o/${o.n}/full`, 'Fullscreen', 'button primary'))),
+    el('nav', {}, link(`#/o/${prev.n}`, '‹', 'button icon'), link(`#/o/${next.n}`, '›', 'button icon'), ...fullscreen)),
   errorBar(o.n), area], fit };
 }
 
@@ -97,12 +103,13 @@ function full(o) {
 function render() {
   const [, n, mode] = location.hash.match(/^#\/o\/(\d+)(\/full)?$/) ?? [];
   const o = n && option(Number(n));
-  if (!mode && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  const page = pageFor(o, Boolean(mode));
+  if (page !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   frames = [];
   resize?.disconnect();
-  const view = !o || o.error ? grid() : mode ? full(o) : canvas(o);
+  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : canvas(o);
   document.title = o ? `Option ${o.n} · ${design.name}` : design.name;
-  app.className = !o || o.error ? 'page-grid' : mode ? 'page-full' : 'page-canvas';
+  app.className = `page-${page}`;
   app.replaceChildren(...view.body);
   if (view.fit) { resize = new ResizeObserver(view.fit); resize.observe(app); }
 }

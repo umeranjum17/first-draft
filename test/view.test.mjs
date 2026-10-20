@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { FRAMES, fitCanvas } from '../src/view/canvas.js';
+import { FRAMES, fitCanvas, pageFor } from '../src/view/canvas.js';
 import { designFiles, serve } from '../src/view.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
@@ -36,6 +36,15 @@ test('the canvas puts phone and desktop side by side at 1280 and stacks them at 
   assert.ok(FRAMES.desktop.width * narrow.desktop <= 390 - 48);
   assert.equal(fitCanvas(4000).desktop, 1);
   assert.deepEqual([FRAMES.phone.width, FRAMES.desktop.width], [390, 1280]);
+});
+
+test('an errored option opens its canvas, never the grid or a frame', () => {
+  const errored = { n: 2, label: 'a-2', error: 'too big' };
+  assert.equal(pageFor(undefined, false), 'grid');
+  assert.equal(pageFor(errored, false), 'canvas');
+  assert.equal(pageFor(errored, true), 'canvas');
+  assert.equal(pageFor({ n: 1, label: 'a-1' }, false), 'canvas');
+  assert.equal(pageFor({ n: 1, label: 'a-1' }, true), 'full');
 });
 
 test('options render from a second origin, sandboxed to scripts only', async (t) => {

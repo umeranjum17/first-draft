@@ -19,6 +19,12 @@ export function fitCanvas(containerWidth) {
   return { stacked: true, phone: Math.min(1, available / phone), desktop: Math.min(1, available / desktop) };
 }
 
+export function pageFor(option, full) {
+  if (!option) return 'grid';
+  if (option.error || !full) return 'canvas';
+  return 'full';
+}
+
 // preview/helpers.ts formatIframeError and isTrustedPreviewMessageSource, unchanged.
 export function formatIframeError(kind, message, source, lineno) {
   const location = source && lineno ? ` (${source}:${lineno})` : '';
