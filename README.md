@@ -40,6 +40,8 @@ Run `first-draft-axi --help` for every command and flag.
 
 ## What it does
 
+The screenshots below show three options from one real `make --count 3` run on `MiniMax-M3.1-Flash-Preview`; the pin's comment was written by hand.
+
 `make` turns the prompt into 1 to 5 options (`--count`). With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty.
 
 `view` shows a design: the `--out` path given to `make`, a folder of options, or option files.
@@ -53,7 +55,7 @@ Run `first-draft-axi --help` for every command and flag.
 
 - **Play**: click through the option's screens like a prototype, with a Back button, a button per screen and a phone/desktop switch.
 
-  <img src="docs/media/play.webp" width="760" alt="Play: the third option's note screen, reached from the notes list, with Back and the screen buttons">
+  <img src="docs/media/play.webp" width="760" alt="Play: the second option's signed-in screen, reached from its sign-in screen, with Back and the screen buttons">
 
 - **Comment pins**: numbered pins over the canvas and Play, read-only. Click or tap one to read it.
 
@@ -70,7 +72,7 @@ Pins come from `<design>.comments.json` next to the design (`mocks/sign-in.html`
 Every model call goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), on the model you choose. first-draft never picks one, and no route falls back to another account or model. `first-draft-axi init` with no flags lists the routes that are ready.
 
 - **Your subscription CLI**: `byokit:codex` runs your installed, signed-in CLI with your normal home folder, and never copies its login.
-- **A plan key or an api key**: a plan-key route such as `byokit:zai:plan_key`, or an api-key route such as `byokit:minimax:key`. The key comes from the environment variable `doctor` names, goes only to BYOKit for the call, and is never saved.
+- **A plan key or an api key**: a plan-key route such as `byokit:zai:plan_key`, or an api-key route such as `byokit:minimax:key` (its model defaults to `MiniMax-M3.1-Flash-Preview` when `init` gets no `--model`). The key comes from the environment variable `doctor` names, goes only to BYOKit for the call, and is never saved.
 
 The choice lives in `$FIRST_DRAFT_HOME/config.json` (default `~/.first-draft/config.json`):
 
@@ -86,7 +88,7 @@ first-draft works on its own. If you use [sign-off](https://github.com/umeranjum
 first-draft-axi post mocks/sign-in.html --title "Pick the sign-in layout" --option a=Calm --option b=Bold --option c=Dense --recommend a
 ```
 
-It copies the options into the board's `mocks/` (the nearest `.sign-off/`, or `--board`), starts `view` if it is not already serving them, and runs `sign-off-axi post`. The card text ends with an `Open in first-draft:` link per option, to its Play url. The card shows mocks in a sandbox that blocks links inside them, so the urls ride in the card text, to copy. `post` needs `sign-off-axi` on the PATH.
+It copies the options into the board's `mocks/` (the nearest `.sign-off/`, or `--board`), starts `view` if it is not already serving them, and runs `sign-off-axi post`. Each option gets a tappable Open link under its mock, to its Play url; the same urls also end the card text as `Open in first-draft:`, for boards that do not draw the link. A link inside a mock does not work: the board shows mocks in a sandbox that blocks it. `post` needs `sign-off-axi` 0.5.0 or newer on the PATH.
 
 first-draft needs nothing from Firstmate: inside it or outside it, it runs on its own config.
 
