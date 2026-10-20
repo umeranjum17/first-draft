@@ -13,5 +13,8 @@ await build({ stdin: { contents: `export { generateViaAgent, composeSystemPrompt
 await build({ entryPoints: { view: 'src/view/app.js' }, outdir: 'dist/view', bundle: true, platform: 'browser', format: 'iife', minify: true, tsconfigRaw: {} });
 mkdirSync('dist', { recursive: true });
 cpSync(`${root}/core/src/prompts/sections`, 'dist', { recursive: true, filter: (p) => !p.endsWith('.ts') });
+// The view's favicon is the logo in docs/.
+cpSync('docs/logo.svg', 'dist/view/favicon.svg');
+for (const f of ['favicon-32.png', 'apple-touch-icon.png']) cpSync(`docs/${f}`, `dist/view/${f}`);
 cpSync('vendor/open-codesign/LICENSE', 'dist/LICENSE');
 cpSync('vendor/open-codesign/NOTICE', 'dist/NOTICE');

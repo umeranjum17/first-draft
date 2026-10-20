@@ -1,11 +1,15 @@
 {
   "name": "first-draft-axi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AXI CLI that turns a prompt into design mocks: self-contained HTML pages, made by the model you choose through BYOKit.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/umeranjum17/first-draft.git"
+  },
+  "homepage": "https://github.com/umeranjum17/first-draft#readme",
+  "bugs": {
+    "url": "https://github.com/umeranjum17/first-draft/issues"
   },
   "type": "module",
   "bin": {

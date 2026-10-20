@@ -81,6 +81,7 @@ test('options render from a second origin, sandboxed to scripts only', async (t)
   assert.equal(data.frames, v.frames);
   assert.deepEqual(data.options.map((o) => [o.n, o.label, Boolean(o.error)]), [[1, 'a-1', false], [2, 'a-2', true]]);
   assert.equal((await fetch(`${view}/view.js`)).status, 200);
+  assert.equal((await fetch(`${view}/favicon.svg`)).headers.get('content-type'), 'image/svg+xml');
 
   const option = await fetch(`${v.frames}/o/1`);
   assert.equal(option.status, 200);

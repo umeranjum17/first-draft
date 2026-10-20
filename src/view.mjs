@@ -53,9 +53,10 @@ export async function viewHost(flag) {
   return { given, host, advertise: wildcard ? tailnet : host, tailnet, wildcard };
 }
 
-export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 // Scripts run only inside this sandbox: inline only, nothing loaded or sent over the network.
 export const framePolicy = (view) => `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors ${view}`;
+const ASSETS = { '/view.js': 'text/javascript', '/view.css': 'text/css', '/favicon.svg': 'image/svg+xml', '/favicon-32.png': 'image/png', '/apple-touch-icon.png': 'image/png' };
 const COMMON = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
 
 // Play only: the screens are the upstream overlay's `data-oc-screen` sections. This reports the active one to the view page and,
@@ -89,15 +90,15 @@ export async function serve({ files, name, host, advertise = host, port, framePo
   const page = () => {
     const { pins, error: pinsError } = readPins(comments);
     const data = { name, frames: frameOrigin, pins, pinsError, options: options.map((o) => ({ n: o.n, label: o.label, error: sizeError(o)?.message })) };
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="stylesheet" href="/view.css"></head>`
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/view.css"></head>`
       + `<body><div id="app"></div><script type="application/json" id="design">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script><script src="/view.js"></script></body></html>`;
   };
   const view = createServer((req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     const path = pathOf(req);
     if (path === '/') return send(res, 200, 'text/html; charset=utf-8', page(), { 'content-security-policy': viewPolicy(frameOrigin) });
-    if (path === '/view.js' || path === '/view.css') {
-      try { return send(res, 200, path.endsWith('.js') ? 'text/javascript' : 'text/css', readFileSync(new URL(path.slice(1), DIST))); }
+    if (ASSETS[path]) {
+      try { return send(res, 200, ASSETS[path], readFileSync(new URL(path.slice(1), DIST))); }
       catch (e) { return send(res, 500, 'text/plain', `${path} cannot be read: ${e.code ?? e.message}`); }
     }
     send(res, 404, 'text/plain', 'not found');
