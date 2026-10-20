@@ -1,7 +1,7 @@
-// The first-draft view: every option of a design as a grid, one option on a canvas (phone and desktop side by side), and fullscreen.
-// Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors and Escape back.
+// The first-draft view: every option of a design as a grid, one option on a canvas (phone and desktop side by side), fullscreen, and Play (clickable screens).
+// Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, SANDBOX, fitCanvas, formatIframeError, isTrustedPreviewMessageSource, pageFor } from './canvas.js';
+import { FRAMES, SANDBOX, fitCanvas, fitPlay, formatIframeError, isTrustedPreviewMessageSource, pageFor, playDevice } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -17,10 +17,10 @@ const el = (tag, attrs = {}, ...kids) => {
   return e;
 };
 
-function frame(option, title, lazy) {
+function frame(option, title, lazy, query = '') {
   // sandbox is set before src so the first navigation is already sandboxed.
   const iframe = el('iframe', { sandbox: SANDBOX, referrerpolicy: 'no-referrer', title, loading: lazy ? 'lazy' : undefined });
-  iframe.src = `${design.frames}/o/${option.n}`;
+  iframe.src = `${design.frames}/o/${option.n}${query}`;
   frames.push({ n: option.n, iframe });
   return iframe;
 }
@@ -87,7 +87,7 @@ function canvas(o) {
     };
   }
   const area = el('main', { class: 'canvas' }, board);
-  const fullscreen = o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button primary')];
+  const fullscreen = o.error ? [] : [link(`#/o/${o.n}/play`, 'Play', 'button primary'), link(`#/o/${o.n}/full`, 'Fullscreen', 'button')];
   return { body: [el('header', { class: 'bar' }, link('#/', '← All options', 'button'),
     el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · ${i + 1} of ${count}`)),
     el('nav', {}, link(`#/o/${prev.n}`, '‹', 'button icon'), link(`#/o/${next.n}`, '›', 'button icon'), ...fullscreen)),
@@ -100,14 +100,43 @@ function full(o) {
   return { body: [el('main', { class: 'full' }, frame(o, `Option ${o.n} fullscreen`)), exit] };
 }
 
+// Play: one option as a clickable prototype on one device. The option's screens (the overlay's data-oc-screen sections) are
+// reported by the option as it moves; the bar lists them, and Back steps through the screens visited.
+let playing = null; // { iframe, screens, current, canBack } while the Play page is open
+function playControls() {
+  const { iframe, screens, current, canBack } = playing;
+  const tell = (msg) => iframe.contentWindow?.postMessage({ __firstDraft: true, ...msg }, '*'); // the sandboxed option has an opaque origin, so no origin can be named
+  const back = el('button', { type: 'button', class: 'button', disabled: canBack ? undefined : '' }, '← Back');
+  back.onclick = () => tell({ type: 'BACK' });
+  const chips = screens.map((id) => {
+    const b = el('button', { type: 'button', class: 'button chip', 'aria-current': id === current ? 'true' : undefined }, id);
+    b.onclick = () => tell({ type: 'GO', id });
+    return b;
+  });
+  return [back, ...(chips.length ? chips : [el('span', { class: 'muted' }, 'Single screen')])];
+}
+
+function play(o, device) {
+  const dev = playDevice(device, innerWidth), f = FRAMES[dev];
+  const iframe = frame(o, `Option ${o.n} Play at ${f.width}px`, false, '?play');
+  playing = { iframe, screens: [], current: null, canBack: false };
+  const controls = el('div', { class: 'play-controls' }, ...playControls());
+  const art = dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe)) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe));
+  const stage = el('main', { class: 'stage' }, art);
+  const tabs = ['phone', 'desktop'].map((d) => el('a', { href: `#/o/${o.n}/play/${d}`, class: 'button', 'aria-current': d === dev ? 'true' : undefined }, `${d === 'phone' ? 'Phone' : 'Desktop'} · ${FRAMES[d].width}`));
+  return { body: [el('header', { class: 'bar' }, link(`#/o/${o.n}`, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), el('nav', {}, ...tabs)),
+    controls, errorBar(o.n), stage], fit: () => art.rescale(fitPlay(dev, stage.clientWidth, stage.clientHeight)) };
+}
+
 function render() {
-  const [, n, mode] = location.hash.match(/^#\/o\/(\d+)(\/full)?$/) ?? [];
+  const [, n, mode, device] = location.hash.match(/^#\/o\/(\d+)(?:\/(full|play)(?:\/(phone|desktop))?)?$/) ?? [];
   const o = n && option(Number(n));
-  const page = pageFor(o, Boolean(mode));
+  const page = pageFor(o, mode);
+  playing = null;
   if (page !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   frames = [];
   resize?.disconnect();
-  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : canvas(o);
+  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : page === 'play' ? play(o, device) : canvas(o);
   document.title = o ? `Option ${o.n} · ${design.name}` : design.name;
   app.className = `page-${page}`;
   app.replaceChildren(...view.body);
@@ -115,7 +144,7 @@ function render() {
 }
 
 const current = () => Number(location.hash.match(/^#\/o\/(\d+)/)?.[1]);
-const leaveFull = () => { if (location.hash.endsWith('/full')) location.hash = `#/o/${current()}`; };
+const leaveFull = () => { if (/\/(full|play)/.test(location.hash)) location.hash = `#/o/${current()}`; };
 
 window.addEventListener('message', (e) => {
   const from = frames.find((f) => isTrustedPreviewMessageSource(e.source, f.iframe.contentWindow));
@@ -127,6 +156,11 @@ window.addEventListener('message', (e) => {
     errors.set(from.n, list.slice(-50));
     if (current() === from.n) document.querySelector('.error-bar')?.replaceWith(errorBar(from.n));
   } else if (e.data?.__codesign === true && e.data.type === 'PREVIEW_ESCAPE') leaveFull();
+  else if (playing?.iframe === from.iframe && e.data?.__firstDraft === true && e.data.type === 'SCREEN') {
+    const d = e.data;
+    Object.assign(playing, { screens: Array.isArray(d.screens) ? d.screens.filter((id) => typeof id === 'string') : [], current: String(d.current ?? ''), canBack: d.canBack === true });
+    document.querySelector('.play-controls')?.replaceChildren(...playControls());
+  }
 });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') leaveFull(); });
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveFull(); });

@@ -19,10 +19,18 @@ export function fitCanvas(containerWidth) {
   return { stacked: true, phone: Math.min(1, available / phone), desktop: Math.min(1, available / desktop) };
 }
 
-export function pageFor(option, full) {
+// mode is the route's suffix: 'full', 'play', or nothing.
+export function pageFor(option, mode) {
   if (!option) return 'grid';
-  if (option.error || !full) return 'canvas';
-  return 'full';
+  if (option.error || (mode !== 'full' && mode !== 'play')) return 'canvas';
+  return mode;
+}
+
+// Play shows one device at a time, as large as the stage allows without upscaling.
+export const playDevice = (device, viewportWidth) => device ?? (viewportWidth < 760 ? 'phone' : 'desktop');
+export function fitPlay(device, width, height) {
+  const f = FRAMES[device], w = f.width + (f.bezel ?? 0) * 2, h = f.height + (f.bezel ?? 0) * 2;
+  return Math.min(1, Math.max(1, width - PADDING) / w, Math.max(1, height - PADDING) / h);
 }
 
 // preview/helpers.ts formatIframeError and isTrustedPreviewMessageSource, unchanged.

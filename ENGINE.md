@@ -82,10 +82,27 @@ code in `src/view/`, bundled by esbuild into `dist/view/`:
   unchanged.
 - `preview/fullscreen.ts`: Escape, from the page or the option, leaves fullscreen.
 
+### Play
+
+`#/o/<n>/play[/phone|/desktop]` opens one option as a clickable prototype on one device.
+Screens are the runtime overlay's own mechanism, used unchanged: sections marked
+`data-oc-screen` with an `id`, switched by in-page hash links (`showScreen`), the first
+shown first; the overlay already blocks every other navigation. Options without
+`data-oc-screen` are single-screen Play. Form states (empty, filled, submitted) are screens
+the option links between. `PLAY_BRIDGE` in `src/view.mjs` is the only addition: a small
+script appended to an option served as `/o/<n>?play` (never to thumbnails or the canvas) that
+reports the active screen, with the screen list, to the view page and, on its request, goes
+to a screen or back by clicking an in-page hash link, so the overlay does the switch. The
+view page keeps no history; the bridge keeps the screens visited. Messages are
+`{__firstDraft: true, type: 'SCREEN' | 'GO' | 'BACK'}`; the sandbox, CSP and 5 MB cap are
+unchanged, and the view posts with target `*` because the sandboxed option has no origin.
+`make`'s export contract now asks for this screen-link contract (`data-oc-screen`
+sections, hash links, no script); output stays script-free.
+
 `packages/core/src/frames` holds JSX device snippets for the agent; the view
 renders HTML only and does not use them.
 
 Not in this slice: JSX/runtime exports, external assets, image generation,
-workspace persistence, revision, Play and multi-screen flows, comments,
+workspace persistence, revision, comments,
 sign-off links, or new publication. The first PR
 target remains **2026-10-20**; merge and publication require Main's approval.

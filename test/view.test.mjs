@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { FRAMES, fitCanvas, pageFor } from '../src/view/canvas.js';
+import { FRAMES, fitCanvas, fitPlay, pageFor, playDevice } from '../src/view/canvas.js';
 import { designFiles, serve } from '../src/view.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
@@ -44,13 +44,23 @@ test('the canvas puts phone and desktop side by side at 1280 and stacks them at 
   assert.deepEqual([FRAMES.phone.width, FRAMES.desktop.width], [390, 1280]);
 });
 
+test('Play fits one device to the stage without upscaling, and defaults to the device that fits the viewport', () => {
+  assert.equal(fitPlay('desktop', 4000, 4000), 1);
+  assert.ok(FRAMES.desktop.width * fitPlay('desktop', 1280, 900) <= 1280 - 48);
+  assert.ok((FRAMES.phone.height + FRAMES.phone.bezel * 2) * fitPlay('phone', 1280, 700) <= 700 - 48);
+  assert.ok((FRAMES.phone.width + FRAMES.phone.bezel * 2) * fitPlay('phone', 390, 900) <= 390 - 48);
+  assert.deepEqual([playDevice(undefined, 390), playDevice(undefined, 1280), playDevice('phone', 1280)], ['phone', 'desktop', 'phone']);
+});
+
 test('an errored option opens its canvas, never the grid or a frame', () => {
   const errored = { n: 2, label: 'a-2', error: 'too big' };
-  assert.equal(pageFor(undefined, false), 'grid');
-  assert.equal(pageFor(errored, false), 'canvas');
-  assert.equal(pageFor(errored, true), 'canvas');
-  assert.equal(pageFor({ n: 1, label: 'a-1' }, false), 'canvas');
-  assert.equal(pageFor({ n: 1, label: 'a-1' }, true), 'full');
+  assert.equal(pageFor(undefined), 'grid');
+  assert.equal(pageFor(errored), 'canvas');
+  assert.equal(pageFor(errored, 'full'), 'canvas');
+  assert.equal(pageFor(errored, 'play'), 'canvas');
+  assert.equal(pageFor({ n: 1, label: 'a-1' }), 'canvas');
+  assert.equal(pageFor({ n: 1, label: 'a-1' }, 'full'), 'full');
+  assert.equal(pageFor({ n: 1, label: 'a-1' }, 'play'), 'play');
 });
 
 test('options render from a second origin, sandboxed to scripts only', async (t) => {
@@ -83,6 +93,25 @@ test('options render from a second origin, sandboxed to scripts only', async (t)
   assert.equal((await fetch(`${v.frames}/`)).status, 404);
   assert.equal((await fetch(`${view}/o/1`)).status, 404);
   assert.equal((await fetch(`${v.frames}/o/1`, { method: 'POST' })).status, 405);
+});
+
+const SCREENS = `<!doctype html><html><head><title>Notes</title></head><body><section id="signin" data-oc-screen><a href="#home">Sign in</a></section><section id="home" data-oc-screen><a href="#signin">Back</a></section></body></html>`;
+
+test('Play serves the screen bridge inside the same sandbox, and only when asked', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), SCREENS);
+  writeFileSync(join(dir, 'a-2.html'), '<!doctype html><title>One</title><h1>One screen</h1>');
+  const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
+  t.after(v.close);
+  const plain = await (await fetch(`${v.frames}/o/1`)).text();
+  assert.doesNotMatch(plain, /__firstDraft/);
+  assert.match(plain, /data-oc-screen/); // the screens are the page's own; upstream's overlay switches them
+  const play = await fetch(`${v.frames}/o/1?play`);
+  const html = await play.text();
+  assert.match(html, /__firstDraft/);
+  assert.ok(html.lastIndexOf('__firstDraft') < html.lastIndexOf('</body>'));
+  assert.equal(play.headers.get('content-security-policy'), (await fetch(`${v.frames}/o/1`)).headers.get('content-security-policy'));
+  assert.match(await (await fetch(`${v.frames}/o/2?play`)).text(), /One screen[\s\S]*__firstDraft/); // no screens: Play still opens it
 });
 
 test('an option that is a directory answers with an error and the view keeps serving', async (t) => {
