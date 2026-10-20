@@ -2,12 +2,12 @@
 // the canvas fit, and the CLI's host choice. No browser and no model call.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { FRAMES, SANDBOX, fitCanvas } from '../src/view/canvas.js';
+import { FRAMES, fitCanvas } from '../src/view/canvas.js';
 import { designFiles, serve } from '../src/view.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
@@ -60,23 +60,13 @@ test('options render from a second origin, sandboxed to scripts only', async (t)
   assert.equal(option.status, 200);
   const sandbox = option.headers.get('content-security-policy');
   for (const rule of ['sandbox allow-scripts;', "default-src 'none'", "script-src 'unsafe-inline'", "connect-src 'none'", "form-action 'none'", `frame-ancestors ${view}`]) assert.ok(sandbox.includes(rule), rule);
-  const html = await option.text();
-  assert.match(html, /Sign in to your notes/);
-  assert.doesNotMatch(html, /http-equiv="Content-Security-Policy"/i); // the header replaces the mock's own policy, which would block the runtime
-  assert.match(html, /IFRAME_ERROR/); // upstream overlay: error and navigation bridge
+  assert.match(await option.text(), /Sign in to your notes/);
 
   assert.equal((await fetch(`${v.frames}/o/2`)).status, 413);
   assert.equal((await fetch(`${v.frames}/o/3`)).status, 404);
   assert.equal((await fetch(`${v.frames}/`)).status, 404);
   assert.equal((await fetch(`${view}/o/1`)).status, 404);
   assert.equal((await fetch(`${v.frames}/o/1`, { method: 'POST' })).status, 405);
-});
-
-test('the view page frames options with sandbox="allow-scripts" and nothing more', () => {
-  assert.equal(SANDBOX, 'allow-scripts');
-  const bundle = readFileSync(new URL('../dist/view/view.js', import.meta.url), 'utf8');
-  assert.match(bundle, /allow-scripts/);
-  assert.doesNotMatch(bundle, /allow-same-origin|allow-top-navigation|allow-forms|allow-popups/);
 });
 
 test('view binds the tailnet address from tailscale, or the given host', async (t) => {

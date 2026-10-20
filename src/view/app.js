@@ -115,7 +115,8 @@ window.addEventListener('message', (e) => {
   if (!from) return;
   if (isIframeErrorMessage(e.data)) {
     const d = e.data, list = errors.get(from.n) ?? [];
-    list.push(formatIframeError(d.kind, d.message, d.source, d.lineno));
+    const line = formatIframeError(d.kind, d.message, d.source, d.lineno);
+    if (!list.includes(line)) list.push(line);
     errors.set(from.n, list.slice(-50));
     if (current() === from.n) document.querySelector('.error-bar')?.replaceWith(errorBar(from.n));
   } else if (e.data?.__codesign === true && e.data.type === 'PREVIEW_ESCAPE') leaveFull();

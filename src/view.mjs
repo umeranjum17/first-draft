@@ -43,11 +43,11 @@ export async function serve({ files, name, host, port, framePort }) {
   const sizeError = (o) => {
     try {
       const bytes = statSync(o.file).size;
-      return bytes > LIMIT ? `${basename(o.file)} is ${bytes} bytes; options are 5 MB or less` : null;
-    } catch (e) { return `${basename(o.file)} cannot be read: ${e.code ?? e.message}`; }
+      return bytes > LIMIT ? { status: 413, message: `${basename(o.file)} is ${bytes} bytes; options are 5 MB or less` } : null;
+    } catch (e) { return { status: 404, message: `${basename(o.file)} cannot be read: ${e.code ?? e.message}` }; }
   };
   const page = () => {
-    const data = { name, frames: frameOrigin, options: options.map((o) => ({ n: o.n, label: o.label, error: sizeError(o) ?? undefined })) };
+    const data = { name, frames: frameOrigin, options: options.map((o) => ({ n: o.n, label: o.label, error: sizeError(o)?.message })) };
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="stylesheet" href="/view.css"></head>`
       + `<body><div id="app"></div><script type="application/json" id="design">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script><script src="/view.js"></script></body></html>`;
   };
@@ -63,7 +63,7 @@ export async function serve({ files, name, host, port, framePort }) {
     const o = options[Number(new URL(req.url, 'http://frames').pathname.match(/^\/o\/(\d+)$/)?.[1]) - 1];
     if (!o) return send(res, 404, 'text/plain', 'not found');
     const error = sizeError(o);
-    if (error) return send(res, error.includes('5 MB') ? 413 : 404, 'text/plain', error);
+    if (error) return send(res, error.status, 'text/plain', error.message);
     // Upstream's preview runtime: drops the page's own CSP meta (this header replaces it), adds the viewport support and the error/navigation overlay.
     send(res, 200, 'text/html; charset=utf-8', buildPreviewDocument(readFileSync(o.file, 'utf8'), { path: 'index.html' }), { 'content-security-policy': framePolicy(viewOrigin) });
   });
