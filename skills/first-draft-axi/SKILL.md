@@ -12,5 +12,6 @@ Run `first-draft-axi --help` for the commands; the CLI's own output says what to
    Then `first-draft-axi init --agent byokit:<route> --model <model>`.
 3. `first-draft-axi make "<prompt>" --out <file.html> [--count N]` makes the mocks: one upstream engine run each on the user's plan, potentially several model turns. Every model turn goes through BYOKit; failures are not retried.
 4. To show the options, run `first-draft-axi view <the --out path>` in the background and give the user the printed tailnet url: a grid, a phone + desktop canvas per option, fullscreen, and Play (click through the option's screens).
-5. To get the user's pick, post them to a sign-off board:
-   `sign-off-axi post --type design --title "<question>" --option a=<label> --mock a=<board-relative path> ...`.
+5. To get the user's pick, post them to a sign-off board (needs `sign-off-axi`; `first-draft-axi` works without it):
+   `first-draft-axi post <the --out path> --title "<question>" --recommend a [--option a=<label> ...]`.
+   It copies the options into the board's `mocks/`, starts the view if needed, and the card text carries each option's Play url on the tailnet (the board's sandbox blocks links inside a mock, so it is plain text to copy). Pick the `--recommend` yourself; a key already on the board needs a new `--key`.
