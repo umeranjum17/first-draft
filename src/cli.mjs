@@ -2,10 +2,11 @@
 // first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, extname, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
 import { make, engineDoctor } from './make.mjs';
+import { designFiles, serve, tailnetHost } from './view.mjs';
 
 const VERSION = '0.1.0';
 const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
@@ -52,11 +53,14 @@ const agentOrAsk = () => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[3]:
+commands[4]:
   make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
+  view <design> [--host H] [--port P]   serve a design's options as a grid, a phone + desktop canvas and fullscreen, until stopped
   doctor                              show whether the configured agent is ready, with no paid call
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
 The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key route or byokit:codex for the installed subscription CLI.
+A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
+view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
@@ -91,6 +95,7 @@ if (command === 'make') {
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out },
     ...(blocked.size && { blocked_remote: [...blocked] }),
     help: [blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
+      `See them on the tailnet: first-draft-axi view ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out}`,
       `Post them for review: sign-off-axi post --type design --title "<question>"${files.map((f, i) => ` --option ${'abcde'[i]}=<label> --mock ${'abcde'[i]}=${relative(resolve('.sign-off'), f.file)}`).join('')}`] }));
 } else if (command === 'doctor') {
   const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor()];
@@ -110,6 +115,26 @@ if (command === 'make') {
   if (!routeOf(values.agent)) fail('BAD_AGENT', `agent ${values.agent} is not byokit:<route>`, [ASK]);
   save(values);
   console.log(JSON.stringify({ saved: { config: CONFIG(), agent: values.agent, model: values.model }, help: ['Run `first-draft-axi doctor`'] }));
+} else if (command === 'view') {
+  const { values, positionals } = flags(rest, { host: { type: 'string' }, port: { type: 'string' } });
+  if (!positionals.length) fail('USAGE', 'view needs a design', ['Run `first-draft-axi view <file.html|folder>`']);
+  const files = designFiles(positionals);
+  if (!files.length) fail('NO_OPTIONS', `no HTML options found for ${positionals.join(' ')}`, ['Pass the --out path given to make, a folder of .html options, or the option files']);
+  const port = Number(values.port ?? process.env.FIRST_DRAFT_VIEW_PORT ?? 4430);
+  if (!Number.isInteger(port) || port < 0 || port > 65534) fail('USAGE', '--port is 0-65534 (options render from the next port)', ['Run `first-draft-axi view <design> --port 4430`']);
+  const given = values.host ?? process.env.FIRST_DRAFT_VIEW_HOST;
+  const wildcard = given === '0.0.0.0' || given === '::';
+  const tailnet = given && !wildcard ? null : await tailnetHost();
+  if (wildcard && !tailnet) fail('NO_TAILNET', 'a wildcard --host listens on every address, but tailscale ip -4 found no tailnet address to show', ['Pass --host <tailnet address>']);
+  const host = given || tailnet || '127.0.0.1';
+  const advertise = wildcard ? tailnet : host;
+  let v;
+  try {
+    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1 });
+  } catch (e) { fail(e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'VIEW_FAILED', `cannot serve on ${advertise}:${port}: ${e.message}`, ['Stop the other `first-draft-axi view`, or pass --port <port>']); }
+  console.log(JSON.stringify({ viewing: { url: v.url, frames: v.frames, options: v.options.map((o) => ({ option: o.n, file: o.file, url: `${v.url}#/o/${o.n}` })) },
+    help: [/^(127\.|::1$|localhost$)/.test(advertise) ? `${given ? 'This host' : 'tailscale ip -4 found no tailnet address, so this url'} opens on this machine only; pass --host <tailnet address>` : 'Open the url on any device that can reach this host; it serves until this process stops',
+      'Each option opens at <url>#/o/<n>; add /full for fullscreen'] }));
 } else {
   fail('USAGE', `unknown command ${command}`, ['Run `first-draft-axi --help`']);
 }

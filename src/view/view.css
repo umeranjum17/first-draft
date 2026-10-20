@@ -1,0 +1,60 @@
+/* Phone tokens from Open CoDesign packages/ui/src/tokens.css; the screen size is first-draft's 390x844. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f4ef; --surface: #ffffff; --canvas: #ebe8e1; --text: #1d1c1a; --muted: #6b6862; --border: #dcd8cf; --accent: #2f5bd3; --error: #c2412d;
+  --radius-phone: 44px; --border-width-phone-bezel: 3px;
+  --color-phone-body: oklch(0.22 0.005 280); --color-phone-island: oklch(0.08 0 0);
+  --size-preview-mobile-island-width: 95px; --size-preview-mobile-island-height: 28px;
+  --size-preview-mobile-home-indicator-width: 134px; --size-preview-mobile-home-indicator-height: 5px;
+  --shadow: 0 8px 28px rgb(0 0 0 / 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --surface: #222220; --canvas: #1c1c1b; --text: #eceae4; --muted: #a09c94; --border: #3a3936; --accent: #7d9cf0; --error: #f07a66;
+    --color-phone-body: oklch(0.32 0.005 280); --color-phone-island: oklch(0.05 0 0); --shadow: 0 8px 28px rgb(0 0 0 / 0.5); }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#app { min-height: 100vh; display: flex; flex-direction: column; }
+iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.muted { color: var(--muted); font-weight: 400; }
+
+.bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.bar h1 { flex: 1 1 auto; margin: 0; font-size: 16px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.bar nav { display: flex; gap: 8px; }
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.button.icon { min-width: 40px; padding: 0; font-size: 20px; }
+.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-width: 40px; min-height: 40px; cursor: pointer; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; padding: 16px; }
+.card { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: inherit; text-decoration: none; box-shadow: var(--shadow); }
+.card:focus-visible, .button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.thumb { aspect-ratio: 1280 / 800; overflow: hidden; background: #fff; pointer-events: none; }
+.thumb-error { display: grid; place-items: center; padding: 16px; color: var(--error); background: var(--surface); text-align: center; }
+.card-label { padding: 10px 14px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+
+.scaled { position: relative; flex-shrink: 0; }
+.scaled-inner { transform-origin: top left; }
+.canvas { flex: 1; padding: 24px; overflow: auto; background: var(--canvas); }
+.board { display: flex; gap: 32px; align-items: flex-start; justify-content: center; }
+.board.stacked { flex-direction: column; align-items: center; }
+.board figure { margin: 0; }
+.board figcaption { margin-top: 8px; color: var(--muted); font-size: 13px; text-align: center; }
+.artboard { width: 100%; height: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: #fff; box-shadow: var(--shadow); }
+
+/* PhoneFrame.tsx */
+.phone { position: relative; display: inline-flex; flex-direction: column; padding: var(--border-width-phone-bezel); border-radius: var(--radius-phone); background: var(--color-phone-body); box-shadow: var(--shadow); }
+.phone-screen { position: relative; width: 390px; height: 844px; overflow: hidden; background: #fff; border-radius: calc(var(--radius-phone) - var(--border-width-phone-bezel)); }
+.phone-island, .phone-home { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; pointer-events: none; border-radius: 9999px; background: var(--color-phone-island); }
+.phone-island { top: 8px; width: var(--size-preview-mobile-island-width); height: var(--size-preview-mobile-island-height); }
+.phone-home { bottom: 8px; width: var(--size-preview-mobile-home-indicator-width); height: var(--size-preview-mobile-home-indicator-height); opacity: 0.5; }
+
+/* CanvasErrorBar.tsx */
+.error-bar { display: flex; align-items: flex-start; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--error) 12%, var(--bg)); }
+.error-bar[hidden] { display: none; }
+.error-bar > div { flex: 1; min-width: 0; }
+.error-bar strong { color: var(--error); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.error-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+
+.full { position: fixed; inset: 0; background: #fff; }
+.exit { position: fixed; bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10; min-height: 36px; padding: 0 12px; font-size: 14px; box-shadow: var(--shadow); opacity: 0.9; }
