@@ -1,0 +1,9 @@
+# first-draft features
+
+The repo's maintained verification map; a proof that drives one entry point is incomplete when this lists others.
+
+- [Grid of every option](grid-of-every-option.md): Open the view url at #/ (the root)
+- [Canvas for one option at phone 390 and desktop 1280](canvas-for-one-option-at-phone-390-and-d.md): From the grid, click an option card, or open <url>#/o/1
+- [Play: click through the screens of an option](play-click-through-the-screens-of-an-opt.md): From the canvas, press the Play button, or open <url>#/o/1/play
+- [Comment pins read from the design's comments file](comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design
+- [View startup output and error codes](view-startup-output-and-error-codes.md): Run the view command in a shell
