@@ -446,7 +446,7 @@ test('a call that times out once and one whose connection closes are asked again
   const [serve] = server.listeners('request');
   server.removeAllListeners('request');
   let calls = 0;
-  server.on('request', (req, res) => { if (calls++ === 0) return; if (calls === 3) return req.socket.destroy(); serve(req, res); }); // turn 1's first call never answers; turn 2's first call drops
+  server.on('request', (req, res) => { if (calls++ === 1) return; if (calls === 4) return req.socket.destroy(); serve(req, res); }); // pick succeeds; turn 1's first call never answers; turn 2's first call drops
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
@@ -454,5 +454,5 @@ test('a call that times out once and one whose connection closes are asked again
   const out = join(dir, 'retried.html');
   await run('make', 'a notes page', '--out', out);
   assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
-  assert.equal(calls, 5); // 2 failed + 3 turns
+  assert.equal(calls, 6); // 1 pick + 2 failed calls + 3 generation turns
 });
