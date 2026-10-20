@@ -2,7 +2,7 @@ name: pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, fm/fd-landing-page]
   workflow_dispatch:
 
 permissions:
