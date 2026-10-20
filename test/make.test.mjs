@@ -318,6 +318,7 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /Only two tools exist/);
   assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
   assert.match(sent, /in-page hash links/);
+  assert.match(sent, /Hard rule, first and above all: .*<script> element.*on\* event-handler attribute.*javascript: URL.*hash links.*Host export contract/); // the guard's exact refusals, stated up front
   assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
   assert.match(sent, /Brand values are data, not memory/);
 });
