@@ -340,17 +340,17 @@ test('script-free prose is exported, not mistaken for script', async (t) => {
   assert.match(html, /Content-Security-Policy/);
 });
 
-test('a view call that carries file_text is made as a create', async (t) => {
+test('a view call that carries file_text is made as a create, one with old_str as a str_replace', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const seen = [], server = await standIn(seen, null);
+  const seen = [], server = await standIn(seen, { command: 'view', old_str: 'Sign in', new_str: 'revised' }, false);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'view.html');
   await run('make', 'view fixture page', '--out', out);
-  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
+  assert.match(readFileSync(out, 'utf8'), /revised to your notes/);
 });
 
 test('init with only the minimax key route saves its shipped default model', async (t) => {
