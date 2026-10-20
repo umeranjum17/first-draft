@@ -29,6 +29,15 @@ export async function tailnetHost() {
   } catch { return null; }
 }
 
+// Where the view binds and what address it shows: --host, else $FIRST_DRAFT_VIEW_HOST, else the tailnet address, else this machine.
+export async function viewHost(flag) {
+  const given = flag ?? process.env.FIRST_DRAFT_VIEW_HOST;
+  const wildcard = given === '0.0.0.0' || given === '::';
+  const tailnet = given && !wildcard ? null : await tailnetHost();
+  const host = given || tailnet || '127.0.0.1';
+  return { given, host, advertise: wildcard ? tailnet : host, tailnet, wildcard };
+}
+
 export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 // Scripts run only inside this sandbox: inline only, nothing loaded or sent over the network.
 export const framePolicy = (view) => `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors ${view}`;

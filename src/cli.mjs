@@ -2,11 +2,12 @@
 // first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, extname, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
 import { make, engineDoctor } from './make.mjs';
-import { designFiles, serve, tailnetHost } from './view.mjs';
+import { designFiles, serve, viewHost } from './view.mjs';
+import { post } from './post.mjs';
 
 const VERSION = '0.1.0';
 const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
@@ -53,14 +54,16 @@ const agentOrAsk = () => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[4]:
+commands[5]:
   make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone + desktop canvas and fullscreen, until stopped
+  post <design> --title "<question>" --recommend <a|1> [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url in the card text
   doctor                              show whether the configured agent is ready, with no paid call
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
 The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key route or byokit:codex for the installed subscription CLI.
 A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
 view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.
+post copies the options into the board's mocks folder (the nearest .sign-off/, or --board), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) in the card's --tradeoff text: the card's sandbox blocks a link inside the mock.
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
@@ -96,7 +99,21 @@ if (command === 'make') {
     ...(blocked.size && { blocked_remote: [...blocked] }),
     help: [blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
       `See them on the tailnet: first-draft-axi view ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out}`,
-      `Post them for review: sign-off-axi post --type design --title "<question>"${files.map((f, i) => ` --option ${'abcde'[i]}=<label> --mock ${'abcde'[i]}=${relative(resolve('.sign-off'), f.file)}`).join('')}`] }));
+      `Post them for review: first-draft-axi post ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out} --title "<question>" --recommend a`] }));} else if (command === 'post') {
+  const { values, positionals } = flags(rest, { title: { type: 'string' }, recommend: { type: 'string' }, option: { type: 'string', multiple: true }, tradeoff: { type: 'string' }, key: { type: 'string' }, board: { type: 'string' }, host: { type: 'string' }, port: { type: 'string' } });
+  const files = designFiles(positionals);
+  if (!positionals.length || !values.title || !values.recommend) fail('USAGE', 'post needs a design, --title and --recommend', ['Run `first-draft-axi post <design> --title "<question>" --recommend a`']);
+  if (!files.length) fail('NO_OPTIONS', `no HTML options found for ${positionals.join(' ')}`, ['Pass the --out path given to make, a folder of .html options, or the option files']);
+  const port = Number(values.port ?? process.env.FIRST_DRAFT_VIEW_PORT ?? 4430);
+  if (!Number.isInteger(port) || port < 1 || port > 65534) fail('USAGE', '--port is 1-65534 (options render from the next port)', ['Run `first-draft-axi post <design> --port 4430 ...`']);
+  const labels = (values.option ?? []).map((o) => o.replace(/^[a-f]=/, ''));
+  try {
+    const p = await post({ files, name: basename(positionals[0], extname(positionals[0])), title: values.title, labels, tradeoff: values.tradeoff, key: values.key, recommend: values.recommend, board: values.board, host: values.host, port });
+    console.log(JSON.stringify({ posted: { board: p.board, view: p.view, options: p.options }, sign_off: p.sign_off, help: ['Each option card links to its Play route in the first-draft view; the view serves until it is stopped'] }));
+  } catch (e) {
+    if (!e.code) throw e;
+    fail(e.code, e.message, e.help);
+  }
 } else if (command === 'doctor') {
   const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor()];
   let c;
@@ -122,12 +139,8 @@ if (command === 'make') {
   if (!files.length) fail('NO_OPTIONS', `no HTML options found for ${positionals.join(' ')}`, ['Pass the --out path given to make, a folder of .html options, or the option files']);
   const port = Number(values.port ?? process.env.FIRST_DRAFT_VIEW_PORT ?? 4430);
   if (!Number.isInteger(port) || port < 0 || port > 65534) fail('USAGE', '--port is 0-65534 (options render from the next port)', ['Run `first-draft-axi view <design> --port 4430`']);
-  const given = values.host ?? process.env.FIRST_DRAFT_VIEW_HOST;
-  const wildcard = given === '0.0.0.0' || given === '::';
-  const tailnet = given && !wildcard ? null : await tailnetHost();
+  const { given, host, advertise, tailnet, wildcard } = await viewHost(values.host);
   if (wildcard && !tailnet) fail('NO_TAILNET', 'a wildcard --host listens on every address, but tailscale ip -4 found no tailnet address to show', ['Pass --host <tailnet address>']);
-  const host = given || tailnet || '127.0.0.1';
-  const advertise = wildcard ? tailnet : host;
   let v;
   try {
     v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1 });
