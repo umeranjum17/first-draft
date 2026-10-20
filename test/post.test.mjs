@@ -47,6 +47,18 @@ test('post copies the options to the board, links each to its Play route in a vi
   writeFileSync(join(dir, 'proj/design/y-1.html'), MOCK('Other'));
   const other = await run(['post', 'design/y-1.html', '--title', 'Other', '--recommend', 'a'], { cwd: join(dir, 'proj'), env });
   assert.equal(JSON.parse(other.stdout || 'null')?.error.code, 'PORT_IN_USE', other.stderr);
+
+  // --evidence (journeys, tests, demos): an Evidence card with the Play links and no decision fields, in the view that is already up.
+  writeFileSync(join(dir, 'proj/shot.png'), 'png');
+  const ev = (extra) => run(['post', 'design/x.html', '--title', 'What it made', '--evidence', ...extra], { cwd: join(dir, 'proj'), env });
+  assert.equal(JSON.parse((await ev([])).stdout).error.code, 'USAGE', 'evidence without media is refused');
+  assert.equal(JSON.parse((await ev(['--media', 'shot.png', '--recommend', 'a'])).stdout).error.code, 'USAGE', 'evidence asks no pick');
+  assert.equal(JSON.parse((await ev(['--media', 'shot.png'])).stdout).posted.options.length, 2);
+  const evArgs = readFileSync(join(dir, 'args'), 'utf8').split('\n');
+  assert.deepEqual(evArgs.slice(0, 4), ['post', evArgs[1], '--type', 'evidence']);
+  assert.ok(evArgs.includes('shot.png') && evArgs[evArgs.indexOf('--about') + 1].includes(`Option 2 http://127.0.0.1:${port}/#/o/2/play`));
+  for (const f of ['--recommend', '--option', '--mock', '--link', '--tradeoff', '--default']) assert.ok(!evArgs.includes(f), `no ${f} on an evidence card`);
+  assert.equal(JSON.parse((await run(['post', 'design/x.html', '--title', 'T'], { cwd: join(dir, 'proj'), env })).stdout).error.code, 'USAGE', 'a Decide post still needs --recommend');
 });
 
 test('post stops with a cause when the recommended option is not an option or there is no board', async (t) => {
