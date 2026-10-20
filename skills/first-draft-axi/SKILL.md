@@ -11,6 +11,6 @@ Run `first-draft-axi --help` for the commands; the CLI's own output says what to
 2. No agent or model set: ask the user which BYOKit route and model to use. Never pick one for them.
    Then `first-draft-axi init --agent byokit:<route> --model <model>`.
 3. `first-draft-axi make "<prompt>" --out <file.html> [--count N]` makes the mocks: one upstream engine run each on the user's plan, potentially several model turns. Every model turn goes through BYOKit; failures are not retried.
-4. To show the options, run `first-draft-axi view <the --out path>` in the background and give the user the printed tailnet url: a grid, a phone + desktop canvas per option, and fullscreen.
+4. To show the options, run `first-draft-axi view <the --out path>` in the background and give the user the printed tailnet url: a grid, a phone + desktop canvas per option, fullscreen, and Play (click through the option's screens).
 5. To get the user's pick, post them to a sign-off board:
    `sign-off-axi post --type design --title "<question>" --option a=<label> --mock a=<board-relative path> ...`.

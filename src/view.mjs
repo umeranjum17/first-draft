@@ -34,6 +34,19 @@ export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; st
 export const framePolicy = (view) => `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors ${view}`;
 const COMMON = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
 
+// Play only: the screens are the upstream overlay's `data-oc-screen` sections. This reports the active one to the view page and,
+// on its request, goes to another or back, by clicking an in-page hash link so the overlay's own screen switch does the work.
+const PLAY_BRIDGE = `<script>(function(){var r=document.documentElement,stack=[],back=false;
+function ids(){return [].map.call(document.querySelectorAll('[data-oc-screen]'),function(s){return s.id||s.getAttribute('data-oc-screen')});}
+function sync(){var c=r.getAttribute('data-oc-active-screen');if(c){if(back)back=false;else if(stack[stack.length-1]!==c)stack.push(c);}
+parent.postMessage({__firstDraft:true,type:'SCREEN',screens:ids(),current:c,canBack:stack.length>1},'*');}
+function go(id){var a=document.createElement('a');a.setAttribute('href','#'+id);document.body.appendChild(a);a.click();a.remove();}
+new MutationObserver(sync).observe(r,{attributes:true,attributeFilter:['data-oc-active-screen']});
+addEventListener('load',sync);
+addEventListener('message',function(e){if(e.source!==parent||!e.data||e.data.__firstDraft!==true)return;
+if(e.data.type==='GO'&&ids().indexOf(e.data.id)>=0)go(e.data.id);
+else if(e.data.type==='BACK'&&stack.length>1){stack.pop();back=true;go(stack[stack.length-1]);}});})();</script>`;
+
 const pathOf = (req) => req.url.split('?')[0];
 const listen = (server, port, host) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, host, () => { server.off('error', fail); ok(); }); });
 
@@ -74,6 +87,7 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     let html;
     try { html = buildPreviewDocument(readFileSync(o.file, 'utf8'), { path: 'index.html' }); }
     catch (e) { return send(res, 500, 'text/plain', `${basename(o.file)} cannot be rendered: ${e.code ?? e.message}`); }
+    if (req.url.split('?')[1] === 'play') html = /<\/body>(?![\s\S]*<\/body>)/i.test(html) ? html.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => `${PLAY_BRIDGE}</body>`) : html + PLAY_BRIDGE;
     send(res, 200, 'text/html; charset=utf-8', html, { 'content-security-policy': framePolicy(viewOrigin) });
   });
   await listen(view, port, host);

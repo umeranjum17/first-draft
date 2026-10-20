@@ -58,3 +58,10 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 
 .full { position: fixed; inset: 0; background: #fff; }
 .exit { position: fixed; bottom: calc(12px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10; min-height: 36px; padding: 0 12px; font-size: 14px; box-shadow: var(--shadow); opacity: 0.9; }
+
+/* Play */
+.page-play { height: 100vh; }
+.play-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.button[disabled] { opacity: 0.4; cursor: default; }
+.button[aria-current] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stage { flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; background: var(--canvas); }

@@ -297,6 +297,8 @@ test('the engine prompt carries the export contract and the brand rule', async (
   const sent = JSON.stringify(seen[0].body);
   assert.match(sent, /Host export contract/);
   assert.match(sent, /Only two tools exist/);
+  assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
+  assert.match(sent, /in-page hash links/);
   assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
   assert.match(sent, /Brand values are data, not memory/);
 });
