@@ -1,0 +1,103 @@
+// The first-draft view on the built bundles: which files make a design, the two origins and their policies,
+// the canvas fit, and the CLI's host choice. No browser and no model call.
+import assert from 'node:assert/strict';
+import { execFile, spawn } from 'node:child_process';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { promisify } from 'node:util';
+import { FRAMES, SANDBOX, fitCanvas } from '../src/view/canvas.js';
+import { designFiles, serve } from '../src/view.mjs';
+
+const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
+const MOCK = `<!doctype html><html lang="en"><head>\n<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'" /><title>Notes</title></head><body><h1>Sign in to your notes</h1></body></html>`;
+const temp = (t) => { const dir = mkdtempSync(join(tmpdir(), 'first-draft-view-')); t.after(() => rmSync(dir, { recursive: true, force: true })); return dir; };
+
+test('a design is a folder, the numbered --out path, or option files', (t) => {
+  const dir = temp(t);
+  mkdirSync(join(dir, 'mocks'));
+  for (const f of ['x-1.html', 'x-2.html', 'x-10.html', 'x-a.html', 'notes.txt']) writeFileSync(join(dir, 'mocks', f), MOCK);
+  const names = (args) => designFiles(args).map((f) => f.slice(dir.length + 1));
+  assert.deepEqual(names([join(dir, 'mocks/x.html')]), ['mocks/x-1.html', 'mocks/x-2.html', 'mocks/x-10.html']);
+  assert.deepEqual(names([join(dir, 'mocks')]), ['mocks/x-1.html', 'mocks/x-2.html', 'mocks/x-10.html', 'mocks/x-a.html']);
+  assert.deepEqual(names([join(dir, 'mocks/x-2.html'), join(dir, 'mocks/x-a.html'), join(dir, 'mocks/x-2.html')]), ['mocks/x-2.html', 'mocks/x-a.html']);
+  assert.deepEqual(names([join(dir, 'missing/y.html')]), []);
+});
+
+test('the canvas puts phone and desktop side by side at 1280 and stacks them at 390', () => {
+  const wide = fitCanvas(1280);
+  assert.equal(wide.stacked, false);
+  assert.ok((FRAMES.phone.width + FRAMES.phone.bezel * 2 + FRAMES.desktop.width) * wide.desktop <= 1280 - 48);
+  const narrow = fitCanvas(390);
+  assert.equal(narrow.stacked, true);
+  assert.ok((FRAMES.phone.width + FRAMES.phone.bezel * 2) * narrow.phone <= 390 - 48);
+  assert.ok(FRAMES.desktop.width * narrow.desktop <= 390 - 48);
+  assert.equal(fitCanvas(4000).desktop, 1);
+  assert.deepEqual([FRAMES.phone.width, FRAMES.desktop.width], [390, 1280]);
+});
+
+test('options render from a second origin, sandboxed to scripts only', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  writeFileSync(join(dir, 'a-2.html'), `<!doctype html><body>${'x'.repeat(5_000_001)}</body>`);
+  const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
+  t.after(v.close);
+  const view = new URL(v.url).origin;
+  assert.notEqual(view, v.frames);
+
+  const page = await fetch(v.url);
+  assert.equal(page.status, 200);
+  const policy = page.headers.get('content-security-policy');
+  assert.match(policy, /default-src 'none'/);
+  assert.match(policy, new RegExp(`frame-src ${v.frames}(;|$)`));
+  const data = JSON.parse((await page.text()).match(/<script type="application\/json" id="design">(.*?)<\/script>/)[1]);
+  assert.equal(data.frames, v.frames);
+  assert.deepEqual(data.options.map((o) => [o.n, o.label, Boolean(o.error)]), [[1, 'a-1', false], [2, 'a-2', true]]);
+  assert.equal((await fetch(`${view}/view.js`)).status, 200);
+
+  const option = await fetch(`${v.frames}/o/1`);
+  assert.equal(option.status, 200);
+  const sandbox = option.headers.get('content-security-policy');
+  for (const rule of ['sandbox allow-scripts;', "default-src 'none'", "script-src 'unsafe-inline'", "connect-src 'none'", "form-action 'none'", `frame-ancestors ${view}`]) assert.ok(sandbox.includes(rule), rule);
+  const html = await option.text();
+  assert.match(html, /Sign in to your notes/);
+  assert.doesNotMatch(html, /http-equiv="Content-Security-Policy"/i); // the header replaces the mock's own policy, which would block the runtime
+  assert.match(html, /IFRAME_ERROR/); // upstream overlay: error and navigation bridge
+
+  assert.equal((await fetch(`${v.frames}/o/2`)).status, 413);
+  assert.equal((await fetch(`${v.frames}/o/3`)).status, 404);
+  assert.equal((await fetch(`${v.frames}/`)).status, 404);
+  assert.equal((await fetch(`${view}/o/1`)).status, 404);
+  assert.equal((await fetch(`${v.frames}/o/1`, { method: 'POST' })).status, 405);
+});
+
+test('the view page frames options with sandbox="allow-scripts" and nothing more', () => {
+  assert.equal(SANDBOX, 'allow-scripts');
+  const bundle = readFileSync(new URL('../dist/view/view.js', import.meta.url), 'utf8');
+  assert.match(bundle, /allow-scripts/);
+  assert.doesNotMatch(bundle, /allow-same-origin|allow-top-navigation|allow-forms|allow-popups/);
+});
+
+test('view binds the tailnet address from tailscale, or the given host', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  mkdirSync(join(dir, 'bin'));
+  writeFileSync(join(dir, 'bin/tailscale'), '#!/bin/sh\necho 192.0.2.7\n');
+  chmodSync(join(dir, 'bin/tailscale'), 0o755);
+  const env = { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, FIRST_DRAFT_VIEW_HOST: '' };
+  // 192.0.2.7 is a documentation address this machine does not have, so binding it fails and names it.
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'view', join(dir, 'a.html'), '--port', '0'], { env }),
+    (e) => JSON.parse(e.stdout).error.code === 'VIEW_FAILED' && e.stdout.includes('192.0.2.7'));
+
+  const child = spawn(process.execPath, [CLI, 'view', join(dir, 'a.html'), '--port', '0'], { env: { ...env, FIRST_DRAFT_VIEW_HOST: '127.0.0.1' } });
+  t.after(() => child.kill());
+  const line = await new Promise((ok, fail) => { child.stdout.once('data', (d) => ok(String(d))); child.once('exit', fail); });
+  const out = JSON.parse(line);
+  assert.match(out.viewing.url, /^http:\/\/127\.0\.0\.1:\d+\/$/);
+  assert.equal(out.viewing.options[0].url, `${out.viewing.url}#/o/1`);
+  assert.match(out.help[0], /this machine only/);
+  assert.equal((await fetch(out.viewing.options[0].url)).status, 200);
+
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'view', join(dir, 'none.html')], { env }), (e) => JSON.parse(e.stdout).error.code === 'NO_OPTIONS');
+});
