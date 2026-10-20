@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f5f1">
+  <meta name="description" content="Write one prompt and get several first drafts of a screen.">
+  <title>first-draft - several first drafts from one prompt</title>
+  <link rel="icon" href="favicon-32.png">
+  <style>
+    :root { color-scheme: light; font: 16px/1.55 system-ui, sans-serif; color: #24231f; background: #f7f5f1; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header, main, footer { width: min(1100px, calc(100% - 40px)); margin: auto; }
+    header { display: flex; align-items: center; gap: 12px; padding: 22px 0; font-weight: 700; }
+    header img { width: 36px; height: 36px; }
+    main { padding: 72px 0 56px; }
+    h1 { max-width: 760px; margin: 0; font-size: clamp(2.8rem, 7vw, 5.7rem); line-height: .98; letter-spacing: -.065em; }
+    .intro { max-width: 700px; margin: 24px 0 28px; color: #5e5a54; font-size: clamp(1.1rem, 2vw, 1.35rem); }
+    a.button { display: inline-block; padding: 12px 18px; border-radius: 7px; background: #af4025; color: white; font-weight: 650; text-decoration: none; }
+    a.button:hover { background: #8d321d; }
+    .hero { display: block; width: 100%; margin: 54px 0 66px; border: 1px solid #e2ded7; border-radius: 14px; box-shadow: 0 18px 50px #29231b18; }
+    h2 { margin: 0 0 10px; font-size: 1.7rem; letter-spacing: -.03em; }
+    .detail { max-width: 660px; margin: 0 0 34px; color: #5e5a54; }
+    .screens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    figure { margin: 0; }
+    figure img { display: block; width: 100%; height: auto; border: 1px solid #e2ded7; border-radius: 10px; }
+    figcaption { margin-top: 8px; color: #5e5a54; font-size: .92rem; }
+    footer { padding: 22px 0 36px; border-top: 1px solid #e2ded7; color: #6d6860; font-size: .9rem; }
+    footer a { color: inherit; }
+    @media (max-width: 600px) { main { padding-top: 44px; } .hero { margin: 38px 0 48px; } .screens { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header><img src="logo.svg" alt=""><span>first-draft</span></header>
+  <main>
+    <h1>One prompt.<br>Several first drafts.</h1>
+    <p class="intro">Generate self-contained HTML screens with the model you choose. Compare them at phone and desktop width, click through their screens, and read the comments people pinned on them.</p>
+    <a class="button" href="https://github.com/umeranjum17/first-draft#install">Get started</a>
+    <img class="hero" src="media/grid.webp" alt="Three options for a notes app sign-in page, shown side by side">
+    <h2>From prompt to prototype</h2>
+    <p class="detail">Make creates one to five options. View them side by side, explore each canvas at phone and desktop widths, and play through the screens. Pages load locally with no network.</p>
+    <div class="screens">
+      <figure><img src="media/canvas-1280.webp" alt="A design shown at phone width 390 and desktop width 1280"><figcaption>Compare phone and desktop layouts.</figcaption></figure>
+      <figure><img src="media/play.webp" alt="A prototype's signed-in screen with navigation controls"><figcaption>Click through the screens like a prototype.</figcaption></figure>
+      <figure><img src="media/pin.webp" alt="A comment pin opened over the canvas"><figcaption>Read pinned comments on the design.</figcaption></figure>
+      <figure><img src="media/canvas-390.webp" alt="The canvas arranged for a narrow phone screen"><figcaption>On a narrow screen, phone comes first.</figcaption></figure>
+    </div>
+  </main>
+  <footer><a href="https://github.com/umeranjum17/first-draft">GitHub</a> · MIT License</footer>
+</body>
+</html>

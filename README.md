@@ -1,13 +1,15 @@
 <p align="center">
-  <img src="docs/logo.svg" width="72" height="72" alt="first-draft logo">
+  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/logo.svg" width="72" height="72" alt="first-draft logo">
 </p>
 
 <h1 align="center">first-draft</h1>
 
+<p align="center"><a href="https://umeranjum17.github.io/first-draft/">Visit the landing page</a></p>
+
 <p align="center"><b>Write one prompt and get several first drafts of a screen.</b><br>Each option is a self-contained HTML page that opens with no network. Compare them at phone and desktop width, click through their screens, and read the comments people pinned on them.</p>
 
 <p align="center">
-  <img src="docs/media/grid.webp" width="760" alt="The view: three options of a notes app sign-in page side by side">
+  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/grid.webp" width="760" alt="The view: three options of a notes app sign-in page side by side">
 </p>
 
 ## Install
@@ -49,17 +51,17 @@ The screenshots below show three options from one real `make --count 3` run on `
 - **Grid**: every option side by side. Open one to see it on the canvas.
 - **Canvas**: the option at phone width (390) and desktop width (1280) side by side, stacked on a narrow screen, with Fullscreen and Play.
 
-  <img src="docs/media/canvas-1280.webp" width="760" alt="One option on the canvas: a phone frame at 390 and a desktop frame at 1280">
+  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/canvas-1280.webp" width="760" alt="One option on the canvas: a phone frame at 390 and a desktop frame at 1280">
 
-  <img src="docs/media/canvas-390.webp" width="260" alt="The canvas on a phone: the phone frame comes first, the desktop frame below it">
+  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/canvas-390.webp" width="260" alt="The canvas on a phone: the phone frame comes first, the desktop frame below it">
 
 - **Play**: click through the option's screens like a prototype, with a Back button, a button per screen and a phone/desktop switch.
 
-  <img src="docs/media/play.webp" width="760" alt="Play: the second option's signed-in screen, reached from its sign-in screen, with Back and the screen buttons">
+  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/play.webp" width="760" alt="Play: the second option's signed-in screen, reached from its sign-in screen, with Back and the screen buttons">
 
 - **Comment pins**: numbered pins over the canvas and Play, read-only. Click or tap one to read it.
 
-  <img src="docs/media/pin.webp" width="760" alt="A comment pin opened on the phone and desktop frames">
+  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/pin.webp" width="760" alt="A comment pin opened on the phone and desktop frames">
 
 Each option opens at `<url>#/o/<n>`; add `/full` for Fullscreen or `/play` for Play.
 
