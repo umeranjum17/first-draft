@@ -123,14 +123,17 @@ if (command === 'make') {
   const port = Number(values.port ?? process.env.FIRST_DRAFT_VIEW_PORT ?? 4430);
   if (!Number.isInteger(port) || port < 0 || port > 65534) fail('USAGE', '--port is 0-65534 (options render from the next port)', ['Run `first-draft-axi view <design> --port 4430`']);
   const given = values.host ?? process.env.FIRST_DRAFT_VIEW_HOST;
-  const tailnet = given ? null : await tailnetHost();
+  const wildcard = given === '0.0.0.0' || given === '::';
+  const tailnet = given && !wildcard ? null : await tailnetHost();
+  if (wildcard && !tailnet) fail('NO_TAILNET', 'a wildcard --host listens on every address, but tailscale ip -4 found no tailnet address to show', ['Pass --host <tailnet address>']);
   const host = given || tailnet || '127.0.0.1';
+  const advertise = wildcard ? tailnet : host;
   let v;
   try {
-    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, port, framePort: port && port + 1 });
-  } catch (e) { fail(e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'VIEW_FAILED', `cannot serve on ${host}:${port}: ${e.message}`, ['Stop the other `first-draft-axi view`, or pass --port <port>']); }
+    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1 });
+  } catch (e) { fail(e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'VIEW_FAILED', `cannot serve on ${advertise}:${port}: ${e.message}`, ['Stop the other `first-draft-axi view`, or pass --port <port>']); }
   console.log(JSON.stringify({ viewing: { url: v.url, frames: v.frames, options: v.options.map((o) => ({ option: o.n, file: o.file, url: `${v.url}#/o/${o.n}` })) },
-    help: [/^(127\.|::1$|localhost$)/.test(host) ? `${given ? 'This host' : 'tailscale ip -4 found no tailnet address, so this url'} opens on this machine only; pass --host <tailnet address>` : 'Open the url on any device that can reach this host; it serves until this process stops',
+    help: [/^(127\.|::1$|localhost$)/.test(advertise) ? `${given ? 'This host' : 'tailscale ip -4 found no tailnet address, so this url'} opens on this machine only; pass --host <tailnet address>` : 'Open the url on any device that can reach this host; it serves until this process stops',
       'Each option opens at <url>#/o/<n>; add /full for fullscreen'] }));
 } else {
   fail('USAGE', `unknown command ${command}`, ['Run `first-draft-axi --help`']);

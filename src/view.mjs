@@ -36,7 +36,7 @@ const COMMON = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-ref
 const pathOf = (req) => req.url.split('?')[0];
 const listen = (server, port, host) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, host, () => { server.off('error', fail); ok(); }); });
 
-export async function serve({ files, name, host, port, framePort }) {
+export async function serve({ files, name, host, advertise = host, port, framePort }) {
   const options = files.map((file, i) => ({ n: i + 1, label: basename(file, extname(file)), file }));
   const { buildPreviewDocument } = await import('../dist/engine.mjs');
   let viewOrigin, frameOrigin;
@@ -77,7 +77,7 @@ export async function serve({ files, name, host, port, framePort }) {
   });
   await listen(view, port, host);
   await listen(frames, framePort, host).catch((e) => { view.close(); throw e; });
-  const h = host.includes(':') ? `[${host}]` : host;
+  const h = advertise.includes(':') ? `[${advertise}]` : advertise;
   viewOrigin = `http://${h}:${view.address().port}`;
   frameOrigin = `http://${h}:${frames.address().port}`;
   return { url: `${viewOrigin}/`, frames: frameOrigin, options, close: () => { view.close(); frames.close(); } };

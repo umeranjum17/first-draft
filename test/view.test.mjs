@@ -103,6 +103,26 @@ test('view binds the tailnet address from tailscale, or the given host', async (
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'view', join(dir, 'none.html')], { env }), (e) => JSON.parse(e.stdout).error.code === 'NO_OPTIONS');
 });
 
+test('a wildcard host listens everywhere but advertises the tailnet address, or fails without one', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  mkdirSync(join(dir, 'bin'));
+  writeFileSync(join(dir, 'bin/tailscale'), '#!/bin/sh\necho 192.0.2.7\n');
+  chmodSync(join(dir, 'bin/tailscale'), 0o755);
+  const env = { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, FIRST_DRAFT_VIEW_HOST: '' };
+  const child = spawn(process.execPath, [CLI, 'view', join(dir, 'a.html'), '--host', '0.0.0.0', '--port', '0'], { env });
+  t.after(() => child.kill());
+  const line = await new Promise((ok, fail) => { child.stdout.once('data', (d) => ok(String(d))); child.once('exit', fail); });
+  const out = JSON.parse(line);
+  assert.match(out.viewing.url, /^http:\/\/192\.0\.2\.7:\d+\/$/);
+  assert.equal(out.viewing.options[0].url, `${out.viewing.url}#/o/1`);
+  assert.equal((await fetch(`http://127.0.0.1:${new URL(out.viewing.url).port}/`)).status, 200);
+
+  mkdirSync(join(dir, 'empty'));
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'view', join(dir, 'a.html'), '--host', '::', '--port', '0'], { env: { ...env, PATH: join(dir, 'empty') } }),
+    (e) => JSON.parse(e.stdout).error.code === 'NO_TAILNET' && !e.stdout.includes('::'));
+});
+
 test('a malformed request target gets an answer and the view keeps serving', async (t) => {
   const dir = temp(t);
   writeFileSync(join(dir, 'a-1.html'), MOCK);
