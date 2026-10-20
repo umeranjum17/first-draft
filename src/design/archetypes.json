@@ -1,0 +1,82 @@
+[
+  {
+    "id": "operator-console", "fits": "bookkeeping, analytics, logistics, back-office operations",
+    "mood": "precise, alert", "refs": "Bloomberg-like information priority; Linear-like restraint",
+    "type": "system sans; tabular figures", "colour": "cool neutral ramp, one ink-blue accent; semantic warnings; body contrast >=4.5:1",
+    "layout": "navigation rail, working summary, aligned ledger and detail pane; stacked priority rows on phone",
+    "density": "compact, comparison-led", "surface": "small radii, rules instead of shadows", "motion": "press feedback only",
+    "avoid": "oversized hero numbers, decorative charts, card grids hiding the ledger"
+  },
+  {
+    "id": "calm-workspace", "fits": "notes, planning, collaboration, personal productivity",
+    "mood": "focused, spacious", "refs": "Things-like calm; Notion-like content priority",
+    "type": "system sans; restrained heading scale", "colour": "paper-white and graphite ramp, one muted violet accent; body contrast >=4.5:1",
+    "layout": "slim navigation, document or task list, contextual inspector; content-first phone",
+    "density": "medium with generous reading gutters", "surface": "soft corners, minimal elevation", "motion": "quiet press feedback",
+    "avoid": "marketing pitch panels, empty centre-aligned forms, every item boxed"
+  },
+  {
+    "id": "editorial-reading", "fits": "publishing, journals, learning, stories, content-led catalogues",
+    "mood": "considered, literate", "refs": "NYT-like reading hierarchy; Kinfolk-like pacing",
+    "type": "Georgia display and reading text; system sans navigation", "colour": "white, charcoal and one deep plum accent; body contrast >=4.5:1",
+    "layout": "subject-led headline, asymmetric feature, narrow reading column and related index",
+    "density": "airy features, comfortable long text", "surface": "mostly unboxed, editorial rules", "motion": "press states; at most one quiet reveal",
+    "avoid": "newspaper columns on phone, fake issue numbers, serif plus clay by habit"
+  },
+  {
+    "id": "warm-commerce", "fits": "coffee, food, craft goods, subscriptions, independent retail",
+    "mood": "tactile, welcoming", "refs": "Blue Bottle-like product care; Muji-like utility",
+    "type": "system sans product facts; Georgia tasting or material notes", "colour": "oat-white, espresso ink, one berry accent; body contrast >=4.5:1",
+    "layout": "product-led composition, comparison of plans, order summary beside checkout; sequential phone flow",
+    "density": "medium, purchase decisions prominent", "surface": "rounded controls, flat product areas", "motion": "press feedback, one restrained product entrance",
+    "avoid": "fake remote photography, dashboard chrome, generic luxury slogans"
+  },
+  {
+    "id": "premium-dark", "fits": "cinema, audio, luxury products, evening experiences",
+    "mood": "immersive, deliberate", "refs": "Aesop-like restraint; Leica-like precision",
+    "type": "Georgia display or bold system sans; quiet sans facts", "colour": "charcoal layers, pale text, one subdued copper accent; body contrast >=4.5:1",
+    "layout": "one dramatic product or title composition, quieter specifications and booking path",
+    "density": "low, strong focal point", "surface": "tonal separation, rare fine borders", "motion": "one subtle opacity entrance, press feedback",
+    "avoid": "acid neon, unreadable grey labels, glossy gradients everywhere"
+  },
+  {
+    "id": "friendly-mobile", "fits": "appointments, travel, habits, everyday consumer services",
+    "mood": "approachable, clear", "refs": "Airbnb-like wayfinding; Headspace-like reassurance",
+    "type": "rounded system sans where available; readable sans fallback", "colour": "white and soft stone, one confident teal accent; body contrast >=4.5:1",
+    "layout": "single-task steps, selectable list, clear progress and confirmation; useful desktop summary",
+    "density": "comfortable, thumb-friendly", "surface": "soft panels, generous controls, low shadow", "motion": "short press feedback, quiet confirmation reveal",
+    "avoid": "emoji icons, tiny slot pills, playful decoration over essential facts"
+  },
+  {
+    "id": "trusted-service", "fits": "healthcare, finance, insurance, government, professional booking",
+    "mood": "reassuring, accountable", "refs": "NHS-like clarity; GOV.UK-like directness",
+    "type": "system sans, clear labels and numbers", "colour": "white, slate ramp, one deep evergreen accent; body contrast >=4.5:1",
+    "layout": "clear service identity, qualification or clinic facts, step-by-step form and explicit confirmation",
+    "density": "medium, essential details visible", "surface": "simple borders and restrained corners", "motion": "press feedback only",
+    "avoid": "invented trust badges, vague fees, alarming red decoration, hidden terms"
+  },
+  {
+    "id": "playful-youth", "fits": "games, creative learning, youth activities, playful consumer products",
+    "mood": "energetic, encouraging", "refs": "Duolingo-like encouragement; Nintendo-like legibility",
+    "type": "heavy system sans display; normal-weight sans instructions", "colour": "light neutral, dark ink, one vivid orange accent; body contrast >=4.5:1",
+    "layout": "one bold activity, clear next step, visible progress; secondary content kept quiet",
+    "density": "low to medium, large targets", "surface": "chunky corners, selective offset shadow", "motion": "press feedback and one brief celebratory entrance",
+    "avoid": "rainbow controls, infantilising adult tasks, constant bouncing"
+  },
+  {
+    "id": "developer-technical", "fits": "APIs, infrastructure, build tools, developer documentation",
+    "mood": "rigorous, transparent", "refs": "Stripe-like explanation; GitHub-like inspectability",
+    "type": "system sans reading; system monospace code only", "colour": "white or graphite ramp, one cobalt accent; body contrast >=4.5:1",
+    "layout": "resource navigation, real code or log artefact, status and a direct next action",
+    "density": "dense artefacts, spacious explanation", "surface": "fine rules, code wells, small radii", "motion": "press feedback only",
+    "avoid": "fake terminal decoration, monospace on every label, neon hacker cliches"
+  },
+  {
+    "id": "bold-campaign", "fits": "launches, festivals, advocacy, events, subscription acquisition",
+    "mood": "confident, expressive", "refs": "Patagonia-like conviction; Spotify-like energy",
+    "type": "oversized system sans display; quiet readable sans body", "colour": "one saturated magenta field, ink and white neutrals; body contrast >=4.5:1",
+    "layout": "subject-specific typographic poster, persuasive proof, one dominant conversion path",
+    "density": "low, high contrast in scale", "surface": "large flat fields, no decorative card kit", "motion": "one short coordinated entrance, press feedback",
+    "avoid": "generic SaaS hero, gradient blobs, repeating the headline in every section"
+  }
+]

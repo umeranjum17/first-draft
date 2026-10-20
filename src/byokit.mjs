@@ -59,8 +59,8 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
     const { bin, account } = await launch();
     const { codex } = await import('@byokit/decide/codex');
     const schema = { type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
-      text: { type: 'string' }, calls: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
-        name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
+      text: { type: 'string' }, calls: { type: 'array', ...(!context.tools.length && { maxItems: 0 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
+        name: { type: 'string', ...(context.tools.length && { enum: context.tools.map((t) => t.name) }) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
     const answer = await codex({ bin, account, model: model.replace(/^openai-codex\//, ''), timeoutMs }).generate({
       system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), schema, signal, maxOutputTokens: maxTokens });
     if (!answer.data) throw new Error('BYOKit returned no structured engine response');

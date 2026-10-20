@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
 import { make, engineDoctor } from './make.mjs';
+import { pickDesign } from './design.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 
@@ -14,7 +15,6 @@ const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
-const VARIATIONS = ['a calm minimal layout with generous whitespace', 'a bold colorful layout with strong hierarchy', 'a dense information-rich dashboard layout'];
 
 const read = () => {
   try {
@@ -56,7 +56,7 @@ const agentOrAsk = () => {
 
 const HELP = `usage: first-draft-axi <command> [flags]
 commands[6]:
-  make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
+  make "<prompt>" --out <file.html> [--count N]   pick fitting archetypes once, then make N self-contained HTML mocks (one engine run each)
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone + desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
@@ -82,18 +82,22 @@ if (command === 'make') {
   const c = agentOrAsk();
   const started = Date.now();
   const files = [];
-  let tokens_in = 0, tokens_out = 0;
+  let design;
+  try { design = await pickDesign({ prompt, count, ...c }); }
+  catch (e) { fail('PICK_FAILED', `${c.agent} (${c.model}) could not pick design directions: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+  const directions = [design.archetype, ...design.alts];
+  let { tokens_in, tokens_out } = design;
   const blocked = new Set(), cut = [];
   for (let i = 0; i < count; i++) {
     let made;
     try {
-      made = await make({ prompt, ...c, variation: count > 1 ? `${i + 1} of ${count}: ${VARIATIONS[i % VARIATIONS.length]}` : undefined });
+      made = await make({ prompt, ...c, design, archetype: directions[i] });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const numbered = values.out.includes('{i}') ? values.out.replace('{i}', String(i + 1)) : count > 1 ? values.out.slice(0, -extname(values.out).length || undefined) + `-${i + 1}` + extname(values.out) : values.out;
     const out = resolve(numbered);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, made.html);
-    files.push({ file: out, bytes: Buffer.byteLength(made.html) });
+    files.push({ file: out, bytes: Buffer.byteLength(made.html), archetype: directions[i] });
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
     made.remote.forEach((r) => blocked.add(r));

@@ -42,9 +42,13 @@ Run `first-draft-axi --help` for every command and flag.
 
 ## What it does
 
-The screenshots below show three options from one real `make --count 3` run on `MiniMax-M3.1-Flash-Preview`; the pin's comment was written by hand.
+The screenshots below are pre-archetype examples from one real `make --count 3` run on `MiniMax-M3.1-Flash-Preview`; the pin's comment was written by hand.
 
-`make` turns the prompt into 1 to 5 options (`--count`). With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty.
+`make` first uses one short, no-tool model call to pick a fitting archetype and distinct alternatives from ten design cards. It then turns the prompt into 1 to 5 options (`--count`), each guided by only its chosen card plus a shared craft block. Options vary in product-appropriate structure, not fixed minimal/bold/dashboard styles. The JSON names each file's archetype; token totals include the pick. A failed or invalid pick shows its error and stops without a fallback.
+
+Before generation, describe the product, audience, primary job and mood in the prompt. Reference brands are mood words only, never copied colours or tokens. CSS-only press feedback and reduced-motion handling are requested by default; no JavaScript or network access is added. `--brief`, `--archetype` and a critique pass are not part of this release.
+
+With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty.
 
 `refine` takes one option and a follow-up prompt, for example `first-draft-axi refine mocks/sign-in-2.html "warmer palette, add an empty state" --out mocks/sign-in-2-warm.html`, and writes the result as a new option; the original is untouched. It runs the same model as `make`; keep the change short.
 
@@ -111,6 +115,10 @@ npm test   # builds, then runs the real engine loop against local stand-ins; no 
 
 [ENGINE.md](ENGINE.md) has the pinned design engine, its source and the model boundary. A change to a command, a default or the view updates this README, the skill and the screenshots in the same PR.
 
+## Design guidance credits
+
+Our design craft block rewrites principles from [Emil Kowalski's MIT skills](https://github.com/emilkowalski/skills) and [Anthropic's Apache-2.0 frontend-design skill](https://github.com/anthropics/skills/tree/main/skills/frontend-design). The ten archetype cards are first-draft's own. See the packaged [sources and license notices](src/design/SOURCES.md); no endorsement or brand tokens are implied.
+
 ## License
 
-MIT. See `LICENSE`.
+MIT. See `LICENSE`; third-party design guidance notices are in `src/design/`.

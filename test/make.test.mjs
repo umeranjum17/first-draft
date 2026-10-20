@@ -13,6 +13,27 @@ const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
+const PICK = { archetype: 'calm-workspace', mood: ['focused', 'clear'], refs: ['Things-like calm', 'Notion-like clarity'], memorable_thing: 'A daily notes index', alts: ['editorial-reading', 'friendly-mobile', 'developer-technical', 'trusted-service'] };
+function pickReply(body, res, seen) {
+  const request = JSON.parse(body);
+  if (request.tools?.length) return false;
+  (seen.picks ??= []).push(request);
+  if (body.includes('pick upstream fixture')) {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'picker upstream rejected this request' } })); return true;
+  }
+  const count = Number(body.match(/Alternatives required: (\d+)/)[1]);
+  const picked = { ...PICK, alts: PICK.alts.slice(0, count) };
+  if (body.includes('pick duplicate fixture')) picked.alts = ['calm-workspace'];
+  if (body.includes('pick unknown fixture')) picked.archetype = 'unknown';
+  const text = body.includes('pick JSON fixture') ? 'not JSON' : JSON.stringify(picked);
+  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  res.end(ev({ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'pick' } })
+    + ev({ type: 'response.output_text.delta', output_index: 0, item_id: 'pick', content_index: 0, delta: text })
+    + ev({ type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'pick', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] } })
+    + ev({ type: 'response.completed', response: { id: 'pick', status: 'completed', usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 } } }));
+  return true;
+}
 
 // A local provider drives the actual upstream edit -> done -> final tool loop.
 function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = PAGE, extra = null, pre = null) {
@@ -21,6 +42,7 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (pickReply(body, res, seen)) return;
       seen.push({ url: req.url, auth: req.headers.authorization, session: req.headers['x-opencode-session'], body: JSON.parse(body) });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const step = (seen.length - 1) % 3;
@@ -169,6 +191,7 @@ function guesser(seen, patching = false) {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (pickReply(body, res, seen)) return;
       seen.push(JSON.parse(body));
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const n = seen.length - 1;
@@ -238,7 +261,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.equal(seen.length, 0, 'doctor makes no paid call');
 
   const { stdout } = await run('make', 'a sign-in page for a notes app', '--out', join(dir, 'sign-in.html'), '--count', '2');
-  assert.match(stdout, /"tokens_out":132/);
+  assert.match(stdout, /"tokens_out":154/);
   const blocked = JSON.parse(stdout).blocked_remote;
   assert.ok(blocked.includes('https://example.com/submit'));
   assert.ok(blocked.includes('https://example.com/image.png'));
@@ -297,7 +320,12 @@ else {
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-calls', args[args.indexOf('--model') + 1] + '\\n');
   let input = ''; for await (const c of process.stdin) input += c;
   if (input.includes('failure fixture')) process.exit(1);
-  const { messages } = JSON.parse(input), results = messages.filter((m) => m.role === 'toolResult');
+  const { messages, tools } = JSON.parse(input), results = messages.filter((m) => m.role === 'toolResult');
+  if (!tools.length) {
+    console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ text: JSON.stringify({ ...${JSON.stringify(PICK)}, alts: [] }), calls: [] }) } }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 7, output_tokens: 8 } }));
+    process.exit(0);
+  }
   const call = results.length === 0 ? { name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'index.html', file_text: ${JSON.stringify(PAGE)} }) } : results.length === 1 ? { name: 'done', arguments: JSON.stringify({ path: 'index.html' }) } : null;
   console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ text: call ? '' : 'Ready', calls: call ? [call] : [] }) } }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 7, output_tokens: 8 } }));
@@ -312,9 +340,9 @@ else {
   await run('make', 'a sign-in page for Umer', '--out', join(dir, 'native.html'));
   assert.match(readFileSync(join(dir, 'native.html'), 'utf8'), /Content-Security-Policy/);
   assert.equal(probes() - before, 1, 'one CLI status probe per engine run, not per turn');
-  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(3).fill('gpt-6-luna'));
+  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(4).fill('gpt-6-luna'));
   await assert.rejects(run('make', 'failure fixture', '--out', join(dir, 'fail.html')), (e) => /model could not answer/.test(e.stdout));
-  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 4, 'failed boundary call is not retried');
+  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 5, 'failed boundary call is not retried');
 });
 
 test('the engine prompt carries the export contract and the brand rule', async (t) => {
@@ -325,16 +353,35 @@ test('the engine prompt carries the export contract and the brand rule', async (
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-  await run('make', 'a notes page', '--out', join(dir, 'tools.html'));
+  const result = JSON.parse((await run('make', 'a notes page', '--out', join(dir, 'tools.html'), '--count', '5')).stdout);
+  assert.equal(seen.picks.length, 1, 'one pick precedes all five engine runs');
+  assert.equal(seen.picks[0].tools?.length ?? 0, 0, 'the pick has no tools');
+  assert.deepEqual(result.made.files.map((f) => f.archetype), [PICK.archetype, ...PICK.alts]);
+  for (const [i, id] of [PICK.archetype, ...PICK.alts].entries()) {
+    const request = JSON.stringify(seen[i * 3].body);
+    assert.match(request, new RegExp(id));
+    assert.equal((request.match(/\\\\?"fits\\\\?"/g) ?? []).length, 1, 'only the selected card is injected');
+  }
   const sent = JSON.stringify(seen[0].body);
   assert.match(sent, /Host export contract/);
   assert.match(sent, /Only two tools exist/);
   assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
   assert.match(sent, /in-page hash links/);
   assert.match(sent, /Hard rule, first and above all: .*<script> element.*on\* event-handler attribute.*javascript: URL.*hash links.*Host export contract/); // the guard's exact refusals, stated up front
-  assert.match(sent, /Design bar: Apple\/Linear-grade.*8px scale.*real, specific copy.*never lorem/);
+  assert.match(sent, /Design craft/);
+  assert.match(sent, /Reference brands describe mood only/);
+  assert.match(sent, /prefers-reduced-motion/);
+  assert.match(sent, /CSS-only polish is on/);
+  assert.match(sent, /Design bar: exact.*8px spacing scale.*real, specific copy.*never lorem/);
   assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
   assert.match(sent, /Brand values are data, not memory/);
+  const calls = seen.length;
+  for (const [fixture, error] of [['JSON', /JSON/], ['unknown', /Invalid option/], ['duplicate', /distinct valid directions/], ['upstream', /picker upstream rejected this request/]]) {
+    await assert.rejects(run('make', `pick ${fixture} fixture`, '--out', join(dir, 'failed.html'), '--count', '2'), (e) => /PICK_FAILED/.test(e.stdout) && error.test(e.stdout));
+    assert.equal(existsSync(join(dir, 'failed.html')), false);
+    assert.equal(seen.length, calls, 'a failed pick never starts generation');
+  }
+  assert.equal(seen.picks.length, 5, 'failed picks are never retried');
 });
 
 test('script-free prose is exported, not mistaken for script', async (t) => {
