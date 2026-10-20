@@ -35,6 +35,7 @@ test('post copies the options to the board, links each to its Play route in a vi
   const args = readFileSync(join(dir, 'args'), 'utf8').split('\n');
   assert.deepEqual(args.slice(0, 1).concat(args.slice(2, 5)), ['post', '--type', 'design', '--title']);
   assert.ok(args.includes('b=mocks/x/option-2.html') && args.includes('b=Bold') && args.includes('b'), 'recommend 2 is option b');
+  assert.ok(args.includes(`a=http://127.0.0.1:${port}/#/o/1/play`) && args.includes(`b=http://127.0.0.1:${port}/#/o/2/play`), 'each option gets its own --link');
   const tradeoff = args[args.indexOf('--tradeoff') + 1];
   assert.ok(tradeoff.includes(`Calm http://127.0.0.1:${port}/#/o/1/play`) && tradeoff.includes(`Bold http://127.0.0.1:${port}/#/o/2/play`));
   assert.match(await (await fetch(`http://127.0.0.1:${port}/`)).text(), /x-1/);
