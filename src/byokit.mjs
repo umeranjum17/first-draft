@@ -82,7 +82,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
   try {
     return await accounts.respondKey(MEMBER, { account, model: { ...found, ...(base && { baseUrl: base }) },
       context,
-      options: { signal, ...(maxTokens && { maxTokens }) } });
+      options: { signal, ...(maxTokens && { maxTokens: Math.min(found.maxTokens ?? Infinity, maxTokens * 4) }) } }); // thinking models spend the cap before the page; the model's own limit bounds it
   } catch (e) {
     const why = [e.status && `HTTP ${e.status}`, e.detail].filter(Boolean).join(': ');
     if (why) e.message = `${e.message} (${why})`;
