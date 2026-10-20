@@ -35,7 +35,19 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
     insert: (path, line, text) => { const lines = get(path).split('\n'); if (!Number.isInteger(line) || line < 0 || line > lines.length) throw new Error('insert_line is outside the file'); lines.splice(line, 0, text); return put(path, lines.join('\n')); },
   };
   const done = makeDoneTool({ ...fs, view: (path) => key(path) === 'index.html' ? fs.view(path) : null, listDir: (dir) => fs.listDir(dir).filter((p) => key(p) === 'index.html') });
-  const failed = new AbortController(), signal = AbortSignal.any([failed.signal, AbortSignal.timeout(timeoutMs)]);
+  const failed = new AbortController(), signal = failed.signal;
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+  // A call that timed out or whose connection closed is asked again on the same route and model, twice at most; anything else is the real failure.
+  const dropped = (e, call) => call.reason?.name === 'TimeoutError' || /other side closed|fetch failed|ECONNRESET|socket hang up|took too long|was cancelled|operation was aborted/i.test(e.message);
+  const ask = async (args, outer) => {
+    for (let retry = 0; ; retry++) {
+      const call = AbortSignal.any([signal, ...(outer ? [outer] : []), AbortSignal.timeout(timeoutMs)]); // timeoutMs bounds each call: turn 1 writes the whole page (30k+ tokens, 6 min) and must not eat the budget of the whole design
+      try { return await respond({ ...args, signal: call, timeoutMs }); } catch (e) {
+        if (retry === 2 || signal.aborted || outer?.aborted || !dropped(e, call)) throw e;
+        await pause([1000, 4000][retry]);
+      }
+    }
+  };
   let turns = 0, verified = null, capped = null, used = { inputTokens: 0, outputTokens: 0 };
   const answer = (_model, context, options) => {
     const stream = createAssistantMessageEventStream();
@@ -43,7 +55,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
       try {
         signal.throwIfAborted();
         if (++turns > 12) throw capped = new Error('engine exceeded 12 model turns'); // M3.1 Flash writes the whole page on turn 1, then spends the rest patching it: the cap ends the run, the page so far is kept below.
-        const message = await respond({ route: routeOf(agent), model, context, maxTokens: 16000, signal: AbortSignal.any([signal, ...(options?.signal ? [options.signal] : [])]), timeoutMs });
+        const message = await ask({ route: routeOf(agent), model, context, maxTokens: 16000 }, options?.signal);
         if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
         // MiniMax M3.1 Flash often sends command "view" on every call, with the real intent in the other arguments: take the command from them.
         used.inputTokens += message.usage?.input ?? 0; used.outputTokens += message.usage?.output ?? 0;
