@@ -202,6 +202,25 @@ test('the editor escalates to create after three failed exact edits', async (t) 
   assert.match(JSON.stringify(seen[4].input), /Too many failed exact edits/);
 });
 
+test('make runs on a BYOKit api-key route as well as a plan-key route', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENAI_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
+  assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
+  assert.equal(seen.length, 0, 'doctor makes no paid call');
+  await run('make', 'a sign-in page', '--out', join(dir, 'k.html'), '--count', '1');
+  assert.equal(seen[0].auth, 'Bearer test-key');
+  assert.match(readFileSync(join(dir, 'k.html'), 'utf8'), /Sign in to your notes/);
+  await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'doctor'], { env: { ...env, OPENAI_API_KEY: '' } }), (e) => /OPENAI_API_KEY is not set/.test(e.stdout) && !/test-key/.test(e.stdout + e.stderr));
+  await run('init', '--agent', 'byokit:no-such:key', '--model', 'x').catch(() => {});
+  await assert.rejects(run('doctor'), (e) => /plan or api key route/.test(e.stdout));
+});
+
 test('make writes self-contained mocks through the BYOKit Go route', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

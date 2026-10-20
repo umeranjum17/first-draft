@@ -60,7 +60,7 @@ commands[5]:
   post <design> --title "<question>" --recommend <a|1> [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url in the card text
   doctor                              show whether the configured agent is ready, with no paid call
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
-The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key route or byokit:codex for the installed subscription CLI.
+The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key or api key route, or byokit:codex for the installed subscription CLI.
 A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
 view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.
 post copies the options into the board's mocks folder (the nearest .sign-off/, or --board), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) in the card's --tradeoff text: the card's sandbox blocks a link inside the mock.

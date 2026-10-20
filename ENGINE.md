@@ -35,7 +35,7 @@ CSP and 5 MB sign-off limit. An engine run may need multiple model turns; it
 stops on its first boundary failure, with no retry or route fallback.
 
 `doctor` loads the actual built engine and prompt sections, validates plan-key
-model metadata, and checks the selected route locally. Installed-CLI readiness
+and api-key model metadata, and checks the selected route locally. Installed-CLI readiness
 uses BYOKit's native status probe, never a paid model request. It cannot promise
 server-side model availability.
 
