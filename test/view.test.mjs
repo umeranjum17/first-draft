@@ -69,6 +69,16 @@ test('options render from a second origin, sandboxed to scripts only', async (t)
   assert.equal((await fetch(`${v.frames}/o/1`, { method: 'POST' })).status, 405);
 });
 
+test('an option that is a directory answers with an error and the view keeps serving', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  mkdirSync(join(dir, 'a-2.html'));
+  const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
+  t.after(v.close);
+  assert.equal((await fetch(`${v.frames}/o/2`)).status, 404);
+  assert.equal((await fetch(`${v.frames}/o/1`)).status, 200);
+});
+
 test('view binds the tailnet address from tailscale, or the given host', async (t) => {
   const dir = temp(t);
   writeFileSync(join(dir, 'a-1.html'), MOCK);

@@ -42,8 +42,9 @@ export async function serve({ files, name, host, port, framePort }) {
   const send = (res, status, type, body, headers = {}) => { res.writeHead(status, { ...COMMON, 'content-type': type, ...headers }); res.end(body); };
   const sizeError = (o) => {
     try {
-      const bytes = statSync(o.file).size;
-      return bytes > LIMIT ? { status: 413, message: `${basename(o.file)} is ${bytes} bytes; options are 5 MB or less` } : null;
+      const st = statSync(o.file);
+      if (!st.isFile()) return { status: 404, message: `${basename(o.file)} is not a file` };
+      return st.size > LIMIT ? { status: 413, message: `${basename(o.file)} is ${st.size} bytes; options are 5 MB or less` } : null;
     } catch (e) { return { status: 404, message: `${basename(o.file)} cannot be read: ${e.code ?? e.message}` }; }
   };
   const page = () => {
@@ -55,7 +56,10 @@ export async function serve({ files, name, host, port, framePort }) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     const path = new URL(req.url, 'http://view').pathname;
     if (path === '/') return send(res, 200, 'text/html; charset=utf-8', page(), { 'content-security-policy': viewPolicy(frameOrigin) });
-    if (path === '/view.js' || path === '/view.css') return send(res, 200, path.endsWith('.js') ? 'text/javascript' : 'text/css', readFileSync(new URL(path.slice(1), DIST)));
+    if (path === '/view.js' || path === '/view.css') {
+      try { return send(res, 200, path.endsWith('.js') ? 'text/javascript' : 'text/css', readFileSync(new URL(path.slice(1), DIST))); }
+      catch (e) { return send(res, 500, 'text/plain', `${path} cannot be read: ${e.code ?? e.message}`); }
+    }
     send(res, 404, 'text/plain', 'not found');
   });
   const frames = createServer((req, res) => {
@@ -65,7 +69,10 @@ export async function serve({ files, name, host, port, framePort }) {
     const error = sizeError(o);
     if (error) return send(res, error.status, 'text/plain', error.message);
     // Upstream's preview runtime: drops the page's own CSP meta (this header replaces it), adds the viewport support and the error/navigation overlay.
-    send(res, 200, 'text/html; charset=utf-8', buildPreviewDocument(readFileSync(o.file, 'utf8'), { path: 'index.html' }), { 'content-security-policy': framePolicy(viewOrigin) });
+    let html;
+    try { html = buildPreviewDocument(readFileSync(o.file, 'utf8'), { path: 'index.html' }); }
+    catch (e) { return send(res, 500, 'text/plain', `${basename(o.file)} cannot be rendered: ${e.code ?? e.message}`); }
+    send(res, 200, 'text/html; charset=utf-8', html, { 'content-security-policy': framePolicy(viewOrigin) });
   });
   await listen(view, port, host);
   await listen(frames, framePort, host).catch((e) => { view.close(); throw e; });
