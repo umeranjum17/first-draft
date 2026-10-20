@@ -1,4 +1,4 @@
-// BYOKit owns every model call: plan keys or the user's installed subscription CLI.
+// BYOKit owns every model call: plan keys, api keys or the user's installed subscription CLI.
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
@@ -22,23 +22,25 @@ async function launch() {
 }
 const MEMBER = 'first-draft';
 
+const KEY_VIA = ['plan_key', 'key'];
+
 // The route an agent names as byokit:<route>, or undefined.
 export const routeOf = (agent) => agent?.match(/^byokit:(.+)/)?.[1];
 
-// Ready plan-key aliases plus the installed CLI, when present.
+// Ready plan-key and api-key aliases plus the installed CLI, when present.
 export async function readyRoutes() {
-  const keys = (await import('@byokit/accounts')).routes().filter((r) => r.via === 'plan_key' && r.readiness === 'ready').flatMap((r) => (r.aliases?.length ? r.aliases : [r.id]));
+  const keys = (await import('@byokit/accounts')).routes().filter((r) => KEY_VIA.includes(r.via) && r.readiness === 'ready').flatMap((r) => (r.aliases?.length ? r.aliases : [r.id]));
   return [...new Set([...keys, ...(codexBin() ? ['codex'] : [])])];
 }
 
-const planKey = async (route) => (await import('@byokit/accounts')).routes().find((r) => r.via === 'plan_key' && (r.id === route || r.aliases?.includes(route)));
+const planKey = async (route) => (await import('@byokit/accounts')).routes().find((r) => KEY_VIA.includes(r.via) && (r.id === route || r.aliases?.includes(route)));
 const signIn = async (key) => `set ${key.upstream.method} to your ${key.name} key, then: first-draft-axi doctor`;
 
 async function check(route) {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 18)) return `BYOKit needs Node 22.18 or later; this is ${process.version}: install Node 22.18 or later`;
   if (route === 'codex') return;
-  if (!await planKey(route)) return `byokit:${route} is not a BYOKit plan route: use one of: ${(await readyRoutes()).map((r) => `byokit:${r}`).join(', ')}`;
+  if (!await planKey(route)) return `byokit:${route} is not a BYOKit plan or api key route: use one of: ${(await readyRoutes()).map((r) => `byokit:${r}`).join(', ')}`;
 }
 
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
