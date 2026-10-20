@@ -36,16 +36,17 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
   };
   const done = makeDoneTool({ ...fs, view: (path) => key(path) === 'index.html' ? fs.view(path) : null, listDir: (dir) => fs.listDir(dir).filter((p) => key(p) === 'index.html') });
   const failed = new AbortController(), signal = AbortSignal.any([failed.signal, AbortSignal.timeout(timeoutMs)]);
-  let turns = 0, verified = null;
+  let turns = 0, verified = null, capped = null, used = { inputTokens: 0, outputTokens: 0 };
   const answer = (_model, context, options) => {
     const stream = createAssistantMessageEventStream();
     (async () => {
       try {
         signal.throwIfAborted();
-        if (++turns > 12) throw new Error('engine exceeded 12 model turns'); // ponytail: bounded first slice; expand only with measured need.
+        if (++turns > 12) throw capped = new Error('engine exceeded 12 model turns'); // M3.1 Flash writes the whole page on turn 1, then spends the rest patching it: the cap ends the run, the page so far is kept below.
         const message = await respond({ route: routeOf(agent), model, context, maxTokens: 16000, signal: AbortSignal.any([signal, ...(options?.signal ? [options.signal] : [])]), timeoutMs });
         if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
         // MiniMax M3.1 Flash often sends command "view" on every call, with the real intent in the other arguments: take the command from them.
+        used.inputTokens += message.usage?.input ?? 0; used.outputTokens += message.usage?.output ?? 0;
         for (const { name, arguments: a } of message.content) if (name === 'str_replace_based_edit_tool' && a.command === 'view' && !a.view_range) a.command = typeof a.file_text === 'string' ? 'create' : typeof a.old_str === 'string' ? 'str_replace' : typeof a.insert_line === 'number' ? 'insert' : 'view';
         stream.push({ type: 'done', reason: message.stopReason, message }); stream.end(message);
       } catch (e) {
@@ -57,15 +58,24 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
     return stream;
   };
   registerApiProvider({ api: 'openai-completions', stream: answer, streamSimple: answer }, 'first-draft');
+  const doneTool = { ...done, executionMode: 'sequential', execute: (id, params, ...rest) => done.execute(id, params.path ? { ...params, path: key(params.path) } : params, ...rest) };
   const output = await generateViaAgent({ prompt: start !== undefined ? (start.length <= 20_000 // ponytail: a small option is rewritten in one create (fits the 16k output budget); a bigger one is edited, which costs more turns
       ? `Revise this index.html: ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Call the editor once with command "create", path "index.html" and the complete revised file, then done(path="index.html").\n\nCurrent index.html:\n${start}`
       : `Revise the existing index.html (read it first): ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Make the change in a few str_replace edits (each old_str one distinctive line, new_str may be long), then call done(path="index.html") as your last step.`) : variation ? `${prompt}\nVariation: ${variation}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
     systemPrompt: `${NO_SCRIPT}\n\n${composeSystemPrompt({ mode: start !== undefined ? 'revise' : 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. ${TASTE} Use semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Screens: a design with more than one screen puts each in its own top-level element with a unique id and a data-oc-screen attribute (<section id="home" data-oc-screen>), the first being the opening screen. Link screens only with in-page hash links (<a href="#cart">, also for buttons that move on): no script, no network, no other href, no top-level navigation. Give every screen after the first a visible link back. Show form states (empty, filled, submitted) as their own screens, such as signin, signin-filled and signed-in, with the filled values as static text; they are reached by those links. A one-screen design needs no data-oc-screen. Use the supplied editor to write it, then done(path="index.html"). Only two tools exist — that editor and done; skill, scaffold, tweaks, set_title and every other tool are unavailable, so never call them.`,
-  }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), { ...done, executionMode: 'sequential', execute: (id, params, ...rest) => done.execute(id, params.path ? { ...params, path: key(params.path) } : params, ...rest) }],
+  }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), doneTool],
     onEvent: (e) => {
       if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html') verified = files.get('index.html');
-    } }).catch((e) => { throw failed.signal.reason ?? e; });
+    } }).catch(async (e) => {
+    const reason = failed.signal.reason ?? e;
+    if (reason !== capped || !files.has('index.html')) throw reason;
+    // Out of turns with a page written: the page must still pass done, and its errors are the failure shown.
+    const { details } = await doneTool.execute('turn-cap', { path: 'index.html' });
+    if (details.status !== 'ok') throw new Error(`${reason.message}, and the page so far fails done: ${details.errors.map((x) => x.message).join('; ')}`);
+    verified = files.get('index.html');
+    return used;
+  });
   const source = files.get('index.html');
   if (!source || !/<head(?:\s[^>]*)?>|<html[^>]*>|<!doctype[^>]*>/i.test(source)) throw new Error('engine produced no complete index.html');
   if (start !== undefined && bare(source) === bare(start)) throw new Error('the engine left the option unchanged');
@@ -73,6 +83,6 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
   if ((source.match(TAG) ?? []).some((tag) => /^<script\b|\son(?!ce\b)[a-z]+\s*=|(?:href|src|action|formaction|xlink:href|poster)\s*=\s*["']?\s*javascript:|url\(\s*["']?\s*javascript:/i.test(tag))) throw new Error('engine output contains script; only script-free HTML is supported');
   const html = /<head(?:\s[^>]*)?>/i.test(source) ? source.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
-  return { html, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').matchAll(REMOTE_URL)].map((url) => url[0])))],
+  return { html, truncated: capped !== null, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').matchAll(REMOTE_URL)].map((url) => url[0])))],
     tokens_in: output.inputTokens, tokens_out: output.outputTokens };
 }
