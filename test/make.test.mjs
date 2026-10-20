@@ -164,7 +164,7 @@ test('make verifies an export path the model spells loosely', async (t) => {
 });
 
 // A local provider that keeps guessing old_str, so the editor must escalate to create.
-function guesser(seen, patching = false) {
+function guesser(seen, patching = false, page = PAGE) {
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
@@ -174,7 +174,7 @@ function guesser(seen, patching = false) {
       const n = seen.length - 1;
       if (n < (patching ? 20 : 4)) {
         const item = { type: 'function_call', id: `fc${n}`, call_id: `c${n}`, name: 'str_replace_based_edit_tool',
-          arguments: JSON.stringify(n === 0 ? { command: 'create', path: 'index.html', file_text: PAGE } : { command: 'str_replace', path: 'index.html', ...(patching ? { old_str: `to your notes${'!'.repeat(n - 1)}`, new_str: `to your notes${'!'.repeat(n)}` } : { old_str: `guess ${n}`, new_str: 'x' }) }) };
+          arguments: JSON.stringify(n === 0 ? { command: 'create', path: 'index.html', file_text: page } : { command: 'str_replace', path: 'index.html', ...(patching ? { old_str: `to your notes${'!'.repeat(n - 1)}`, new_str: `to your notes${'!'.repeat(n)}` } : { old_str: `guess ${n}`, new_str: 'x' }) }) };
         res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
           + ev({ type: 'response.completed', response: { id: `r${n}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
         return;
@@ -391,7 +391,23 @@ test('a model that keeps patching past the turn cap still gives the page it wrot
   assert.match(made.help[0], /ran out of the engine's 12 turns/);
 });
 
-test('a call that times out once and one whose connection closes are asked again, then the page is made', async (t) => {
+test('at the turn cap a page left unclosed or with a dead anchor is mended and kept', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const page = '<!doctype html><html><body><main><div><h1>Sign in to your notes</h1><a href="#missing">Next</a><a href="#top">Top</a></main><p id="top">x</body>';
+  const seen = [], server = await guesser(seen, true, page);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'mended.html');
+  const { stdout } = await run('make', 'a notes page', '--out', out);
+  const html = readFileSync(out, 'utf8');
+  assert.match(html, /to your notes!{11}<\/h1><a>Next<\/a><a href="#top">Top<\/a><\/div><\/main><p id="top">x<\/p><\/body><\/html>/);
+  assert.deepEqual(JSON.parse(stdout).truncated, [out]);
+});
+
+test('a call that times out, one whose connection closes and one whose stream is cut are asked again, then the page is made', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [], server = await standIn(seen, null);
@@ -399,7 +415,12 @@ test('a call that times out once and one whose connection closes are asked again
   const [serve] = server.listeners('request');
   server.removeAllListeners('request');
   let calls = 0;
-  server.on('request', (req, res) => { if (calls++ === 0) return; if (calls === 3) return req.socket.destroy(); serve(req, res); }); // turn 1's first call never answers; turn 2's first call drops
+  server.on('request', (req, res) => {
+    if (calls++ === 0) return;
+    if (calls === 3) return req.socket.destroy();
+    if (calls === 5) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write('event: response.created\n'); return setTimeout(() => req.socket.destroy(), 50); }
+    serve(req, res);
+  }); // turn 1's first call never answers; turn 2's first call drops; turn 3's first call is cut mid-stream after HTTP 200
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
@@ -407,5 +428,5 @@ test('a call that times out once and one whose connection closes are asked again
   const out = join(dir, 'retried.html');
   await run('make', 'a notes page', '--out', out);
   assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
-  assert.equal(calls, 5); // 2 failed + 3 turns
+  assert.equal(calls, 6); // 3 failed + 3 turns
 });
