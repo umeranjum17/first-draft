@@ -17,3 +17,4 @@ Run `first-draft-axi --help` for every command and flag. Each command prints JSO
 6. To get the user's pick on a sign-off board (optional, needs `sign-off-axi`):
    `first-draft-axi post <the --out path> --title "<question>" --recommend a --option a=<label> --option b=<label> ...`.
    It copies the options into the board's `mocks/`, starts the view if needed, and each option gets a tappable Open link to its Play url under its mock (needs `sign-off-axi` 0.5.0+; the same urls also ride in the card text as a fallback). Pick `--recommend` yourself; a key already on the board needs a new `--key`.
+   Journeys, tests and demos never ask the owner for a pick: post with `--evidence --media shot.png` instead of `--recommend` (an Evidence card with the options and Play links, no Decide card).

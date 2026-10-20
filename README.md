@@ -92,6 +92,8 @@ first-draft-axi post mocks/sign-in.html --title "Pick the sign-in layout" --opti
 
 It copies the options into the board's `mocks/` (the nearest `.sign-off/`, or `--board`), starts `view` if it is not already serving them, and runs `sign-off-axi post`. Each option gets a tappable Open link under its mock, to its Play url; the same urls also end the card text as `Open in first-draft:`, for boards that do not draw the link. A link inside a mock does not work: the board shows mocks in a sandbox that blocks it. `post` needs `sign-off-axi` 0.5.0 or newer on the PATH.
 
+Journeys, tests and demos never ask for a pick: post with `--evidence --media shot.png` instead of `--recommend`. That files an Evidence card (the title, each option's Play url, your screenshots) and no Decide card.
+
 first-draft needs nothing from Firstmate: inside it or outside it, it runs on its own config.
 
 ## Agent skill

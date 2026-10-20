@@ -44,10 +44,13 @@ async function ensureView({ files, host, port }) {
   return { url: r.viewing.url, started: true, pid: child.pid };
 }
 
-export async function post({ files, name, title, labels = [], tradeoff, key, recommend, board, host: hostFlag, port }) {
+// evidence: file the options as an Evidence card (title, note with each Play url, --media), which asks no pick: journeys, tests and demos.
+export async function post({ files, name, title, labels = [], tradeoff, key, recommend, evidence, media = [], board, host: hostFlag, port }) {
   if (files.length > LETTERS.length) throw new PostError('USAGE', `a sign-off design card shows up to ${LETTERS.length} options; ${files.length} found`, ['Post a folder of at most 6 options']);
+  if (evidence && recommend) throw new PostError('USAGE', '--evidence asks no pick, so it takes no --recommend', ['Drop --recommend, or drop --evidence to ask for a pick']);
+  if (evidence && !media.length) throw new PostError('USAGE', '--evidence needs --media <screenshot>: an Evidence card shows captures of the options', ['Run `first-draft-axi post <design> --title "<what this shows>" --evidence --media shot.png`']);
   const rec = /^\d+$/.test(recommend) ? LETTERS[Number(recommend) - 1] : recommend;
-  if (!rec || !LETTERS.slice(0, files.length).includes(rec)) throw new PostError('USAGE', `--recommend is the option you would pick: a-${LETTERS[files.length - 1]} or 1-${files.length}`, ['Run `first-draft-axi post <design> --title "<question>" --recommend a`']);
+  if (!evidence && (!rec || !LETTERS.slice(0, files.length).includes(rec))) throw new PostError('USAGE', `--recommend is the option you would pick: a-${LETTERS[files.length - 1]} or 1-${files.length}`, ['Run `first-draft-axi post <design> --title "<question>" --recommend a`', 'Journeys, tests and demos pick nothing: use --evidence']);
   let boardFile = board && resolve(board);
   for (let d = resolve('.'); !boardFile; d = dirname(d)) {
     if (existsSync(join(d, '.sign-off')) && statSync(join(d, '.sign-off')).isDirectory()) boardFile = join(d, '.sign-off', 'decisions.json');
@@ -57,15 +60,18 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   if (!advertise || (!given && host === '127.0.0.1')) throw new PostError('NO_TAILNET', 'tailscale ip -4 found no tailnet address, and the link must not point at localhost', ['Pass --host <tailnet address>']);
   const view = await ensureView({ files, host: advertise, port });
   const dir = join(dirname(boardFile), 'mocks', name);
-  mkdirSync(dir, { recursive: true });
+  if (!evidence) mkdirSync(dir, { recursive: true });
   const options = files.map((file, i) => {
+    const link = `${new URL(view.url).origin}/#/o/${i + 1}/play`;
+    if (evidence) return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, link };
     const copy = join(dir, `option-${i + 1}.html`);
     if (resolve(file) === copy) throw new PostError('USAGE', `${file} is already the board copy; post the original option files`);
     copyFileSync(file, copy);
-    return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link: `${new URL(view.url).origin}/#/o/${i + 1}/play` };
+    return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link };
   });
   const open = `Open in first-draft: ${options.map((o) => `${o.label} ${o.link}`).join(' · ')}`;
-  const args = ['post', boardFile, '--type', 'design', '--title', title, ...(key ? ['--key', key] : []), '--tradeoff', tradeoff ? `${tradeoff} ${open}` : open, '--recommend', rec,
+  const args = evidence ? ['post', boardFile, '--type', 'evidence', '--title', title, ...(key ? ['--key', key] : []), '--about', tradeoff ? `${tradeoff} ${open}` : open, ...media.flatMap((m) => ['--media', m])]
+    : ['post', boardFile, '--type', 'design', '--title', title, ...(key ? ['--key', key] : []), '--tradeoff', tradeoff ? `${tradeoff} ${open}` : open, '--recommend', rec,
     ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`, '--link', `${o.option}=${o.link}`])];
   try {
     const { stdout } = await promisify(execFile)('sign-off-axi', args, { maxBuffer: 1e7 });
