@@ -601,6 +601,7 @@ export function buildOverlayScript(sourceEdit?: SourceEditOverlayContext): strin
   function showScreen(id) {
     var root = document.documentElement;
     if (!id || !root || !root.setAttribute || !document.querySelectorAll) return;
+    if (window.location.hash.slice(1) !== encodeURIComponent(id)) window.location.hash = encodeURIComponent(id);
     root.setAttribute('data-oc-active-screen', id);
     var screens = document.querySelectorAll('[data-oc-screen]');
     var active = document.activeElement;
