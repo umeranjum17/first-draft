@@ -345,5 +345,5 @@ test('init with only the minimax key route saves its shipped default model', asy
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir };
   const { stdout } = await promisify(execFile)(process.execPath, [CLI, 'init', '--agent', 'byokit:minimax:key'], { env });
-  assert.equal(JSON.parse(stdout).saved.model, 'MiniMax-M3.1-Flash-Preview');
+  assert.equal(JSON.parse(stdout).saved.model, 'MiniMax-M3');
 });
