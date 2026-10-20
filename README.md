@@ -46,6 +46,8 @@ The screenshots below show three options from one real `make --count 3` run on `
 
 `make` turns the prompt into 1 to 5 options (`--count`). With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty.
 
+`refine` takes one option and a follow-up prompt, for example `first-draft-axi refine mocks/sign-in-2.html "warmer palette, add an empty state" --out mocks/sign-in-2-warm.html`, and writes the result as a new option; the original is untouched. It runs the same model as `make`; keep the change short.
+
 `view` shows a design: the `--out` path given to `make`, a folder of options, or option files.
 
 - **Grid**: every option side by side. Open one to see it on the canvas.

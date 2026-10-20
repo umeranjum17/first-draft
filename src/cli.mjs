@@ -55,8 +55,9 @@ const agentOrAsk = () => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[5]:
+commands[6]:
   make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
+  refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone + desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
   doctor                              show whether the configured agent is ready, with no paid call
@@ -115,6 +116,23 @@ if (command === 'make') {
     if (!e.code) throw e;
     fail(e.code, e.message, e.help);
   }
+} else if (command === 'refine') {
+  const { values, positionals } = flags(rest, { out: { type: 'string' } });
+  const [file, ...words] = positionals, change = words.join(' ').trim();
+  if (!file || !change || !values.out) fail('USAGE', 'refine needs an option file, a change and --out <file.html>', ['Run `first-draft-axi refine <option.html> "<change>" --out <file.html>`']);
+  if (resolve(values.out) === resolve(file)) fail('USAGE', '--out must be a new file, not the option being refined', ['Pass a different --out path']);
+  let seed;
+  try { seed = readFileSync(file, 'utf8'); } catch (e) { fail('NO_OPTIONS', `cannot read ${file}: ${e.message}`, ['Pass one option file made by `first-draft-axi make`']); }
+  const c = agentOrAsk();
+  const started = Date.now();
+  let made;
+  try { made = await make({ prompt: change, ...c, seed }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+  const out = resolve(values.out);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, made.html);
+  console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in, tokens_out: made.tokens_out },
+    ...(made.remote.length && { blocked_remote: made.remote }),
+    help: [`See both: first-draft-axi view ${resolve(file)} ${out}`] }));
 } else if (command === 'doctor') {
   const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor()];
   let c;
