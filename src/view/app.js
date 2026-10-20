@@ -87,7 +87,7 @@ function canvas(o) {
     };
   }
   const area = el('main', { class: 'canvas' }, board);
-  const fullscreen = o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button primary')];
+  const fullscreen = o.error ? [] : [link(`#/o/${o.n}/full`, '▶ Play', 'button primary')];
   return { body: [el('header', { class: 'bar' }, link('#/', '← All options', 'button'),
     el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · ${i + 1} of ${count}`)),
     el('nav', {}, link(`#/o/${prev.n}`, '‹', 'button icon'), link(`#/o/${next.n}`, '›', 'button icon'), ...fullscreen)),
