@@ -81,11 +81,12 @@ code in `src/view/`, bundled by esbuild into `dist/view/`:
 - `preview/helpers.ts`: `formatIframeError` and `isTrustedPreviewMessageSource`,
   unchanged.
 - `preview/fullscreen.ts`: Escape, from the page or the option, leaves fullscreen.
+  The canvas's Play link opens an option fullscreen.
 
 `packages/core/src/frames` holds JSX device snippets for the agent; the view
 renders HTML only and does not use them.
 
 Not in this slice: JSX/runtime exports, external assets, image generation,
-workspace persistence, revision, Play and multi-screen flows, comments,
+workspace persistence, revision, multi-screen flows, comments,
 sign-off links, or new publication. The first PR
 target remains **2026-10-20**; merge and publication require Main's approval.
