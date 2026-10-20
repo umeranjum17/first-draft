@@ -390,3 +390,22 @@ test('a model that keeps patching past the turn cap still gives the page it wrot
   assert.deepEqual(made.truncated, [out]);
   assert.match(made.help[0], /ran out of the engine's 12 turns/);
 });
+
+test('a call that times out once and one whose connection closes are asked again, then the page is made', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null);
+  t.after(() => server.close());
+  const [serve] = server.listeners('request');
+  server.removeAllListeners('request');
+  let calls = 0;
+  server.on('request', (req, res) => { if (calls++ === 0) return; if (calls === 3) return req.socket.destroy(); serve(req, res); }); // turn 1's first call never answers; turn 2's first call drops
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  writeFileSync(join(dir, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')), agent_timeout: '1s' }));
+  const out = join(dir, 'retried.html');
+  await run('make', 'a notes page', '--out', out);
+  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
+  assert.equal(calls, 5); // 2 failed + 3 turns
+});
