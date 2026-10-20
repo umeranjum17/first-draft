@@ -70,7 +70,7 @@ Pins come from `<design>.comments.json` next to the design (`mocks/sign-in.html`
 Every model call goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), on the model you choose. first-draft never picks one, and no route falls back to another account or model. `first-draft-axi init` with no flags lists the routes that are ready.
 
 - **Your subscription CLI**: `byokit:codex` runs your installed, signed-in CLI with your normal home folder, and never copies its login.
-- **A plan key or an api key**: a plan-key route such as `byokit:minimax:plan_key`, or an api-key route such as `byokit:minimax:key`. The key comes from the environment variable `doctor` names, goes only to BYOKit for the call, and is never saved.
+- **A plan key or an api key**: a plan-key route such as `byokit:zai:plan_key`, or an api-key route such as `byokit:minimax:key`. The key comes from the environment variable `doctor` names, goes only to BYOKit for the call, and is never saved.
 
 The choice lives in `$FIRST_DRAFT_HOME/config.json` (default `~/.first-draft/config.json`):
 
