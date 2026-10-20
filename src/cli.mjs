@@ -9,7 +9,7 @@ import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 
-const VERSION = '0.2.2';
+const VERSION = '0.2.3';
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
