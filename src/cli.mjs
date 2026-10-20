@@ -83,7 +83,7 @@ if (command === 'make') {
   const started = Date.now();
   const files = [];
   let tokens_in = 0, tokens_out = 0;
-  const blocked = new Set();
+  const blocked = new Set(), cut = [];
   for (let i = 0; i < count; i++) {
     let made;
     try {
@@ -97,10 +97,12 @@ if (command === 'make') {
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
     made.remote.forEach((r) => blocked.add(r));
+    if (made.truncated) cut.push(numbered);
   }
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out },
     ...(blocked.size && { blocked_remote: [...blocked] }),
-    help: [blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
+    ...(cut.length && { truncated: cut }),
+    help: [...(cut.length ? [`${cut.length} design(s) ran out of the engine's 12 turns before finishing: they hold the screens written so far, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
       `See them on the tailnet: first-draft-axi view ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out}`,
       `Post them for review: first-draft-axi post ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out} --title "<question>" --recommend a`] }));} else if (command === 'post') {
   const { values, positionals } = flags(rest, { title: { type: 'string' }, recommend: { type: 'string' }, evidence: { type: 'boolean' }, media: { type: 'string', multiple: true }, option: { type: 'string', multiple: true }, tradeoff: { type: 'string' }, key: { type: 'string' }, board: { type: 'string' }, host: { type: 'string' }, port: { type: 'string' } });

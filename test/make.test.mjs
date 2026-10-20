@@ -164,7 +164,7 @@ test('make verifies an export path the model spells loosely', async (t) => {
 });
 
 // A local provider that keeps guessing old_str, so the editor must escalate to create.
-function guesser(seen) {
+function guesser(seen, patching = false) {
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
@@ -172,9 +172,9 @@ function guesser(seen) {
       seen.push(JSON.parse(body));
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const n = seen.length - 1;
-      if (n < 4) {
+      if (n < (patching ? 20 : 4)) {
         const item = { type: 'function_call', id: `fc${n}`, call_id: `c${n}`, name: 'str_replace_based_edit_tool',
-          arguments: JSON.stringify(n === 0 ? { command: 'create', path: 'index.html', file_text: PAGE } : { command: 'str_replace', path: 'index.html', old_str: `guess ${n}`, new_str: 'x' }) };
+          arguments: JSON.stringify(n === 0 ? { command: 'create', path: 'index.html', file_text: PAGE } : { command: 'str_replace', path: 'index.html', ...(patching ? { old_str: `to your notes${'!'.repeat(n - 1)}`, new_str: `to your notes${'!'.repeat(n)}` } : { old_str: `guess ${n}`, new_str: 'x' }) }) };
         res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
           + ev({ type: 'response.completed', response: { id: `r${n}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
         return;
@@ -372,4 +372,21 @@ test('init with only the minimax key route saves its shipped default model', asy
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir };
   const { stdout } = await promisify(execFile)(process.execPath, [CLI, 'init', '--agent', 'byokit:minimax:key'], { env });
   assert.equal(JSON.parse(stdout).saved.model, 'MiniMax-M3.1-Flash-Preview');
+});
+
+test('a model that keeps patching past the turn cap still gives the page it wrote', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await guesser(seen, true);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'capped.html');
+  const { stdout } = await run('make', 'a notes page', '--out', out);
+  assert.equal(seen.length, 12, 'the engine is stopped at its 12th model turn');
+  assert.match(readFileSync(out, 'utf8'), /to your notes!{11}</, 'the patches made before the cap are kept');
+  const made = JSON.parse(stdout);
+  assert.deepEqual(made.truncated, [out]);
+  assert.match(made.help[0], /ran out of the engine's 12 turns/);
 });
