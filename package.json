@@ -7,6 +7,10 @@
     "type": "git",
     "url": "git+https://github.com/umeranjum17/first-draft.git"
   },
+  "homepage": "https://github.com/umeranjum17/first-draft#readme",
+  "bugs": {
+    "url": "https://github.com/umeranjum17/first-draft/issues"
+  },
   "type": "module",
   "bin": {
     "first-draft-axi": "src/cli.mjs"
