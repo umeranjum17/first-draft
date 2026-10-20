@@ -1,6 +1,6 @@
-// Post a design to a sign-off board: copy the options into the board's mocks folder and `sign-off-axi post` the design card, whose
-// --tradeoff carries each option's Play route in the running view (started here when it is not up). The card's iframe sandbox
-// (allow-scripts only) blocks a link inside the mock, so the URL rides in the card's own text.
+// Post a design to a sign-off board: copy the options into the board's mocks folder and `sign-off-axi post` the design card, with each
+// option's Play route in the running view (started here when it is not up) as that option's --link (sign-off-axi 0.5.0+, a tappable
+// Open under its mock) and, as the fallback, in the --tradeoff text: the card's iframe sandbox blocks a link inside the mock.
 import { execFile, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
@@ -66,7 +66,7 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   });
   const open = `Open in first-draft: ${options.map((o) => `${o.label} ${o.link}`).join(' · ')}`;
   const args = ['post', boardFile, '--type', 'design', '--title', title, ...(key ? ['--key', key] : []), '--tradeoff', tradeoff ? `${tradeoff} ${open}` : open, '--recommend', rec,
-    ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`])];
+    ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`, '--link', `${o.option}=${o.link}`])];
   try {
     const { stdout } = await promisify(execFile)('sign-off-axi', args, { maxBuffer: 1e7 });
     return { board: boardFile, view, options, sign_off: stdout.trim() };
