@@ -61,7 +61,14 @@ function pinLayer(pins) {
         const on = open && o.getAttribute('data-i') === String(i);
         o.setAttribute('aria-expanded', String(on));
         o.bubble.hidden = !on;
+        o.bubble.style.translate = '';
       });
+      // Under 860px the brief is docked over the bottom of the screen: lift the open comment clear of it.
+      const dock = document.querySelector('.brief');
+      if (open && dock && getComputedStyle(dock).position === 'sticky') {
+        const over = bubble.getBoundingClientRect().bottom - (dock.getBoundingClientRect().top - 8);
+        if (over > 0) bubble.style.translate = `0 -${over}px`;
+      }
     };
     layer.append(pin, bubble);
     return { p, pin, bubble };
