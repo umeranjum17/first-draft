@@ -1,7 +1,7 @@
 // The whole make journey on the built CLI: config, BYOKit's opencode-go plan key route
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -449,4 +449,43 @@ test('a call that times out, one whose connection closes and one whose stream is
   await run('make', 'a notes page', '--out', out);
   assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
   assert.equal(calls, 6); // 3 failed + 3 turns
+});
+
+test('the view sends the Next brief to the person\'s agent and the refined option joins the design', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE.replace('Sign in to your notes', 'Welcome back, warm and cosy'));
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const option = join(dir, 'a-1.html');
+  writeFileSync(option, '<!doctype html><html><head><title>Notes</title></head><body><h1>Sign in to your notes</h1></body></html>');
+  const view = spawn(process.execPath, [CLI, 'view', option, '--host', '127.0.0.1', '--port', '0'], { env });
+  t.after(() => view.kill());
+  const url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
+  const send = (body, headers = {}) => fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin, ...headers }, body: JSON.stringify(body) });
+  const options = async () => JSON.parse((await (await fetch(url)).text()).match(/id="design">(.*?)<\/script>/)[1]).options.map((o) => o.file);
+
+  const none = await send({ option: 1, change: 'warmer palette' });
+  assert.equal(none.status, 500);
+  const { error, help } = await none.json();
+  assert.equal(error, 'No agent is set up yet.');
+  assert.match(help[0], /^Choose which BYOKit route and model.*first-draft-axi init --agent byokit:/); // the set-up hint, and no model is called
+  assert.equal(seen.length, 0);
+
+  await promisify(execFile)(process.execPath, [CLI, 'init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor'], { env });
+  assert.equal((await send({ option: 1, change: 'warmer palette' }, { origin: 'http://evil.example' })).status, 403);
+  assert.equal((await send({ option: 9, change: 'warmer palette' })).status, 400);
+  assert.equal((await send({ option: 1, change: '  ' })).status, 400);
+  assert.equal(seen.length, 0, 'a refused request makes no model call');
+
+  const sent = await send({ option: 1, change: 'warmer palette, add an empty state' });
+  assert.equal(sent.status, 200);
+  assert.deepEqual(await sent.json(), { option: { n: 2, label: 'a-1-refined', file: 'a-1-refined.html' } });
+  assert.match(JSON.stringify(seen[0].body), /Revise this index\.html: warmer palette, add an empty state/);
+  assert.match(readFileSync(join(dir, 'a-1-refined.html'), 'utf8'), /Welcome back, warm and cosy/);
+  assert.match(readFileSync(option, 'utf8'), /Sign in to your notes/, 'the option it came from is untouched');
+  assert.deepEqual(await options(), ['a-1.html', 'a-1-refined.html']);
+
+  assert.equal((await send({ option: 1, change: 'again' })).status, 200); // a second send never overwrites the first
+  assert.deepEqual(await options(), ['a-1.html', 'a-1-refined.html', 'a-1-refined-2.html']);
 });
