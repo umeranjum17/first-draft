@@ -3,6 +3,7 @@
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
 import { FRAMES, SANDBOX, fitCanvas, fitPlay, formatIframeError, isTrustedPreviewMessageSource, pageFor, playDevice } from './canvas.js';
 import './view.css';
+import { wrapperOptions } from './wrapper-options.js';
 
 const design = JSON.parse(document.getElementById('design').textContent);
 const app = document.getElementById('app');
@@ -94,7 +95,7 @@ function grid() {
     return el('a', { class: 'card', href: `#/o/${o.n}` }, body, el('div', { class: 'card-label' }, el('strong', {}, `Option ${o.n}`), ` ${o.label}`));
   });
   const fit = () => document.querySelectorAll('.thumb .scaled').forEach((s) => s.rescale(s.parentElement.clientWidth / FRAMES.desktop.width));
-  return { body: [el('header', { class: 'bar' }, el('h1', {}, design.name), el('span', { class: 'muted' }, `${design.options.length} option${design.options.length === 1 ? '' : 's'}`)),
+  return { body: [el('header', { class: 'bar' }, el('h1', {}, design.name), el('span', { class: 'muted' }, `${design.options.length} option${design.options.length === 1 ? '' : 's'}`), link('#/wrappers', 'Wrapper directions', 'button')),
     el('main', { class: 'grid' }, ...cards)], fit };
 }
 
@@ -168,7 +169,8 @@ function render() {
   if (page !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   frames = [];
   resize?.disconnect();
-  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : page === 'play' ? play(o, device) : canvas(o);
+  const study = !['full', 'play'].includes(page) && wrapperOptions({ el, link, design, frame, scaled, pinsFor, errorBar });
+  const view = study || (page === 'grid' ? grid() : page === 'full' ? full(o) : page === 'play' ? play(o, device) : canvas(o));
   document.title = o ? `Option ${o.n} · ${design.name}` : design.name;
   app.className = `page-${page}`;
   app.replaceChildren(...view.body);
