@@ -14,3 +14,4 @@ Harness: a shell runs the CLI with a throwaway FIRST_DRAFT_HOME and the model ke
 2. The output JSON has `render_check: "checked"`. With `FIRST_DRAFT_CHROME` set to a path that does not exist it is `skipped`, and stderr holds one warning line.
 3. Capture: open `<tmp>/page.html` at 390 and 1280, in light and in dark, and save the 390 screenshots in light and dark plus the scroll width (`document.documentElement.scrollWidth` is 390 at the 390 viewport) to `$DONE_DONE_EVIDENCE_ROOT`; keep the 1280 shots outside it, since they do not show the phone claim.
 4. Stop what you started.
+5. The light capture shows a light page and the dark capture a dark one; the check fails done when they paint the same.
