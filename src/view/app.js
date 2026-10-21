@@ -1,7 +1,7 @@
 // The first-draft view: every option of a design as a grid, one option in the Studio (a brief column beside a canvas showing one device at a time), fullscreen, and Play (clickable screens).
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, SANDBOX, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor } from './canvas.js';
+import { FRAMES, PIN_GUTTER, SANDBOX, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -35,7 +35,10 @@ function scaled(width, height, child, pins = [], pad = 0) {
   const layer = pins.length ? pinLayer(pins) : null;
   const outer = el('div', { class: 'scaled' }, inner, ...(layer ? [layer] : []));
   outer.rescale = (scale) => {
-    if (layer) Object.assign(layer.style, { left: `${pad * scale}px`, top: `${pad * scale}px`, width: `${(width - pad * 2) * scale}px`, height: `${(height - pad * 2) * scale}px` });
+    if (layer) {
+      Object.assign(layer.style, { left: `${pad * scale}px`, top: `${pad * scale}px`, width: `${(width - pad * 2) * scale}px`, height: `${(height - pad * 2) * scale}px` });
+      layer.layout((width - pad * 2) * scale, (height - pad * 2) * scale);
+    }
     outer.style.width = `${width * scale}px`;
     outer.style.height = `${height * scale}px`;
     inner.style.transform = `scale(${scale})`;
@@ -43,18 +46,14 @@ function scaled(width, height, child, pins = [], pad = 0) {
   return outer;
 }
 
-// PinOverlay.tsx: numbered round pins over the preview, read-only. Placed by fraction of the frame instead of an element rect,
-// so they hold at any scale; a pin shows its comment text when clicked or tapped.
+// PinOverlay.tsx: numbered round pins, read-only, in the margin beside the frame, level with what they point at (a short leader reaches the frame's edge), so no pin covers the page.
+// x and y are fractions of the frame, so they hold at any scale; the side is the nearer one. A pin shows its comment text when clicked or tapped, away from the point it names.
 function pinLayer(pins) {
   const layer = el('div', { class: 'pins' });
-  pins.forEach((p, i) => {
-    const pin = el('button', { type: 'button', class: 'pin', 'aria-label': `Comment ${i + 1}`, 'aria-expanded': 'false', 'data-i': i }, String(i + 1));
-    const bubble = el('div', { class: `pin-bubble${p.y > 0.6 ? ' up' : ''}`, role: 'note', hidden: '' }, p.text);
-    const wrap = el('div', { class: 'pin-wrap' }, pin);
-    wrap.style.left = `${p.x * 100}%`; // the bubble is placed from --x by CSS, so it stays inside the frame
-    wrap.style.top = `${p.y * 100}%`;
-    bubble.style.setProperty('--x', `${p.x * 100}%`);
-    bubble.style.setProperty('--y', `${p.y * 100}%`);
+  const items = pins.map((p, i) => {
+    const pin = el('button', { type: 'button', class: `pin ${p.x < 0.5 ? 'left' : 'right'}`, 'aria-label': `Comment ${i + 1}`, 'aria-expanded': 'false', 'data-i': i }, String(i + 1));
+    const bubble = el('div', { class: 'pin-bubble', role: 'note', hidden: '' }, el('strong', {}, `${i + 1}  `), p.text);
+    bubble.style.setProperty('--x', p.x < 0.5 ? '0px' : '100%'); // the bubble is placed from --x by CSS, so it stays inside the frame
     pin.bubble = bubble;
     pin.onclick = () => {
       const open = pin.getAttribute('aria-expanded') !== 'true';
@@ -64,8 +63,22 @@ function pinLayer(pins) {
         o.bubble.hidden = !on;
       });
     };
-    layer.append(wrap, bubble);
+    layer.append(pin, bubble);
+    return { p, pin, bubble };
   });
+  // Each side's pins keep to their own column, level with their point and at least 34px apart (the 28px pin plus a gap); w and h are the frame's size on screen.
+  layer.layout = (w, h) => {
+    for (const side of ['left', 'right']) {
+      const mine = items.filter((it) => (it.p.x < 0.5 ? 'left' : 'right') === side).sort((a, b) => a.p.y - b.p.y);
+      let prev = -20;
+      const ys = mine.map((it) => (prev = Math.max(it.p.y * h, prev + 34)));
+      for (let k = ys.length - 1, limit = h - 14; k >= 0; k--, limit = ys[k + 1] - 34) ys[k] = Math.min(ys[k], limit);
+      mine.forEach((it, k) => {
+        Object.assign(it.pin.style, { left: `${side === 'left' ? -22 : w + 22}px`, top: `${Math.max(14, ys[k])}px` });
+        it.bubble.classList.toggle('up', it.p.y < 0.5); // the far half of the frame from the point
+      });
+    }
+  };
   return layer;
 }
 const pinsFor = (o) => design.pins.filter((p) => p.option === o.n);
@@ -112,17 +125,58 @@ const brand = () => el('img', { class: 'brand', src: '/favicon.svg', alt: '', wi
 // A shell word as typed: plain words stay bare, anything else is single-quoted.
 const shellWord = (s) => /^[\w./-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`;
 
-// The Studio brief: the view runs no model, so a brief becomes the refine command that makes it, ready to copy into a terminal.
+// The Studio brief: sending it runs the person's own agent through the view server (the same refine as the terminal) and the new option joins the picker.
+// `job` is the change being made, `result` how the last send ended; both outlive a re-render, so the box is right on any option or device.
+let job = null; // { n, started } while a change is being made
+let result = null; // { n, text } for the option it ended on, or { n, error, help } for the option it failed on
+let clock = null;
+
+function status(o) {
+  const box = el('div', { class: 'run', role: 'status', 'aria-live': 'polite', hidden: '' });
+  if (job) {
+    const left = el('span', { class: 'muted' });
+    const tick = () => { left.textContent = `${Math.round((performance.now() - job.started) / 1000)}s`; };
+    tick(); clearInterval(clock); clock = setInterval(tick, 1000);
+    box.replaceChildren(el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('span', {}, `Making a new option from Option ${job.n}. This takes a minute or two. `, left));
+    box.hidden = false;
+  } else if (result && result.n === o.n) {
+    box.className = `run${result.error ? ' failed' : ''}`;
+    box.setAttribute('role', result.error ? 'alert' : 'status');
+    box.replaceChildren(el('span', {}, result.error ?? result.text), ...(result.help ?? []).map((h) => el('span', { class: 'muted' }, h)));
+    box.hidden = false;
+  }
+  return box;
+}
+
+async function send(o, change) {
+  job = { n: o.n, started: performance.now() };
+  result = null;
+  refreshBrief();
+  try {
+    const res = await fetch('/refine', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ option: o.n, change }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(body.error ?? `The view answered ${res.status}`), { help: body.help });
+    design.options.push(body.option);
+    draft = '';
+    result = { n: body.option.n, text: `Option ${body.option.n} is Option ${o.n} with this change: ${change}` };
+    if (/^#\/o\/\d+(\/(phone|desktop))?$/.test(location.hash)) location.hash = `#/o/${body.option.n}${location.hash.match(/\/(phone|desktop)$/)?.[0] ?? ''}`;
+  } catch (e) { result = { n: o.n, error: e.message === 'Failed to fetch' ? 'The view cannot be reached. Is first-draft-axi view still running?' : e.message, help: e.help }; }
+  job = null;
+  clearInterval(clock);
+  refreshBrief();
+}
+const refreshBrief = () => { const o = option(current()); if (o) document.querySelector('form.brief')?.replaceWith(brief(o)); };
+
 function brief(o) {
   const text = el('textarea', { rows: '3', 'aria-label': `Brief for a change to Option ${o.n}`, placeholder: `Describe a change to Option ${o.n}` });
   text.value = draft;
   text.oninput = () => { draft = text.value; };
-  const result = el('div', { class: 'command', hidden: '' });
-  const form = el('form', { class: 'brief' }, el('label', { class: 'kicker' }, 'Next brief'), result, text,
-    el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, 'For your terminal'), el('button', { type: 'submit', class: 'button primary' }, 'Get command')));
+  const cmd = el('div', { class: 'command', hidden: '' });
+  const go = el('button', { type: 'submit', class: 'button primary', disabled: job ? '' : undefined }, job ? 'Working…' : 'Send');
+  const terminal = el('button', { type: 'button', class: 'link' }, 'Copy terminal command');
+  const form = el('form', { class: 'brief' }, el('label', { class: 'kicker' }, 'Next brief'), status(o), cmd, text, el('div', { class: 'brief-row' }, terminal, go));
   text.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } };
-  form.onsubmit = (e) => {
-    e.preventDefault();
+  const command = () => {
     const change = text.value.trim();
     if (!change) return text.focus();
     const out = o.file.replace(/(\.[^.]*)?$/, (ext) => `-refined${ext}`);
@@ -132,8 +186,16 @@ function brief(o) {
       try { await navigator.clipboard.writeText(code.textContent); copy.textContent = 'Copied'; }
       catch { getSelection().selectAllChildren(code); copy.textContent = document.execCommand('copy') ? 'Copied' : 'Selected'; } // no clipboard API off https: copy the selection
     };
-    result.replaceChildren(el('pre', {}, code), el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, `Run it in the design's folder. It writes ${out} and leaves Option ${o.n} as it is.`), copy));
-    result.hidden = false;
+    cmd.replaceChildren(el('pre', {}, code), el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, `Run it in the design's folder. It writes ${out} and leaves Option ${o.n} as it is.`), copy));
+    cmd.hidden = false;
+  };
+  terminal.onclick = command;
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const change = text.value.trim();
+    if (job) return;
+    if (!change) return text.focus();
+    send(o, change);
   };
   return form;
 }
@@ -165,7 +227,7 @@ function canvas(o, device) {
   const body = [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name, el('span', { class: 'muted' }, ` · Option ${o.n}`)), link('#/', 'All options', 'button')),
     el('div', { class: 'studio' }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), stage), ...(o.error ? [] : [brief(o)]))];
   return { body, dev, fit: art && (() => {
-    const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight);
+    const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight, pins.length ? PIN_GUTTER : 0);
     art.rescale(scale);
     zoom.textContent = `${f.width} × ${f.height} · ${Math.round(scale * 100)}%`;
   }) };
@@ -201,7 +263,7 @@ function play(o, device) {
   const art = artFor(dev, iframe, pinsFor(o));
   const stage = el('main', { class: 'stage' }, art);
   return { body: [el('header', { class: 'bar' }, link(`#/o/${o.n}/${dev}`, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), devices(`#/o/${o.n}/play`, dev)),
-    controls, errorBar(o.n), ...pinsNotice(), stage], dev, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight)) };
+    controls, errorBar(o.n), ...pinsNotice(), stage], dev, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight, pinsFor(o).length ? PIN_GUTTER : 0)) };
 }
 
 function render() {

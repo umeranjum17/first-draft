@@ -83,6 +83,14 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .brief:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .brief-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .brief-row .muted { font-size: 13px; }
+.link { padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; cursor: pointer; }
+.link:hover { color: var(--text); }
+.run { display: flex; align-items: baseline; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.run[hidden] { display: none; }
+.run.failed { flex-direction: column; gap: 2px; color: var(--error); }
+.spinner { flex-shrink: 0; align-self: center; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 9999px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 .command { display: flex; flex-direction: column; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .command[hidden] { display: none; }
 .command pre { margin: 0; padding: 10px; border-radius: 8px; background: var(--sunken); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -100,9 +108,9 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
   .stage.dotted:has(.artboard) { height: auto; aspect-ratio: 1328 / 848; } /* the desktop artboard plus the stage padding */
   .side { border: 0; border-top: 1px solid var(--border); padding: 20px 16px 24px; }
   .brief { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 4; margin: 0 8px 8px; padding: 8px 8px 8px 12px; border-radius: 16px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.16); }
+  .brief { gap: 6px; padding-right: 12px; }
   .brief > .kicker, .brief > .brief-row .muted { display: none; }
-  .brief textarea { min-height: 40px; height: 40px; padding: 10px 112px 10px 2px; line-height: 20px; resize: none; }
-  .brief > .brief-row { position: absolute; right: 8px; bottom: 8px; }
+  .brief textarea { min-height: 40px; height: 40px; padding: 10px 2px; line-height: 20px; resize: none; }
   .tools .button, .devices a { min-height: 40px; }
 }
 
@@ -128,12 +136,15 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .play-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .button[disabled] { opacity: 0.4; cursor: default; }
 .button[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-/* PinOverlay.tsx: warning-soft note pins, 28px for a thumb. The layer sits over the frame, in this page, never inside the iframe. */
+/* PinOverlay.tsx: warning-soft note pins, 28px for a thumb, in the margin beside the frame. The layer sits over the frame, in this page, never inside the iframe. */
 .pins { position: absolute; z-index: 5; pointer-events: none; }
-.pin-wrap { position: absolute; width: 0; height: 0; }
-.pin { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1.5px solid #ca8a04; border-radius: 9999px; background: #fde68a; color: #1d1c1a; font: 600 12px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgb(0 0 0 / 0.25); cursor: pointer; pointer-events: auto; }
+.pin { position: absolute; width: 28px; height: 28px; margin: -14px 0 0 -14px; display: flex; align-items: center; justify-content: center; border: 1.5px solid #ca8a04; border-radius: 9999px; background: #fde68a; color: #1d1c1a; font: 600 12px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgb(0 0 0 / 0.25); cursor: pointer; pointer-events: auto; }
+.pin::after { content: ""; position: absolute; top: 50%; width: 16px; height: 1.5px; margin-top: -0.75px; background: #ca8a04; pointer-events: none; } /* the leader: from the pin to just inside the frame's edge */
+.pin.left::after { left: 100%; }
+.pin.right::after { right: 100%; }
 .pin[aria-expanded="true"] { outline: 3px solid var(--accent); outline-offset: 1px; }
 .pin:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.pin-bubble { --w: min(320px, calc(100% - 16px)); position: absolute; z-index: 6; width: var(--w); left: clamp(8px, calc(var(--x) - var(--w) / 2), calc(100% - 8px - var(--w))); top: calc(var(--y) + 18px); padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 14px; box-shadow: var(--shadow); pointer-events: auto; overflow-wrap: anywhere; }
-.pin-bubble.up { top: auto; bottom: calc(100% - var(--y) + 18px); }
+/* The comment opens in the half of the frame away from its point, so it never covers the text it names. */
+.pin-bubble { --w: min(320px, calc(100% - 16px)); position: absolute; z-index: 6; width: var(--w); left: clamp(8px, calc(var(--x) - var(--w) / 2), calc(100% - 8px - var(--w))); top: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 14px; box-shadow: var(--shadow); pointer-events: auto; overflow-wrap: anywhere; }
+.pin-bubble.up { top: auto; bottom: 12px; }
 .pin-bubble[hidden] { display: none; }

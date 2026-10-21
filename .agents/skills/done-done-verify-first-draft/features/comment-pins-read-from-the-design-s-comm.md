@@ -11,7 +11,7 @@ Put <design>.comments.json next to the design, then open the view for that desig
 Harness: A shell runs the CLI and curl for the url. A browser tool opens the url and each #/o/<n> route for screenshots.
 
 1. Launch the app as SKILL.md says and wait until it is ready.
-2. Write a temporary <tmp>/sign-in.comments.json with one entry {option:1,x:0.4,y:0.2,text:"..."}, run first-draft-axi view <tmp>/sign-in.html, then open <url>#/o/1 and click the numbered pin.
+2. Write a temporary <tmp>/sign-in.comments.json with one entry {option:1,x:0.4,y:0.2,text:"..."}, run first-draft-axi view <tmp>/sign-in.html, then open <url>#/o/1 and click the numbered pin. Pins sit in the margin beside the frame (left or right, whichever is nearer), level with their point and joined to the frame's edge by a short line, so none covers the page text; a pin's comment opens in the half of the frame away from its point. Check it at 390 and 1280 with a comment on the headline.
 3. Capture: screenshot the resulting page to $DONE_DONE_EVIDENCE_ROOT/comment-pins-read-from-the-design-s-comm.png, as SKILL.md's Evidence section says.
 4. Stop what you started.
 

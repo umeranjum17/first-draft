@@ -19,9 +19,11 @@ export function pageFor(option, mode) {
 // as large as the stage allows without upscaling (PreviewPane.tsx computeFitPreviewZoom).
 export const deviceFor = (device, viewportWidth) => device ?? (viewportWidth < 760 ? 'phone' : 'desktop');
 const PADDING = 48;
-export function fitDevice(device, width, height) {
+// Comment pins sit in the margin beside the frame: a design with pins keeps this much more room on each side.
+export const PIN_GUTTER = 16;
+export function fitDevice(device, width, height, gutter = 0) {
   const f = FRAMES[device], w = f.width + (f.bezel ?? 0) * 2, h = f.height + (f.bezel ?? 0) * 2;
-  return Math.min(1, Math.max(1, width - PADDING) / w, Math.max(1, height - PADDING) / h);
+  return Math.min(1, Math.max(1, width - PADDING - gutter * 2) / w, Math.max(1, height - PADDING) / h);
 }
 
 // preview/helpers.ts formatIframeError and isTrustedPreviewMessageSource, unchanged.

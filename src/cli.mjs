@@ -46,12 +46,21 @@ const flags = (args, options) => {
     return parseArgs({ args, options, allowPositionals: true });
   } catch (e) { fail('USAGE', e.message, ['Run `first-draft-axi --help`']); }
 };
-const agentOrAsk = () => {
+const agentOrThrow = () => {
   const c = read();
-  if (!c.agent) fail('NO_AGENT', `no agent is set in ${CONFIG()}`, [ASK]);
-  if (!routeOf(c.agent)) fail('BAD_AGENT', `agent ${c.agent} is not byokit:<route>; this release runs BYOKit routes only`, [ASK]);
-  if (!c.model) fail('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`, [ASK]);
+  const no = (code, message) => Object.assign(new Error(message), { code, help: [ASK] });
+  if (!c.agent) throw no('NO_AGENT', `no agent is set in ${CONFIG()}`);
+  if (!routeOf(c.agent)) throw no('BAD_AGENT', `agent ${c.agent} is not byokit:<route>; this release runs BYOKit routes only`);
+  if (!c.model) throw no('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`);
   return c;
+};
+const agentOrAsk = () => {
+  try { return agentOrThrow(); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
+};
+// The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
+const refineHtml = async (seed, change) => {
+  const c = agentOrThrow();
+  try { return (await make({ prompt: change, ...c, seed })).html; } catch (e) { throw Object.assign(new Error(`${c.agent} (${c.model}) did not refine the design: ${e.message}`), { help: ['Run `first-draft-axi doctor`'] }); }
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
@@ -166,7 +175,7 @@ if (command === 'make') {
   if (wildcard && !tailnet) fail('NO_TAILNET', 'a wildcard --host listens on every address, but tailscale ip -4 found no tailnet address to show', ['Pass --host <tailnet address>']);
   let v;
   try {
-    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1, comments: commentsPath(positionals[0]) });
+    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1, comments: commentsPath(positionals[0]), refine: refineHtml });
   } catch (e) { fail(e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'VIEW_FAILED', `cannot serve on ${advertise}:${port}: ${e.message}`, ['Stop the other `first-draft-axi view`, or pass --port <port>']); }
   console.log(JSON.stringify({ viewing: { url: v.url, frames: v.frames, options: v.options.map((o) => ({ option: o.n, file: o.file, url: `${v.url}#/o/${o.n}` })) },
     help: [/^(127\.|::1$|localhost$)/.test(advertise) ? `${given ? 'This host' : 'tailscale ip -4 found no tailnet address, so this url'} opens on this machine only; pass --host <tailnet address>` : 'Open the url on any device that can reach this host; it serves until this process stops',

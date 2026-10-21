@@ -1,6 +1,6 @@
 // The first-draft view server: the view page on one port, and each option's page on the next port, a different origin.
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -53,7 +53,7 @@ export async function viewHost(flag) {
   return { given, host, advertise: wildcard ? tailnet : host, tailnet, wildcard };
 }
 
-export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 // Scripts run only inside this sandbox: inline only, nothing loaded or sent over the network.
 export const framePolicy = (view) => `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors ${view}`;
 const ASSETS = { '/view.js': 'text/javascript', '/view.css': 'text/css', '/favicon.svg': 'image/svg+xml', '/favicon-32.png': 'image/png', '/apple-touch-icon.png': 'image/png' };
@@ -75,7 +75,19 @@ else if(e.data.type==='BACK'&&stack.length>1){stack.pop();back=true;go(stack[sta
 const pathOf = (req) => req.url.split('?')[0];
 const listen = (server, port, host) => new Promise((ok, fail) => { server.once('error', fail); server.listen(port, host, () => { server.off('error', fail); ok(); }); });
 
-export async function serve({ files, name, host, advertise = host, port, framePort, comments }) {
+// The file a refined option is written to, beside the one it came from, never over an existing file.
+const refinedPath = (file) => {
+  const ext = extname(file), base = join(dirname(file), basename(file, ext));
+  for (let k = 1; ; k++) { const p = `${base}-refined${k > 1 ? `-${k}` : ''}${ext}`; if (!existsSync(p)) return p; }
+};
+const readBody = (req) => new Promise((ok, fail) => {
+  let body = '';
+  req.on('data', (c) => { body += c; if (body.length > 100_000) req.destroy(new Error('request too large')); });
+  req.on('end', () => ok(body)).on('error', fail);
+});
+
+// `refine(seed, change)` makes the html of a new option from an option's html; the view runs no model of its own.
+export async function serve({ files, name, host, advertise = host, port, framePort, comments, refine }) {
   const options = files.map((file, i) => ({ n: i + 1, label: basename(file, extname(file)), file }));
   const { buildPreviewDocument } = await import('../dist/engine.mjs');
   let viewOrigin, frameOrigin;
@@ -87,15 +99,39 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       return st.size > LIMIT ? { status: 413, message: `${basename(o.file)} is ${st.size} bytes; options are 5 MB or less` } : null;
     } catch (e) { return { status: 404, message: `${basename(o.file)} cannot be read: ${e.code ?? e.message}` }; }
   };
+  const shown = (o) => ({ n: o.n, label: o.label, file: basename(o.file), error: sizeError(o)?.message });
   const page = () => {
     const { pins, error: pinsError } = readPins(comments);
-    const data = { name, frames: frameOrigin, pins, pinsError, options: options.map((o) => ({ n: o.n, label: o.label, file: basename(o.file), error: sizeError(o)?.message })) };
+    const data = { name, frames: frameOrigin, pins, pinsError, options: options.map(shown) };
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/view.css"></head>`
       + `<body><div id="app"></div><script type="application/json" id="design">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script><script src="/view.js"></script></body></html>`;
   };
+  // One change runs at a time: the model call takes minutes and the person's agent is one account.
+  let running = false;
+  const change = async (req, res) => {
+    const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
+    const same = (() => { try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; } })();
+    if (!same || !/^application\/json/.test(req.headers['content-type'] ?? '')) return reply(403, { error: 'this request did not come from the view page' });
+    let body;
+    try { body = JSON.parse(await readBody(req)); } catch { return reply(400, { error: 'the request is not valid JSON' }); }
+    const from = options.find((o) => o.n === body?.option), text = typeof body?.change === 'string' ? body.change.trim() : '';
+    if (!from || !text) return reply(400, { error: 'a change needs an option and a few words about the change' });
+    if (!refine) return reply(501, { error: 'this view cannot make a change' });
+    if (running) return reply(409, { error: 'Another change is still being made. Wait for it to finish.' });
+    running = true;
+    try {
+      const html = await refine(readFileSync(from.file, 'utf8'), text);
+      const file = refinedPath(from.file);
+      writeFileSync(file, html);
+      const added = { n: options.length + 1, label: basename(file, extname(file)), file };
+      options.push(added);
+      reply(200, { option: shown(added) });
+    } catch (e) { reply(500, { error: e.message, help: e.help }); } finally { running = false; }
+  };
   const view = createServer((req, res) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     const path = pathOf(req);
+    if (req.method === 'POST' && path === '/refine') return change(req, res);
+    if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     if (path === '/') return send(res, 200, 'text/html; charset=utf-8', page(), { 'content-security-policy': viewPolicy(frameOrigin) });
     if (ASSETS[path]) {
       try { return send(res, 200, ASSETS[path], readFileSync(new URL(path.slice(1), DIST))); }
