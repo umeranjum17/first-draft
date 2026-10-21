@@ -86,7 +86,7 @@ const readBody = (req) => new Promise((ok, fail) => {
   req.on('end', () => ok(body)).on('error', fail);
 });
 
-// `refine(seed, change)` makes the html of a new option from an option's html; the view runs no model of its own.
+// `refine(seed, change)` makes the html of a new option from an option's html; the view runs no model of its own. A failure's `shown` is { error, help } worded for the person.
 export async function serve({ files, name, host, advertise = host, port, framePort, comments, refine }) {
   const options = files.map((file, i) => ({ n: i + 1, label: basename(file, extname(file)), file }));
   const { buildPreviewDocument } = await import('../dist/engine.mjs');
@@ -126,7 +126,7 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       const added = { n: options.length + 1, label: basename(file, extname(file)), file };
       options.push(added);
       reply(200, { option: shown(added) });
-    } catch (e) { reply(500, { error: e.message, help: e.help }); } finally { running = false; }
+    } catch (e) { reply(500, e.shown ?? { error: e.message }); } finally { running = false; }
   };
   const view = createServer((req, res) => {
     const path = pathOf(req);

@@ -11,7 +11,8 @@ import { post } from './post.mjs';
 
 const VERSION = '0.2.3';
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
-const ASK = 'Ask the user which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
+const PICK = 'which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
+const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
 const VARIATIONS = ['a calm minimal layout with generous whitespace', 'a bold colorful layout with strong hierarchy', 'a dense information-rich dashboard layout'];
@@ -48,10 +49,11 @@ const flags = (args, options) => {
 };
 const agentOrThrow = () => {
   const c = read();
-  const no = (code, message) => Object.assign(new Error(message), { code, help: [ASK] });
-  if (!c.agent) throw no('NO_AGENT', `no agent is set in ${CONFIG()}`);
+  // `shown` is what the view tells a person: no config path, and the set-up hint worded for them.
+  const no = (code, message, shown = message) => Object.assign(new Error(message), { code, help: [ASK], shown: { error: shown, help: [`Choose ${PICK}`] } });
+  if (!c.agent) throw no('NO_AGENT', `no agent is set in ${CONFIG()}`, 'No agent is set up yet.');
   if (!routeOf(c.agent)) throw no('BAD_AGENT', `agent ${c.agent} is not byokit:<route>; this release runs BYOKit routes only`);
-  if (!c.model) throw no('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`);
+  if (!c.model) throw no('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`, `No model is set for ${c.agent} yet.`);
   return c;
 };
 const agentOrAsk = () => {
@@ -60,7 +62,10 @@ const agentOrAsk = () => {
 // The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
 const refineHtml = async (seed, change) => {
   const c = agentOrThrow();
-  try { return (await make({ prompt: change, ...c, seed })).html; } catch (e) { throw Object.assign(new Error(`${c.agent} (${c.model}) did not refine the design: ${e.message}`), { help: ['Run `first-draft-axi doctor`'] }); }
+  try { return (await make({ prompt: change, ...c, seed })).html; } catch (e) {
+    const error = `${c.agent} (${c.model}) did not refine the design: ${e.message}`;
+    throw Object.assign(new Error(error), { shown: { error, help: ['Run `first-draft-axi doctor` in a terminal to check the agent'] } });
+  }
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
