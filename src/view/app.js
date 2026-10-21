@@ -1,7 +1,7 @@
-// The first-draft view: every option of a design as a grid, one option on a canvas (phone and desktop side by side), fullscreen, and Play (clickable screens).
+// The first-draft view: every option of a design as a grid, one option in the Studio (a brief column beside a canvas showing one device at a time), fullscreen, and Play (clickable screens).
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, SANDBOX, fitCanvas, fitPlay, formatIframeError, isTrustedPreviewMessageSource, pageFor, playDevice } from './canvas.js';
+import { FRAMES, SANDBOX, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -9,6 +9,7 @@ const app = document.getElementById('app');
 const errors = new Map(); // option number -> runtime error lines
 let frames = []; // [{ n, iframe }] currently mounted
 let resize = null;
+let draft = ''; // the Studio brief being written, kept across options and devices
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -57,7 +58,7 @@ function pinLayer(pins) {
     pin.bubble = bubble;
     pin.onclick = () => {
       const open = pin.getAttribute('aria-expanded') !== 'true';
-      document.querySelectorAll('.pin').forEach((o) => { // the phone and desktop frames show the same comment together
+      document.querySelectorAll('.pin').forEach((o) => {
         const on = open && o.getAttribute('data-i') === String(i);
         o.setAttribute('aria-expanded', String(on));
         o.bubble.hidden = !on;
@@ -68,11 +69,19 @@ function pinLayer(pins) {
   return layer;
 }
 const pinsFor = (o) => design.pins.filter((p) => p.option === o.n);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const pinsNotice = () => design.pinsError ? [el('div', { class: 'error-bar', role: 'alert' }, el('div', {}, design.pinsError))] : [];
 
 // PhoneFrame.tsx: bezel, screen, Dynamic Island and home indicator around the iframe.
 const phoneFrame = (iframe) => el('div', { class: 'phone' }, el('div', { class: 'phone-screen' }, iframe),
   el('div', { class: 'phone-island', 'aria-hidden': 'true' }), el('div', { class: 'phone-home', 'aria-hidden': 'true' }));
+// One option on one device: the phone in its frame, the desktop on an artboard, each laid out at its real size.
+const artFor = (dev, iframe, pins) => {
+  const f = FRAMES[dev];
+  return dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe), pins);
+};
+const devices = (base, dev) => el('nav', { class: 'devices', 'aria-label': 'Viewport' },
+  ...['desktop', 'phone'].map((d) => el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined }, d === 'phone' ? 'Phone' : 'Desktop')));
 
 // CanvasErrorBar.tsx: the latest runtime error of the open option, with a count and a dismiss button.
 function errorBar(n) {
@@ -94,35 +103,72 @@ function grid() {
     return el('a', { class: 'card', href: `#/o/${o.n}` }, body, el('div', { class: 'card-label' }, el('strong', {}, `Option ${o.n}`), ` ${o.label}`));
   });
   const fit = () => document.querySelectorAll('.thumb .scaled').forEach((s) => s.rescale(s.parentElement.clientWidth / FRAMES.desktop.width));
-  return { body: [el('header', { class: 'bar' }, el('h1', {}, design.name), el('span', { class: 'muted' }, `${design.options.length} option${design.options.length === 1 ? '' : 's'}`)),
+  return { body: [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name), el('span', { class: 'muted' }, `${design.options.length} option${design.options.length === 1 ? '' : 's'}`)),
     el('main', { class: 'grid' }, ...cards)], fit };
 }
 
-function canvas(o) {
-  const i = design.options.indexOf(o), count = design.options.length;
-  const prev = design.options[(i - 1 + count) % count], next = design.options[(i + 1) % count];
-  let board, fit;
-  if (o.error) {
-    board = el('div', { class: 'thumb-error' }, o.error);
-  } else {
-    const phone = scaled(FRAMES.phone.width + FRAMES.phone.bezel * 2, FRAMES.phone.height + FRAMES.phone.bezel * 2, phoneFrame(frame(o, `Option ${o.n} at ${FRAMES.phone.width}px`)), pinsFor(o), FRAMES.phone.bezel);
-    const desktop = scaled(FRAMES.desktop.width, FRAMES.desktop.height, el('div', { class: 'artboard' }, frame(o, `Option ${o.n} at ${FRAMES.desktop.width}px`)), pinsFor(o));
-    board = el('div', { class: 'board' },
-      el('figure', {}, phone, el('figcaption', {}, `Phone · ${FRAMES.phone.width}`)),
-      el('figure', {}, desktop, el('figcaption', {}, `Desktop · ${FRAMES.desktop.width}`)));
-    fit = () => {
-      const f = fitCanvas(area.clientWidth);
-      board.classList.toggle('stacked', f.stacked);
-      phone.rescale(f.phone);
-      desktop.rescale(f.desktop);
+const brand = () => el('img', { class: 'brand', src: '/favicon.svg', alt: '', width: '24', height: '24' });
+
+// A shell word as typed: plain words stay bare, anything else is single-quoted.
+const shellWord = (s) => /^[\w./-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`;
+
+// The Studio brief: the view runs no model, so a brief becomes the refine command that makes it, ready to copy into a terminal.
+function brief(o) {
+  const text = el('textarea', { rows: '3', 'aria-label': `Brief for a change to Option ${o.n}`, placeholder: `Describe a change to Option ${o.n}` });
+  text.value = draft;
+  text.oninput = () => { draft = text.value; };
+  const result = el('div', { class: 'command', hidden: '' });
+  const form = el('form', { class: 'brief' }, el('label', { class: 'kicker' }, 'Next brief'), result, text,
+    el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, 'For your terminal'), el('button', { type: 'submit', class: 'button primary' }, 'Get command')));
+  text.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } };
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const change = text.value.trim();
+    if (!change) return text.focus();
+    const out = o.file.replace(/(\.[^.]*)?$/, (ext) => `-refined${ext}`);
+    const code = el('code', {}, `first-draft-axi refine ${shellWord(o.file)} ${shellWord(change)} --out ${shellWord(out)}`);
+    const copy = el('button', { type: 'button', class: 'button' }, 'Copy');
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(code.textContent); copy.textContent = 'Copied'; }
+      catch { getSelection().selectAllChildren(code); copy.textContent = document.execCommand('copy') ? 'Copied' : 'Selected'; } // no clipboard API off https: copy the selection
     };
-  }
-  const area = el('main', { class: 'canvas' }, board);
-  const fullscreen = o.error ? [] : [link(`#/o/${o.n}/play`, 'Play', 'button primary'), link(`#/o/${o.n}/full`, 'Fullscreen', 'button')];
-  return { body: [el('header', { class: 'bar' }, link('#/', '← All options', 'button'),
-    el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · ${i + 1} of ${count}`)),
-    el('nav', {}, link(`#/o/${prev.n}`, '‹', 'button icon'), link(`#/o/${next.n}`, '›', 'button icon'), ...fullscreen)),
-  errorBar(o.n), ...pinsNotice(), area], fit };
+    result.replaceChildren(el('pre', {}, code), el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, `Run it in the design's folder. It writes ${out} and leaves Option ${o.n} as it is.`), copy));
+    result.hidden = false;
+  };
+  return form;
+}
+
+// Studio: the design, its options and the open option's comments in a column beside the canvas, the brief under them.
+// Under 860px (view.css) the column moves below the canvas and the brief docks at the bottom of the screen.
+function canvas(o, device) {
+  const dev = deviceFor(device, innerWidth), f = FRAMES[dev], pins = pinsFor(o);
+  const art = o.error ? null : artFor(dev, frame(o, `Option ${o.n} at ${f.width}px`), pins);
+  const stage = el('div', { class: 'stage dotted' }, art ?? el('div', { class: 'thumb-error', role: 'alert' }, o.error));
+  const zoom = el('span', { class: 'muted zoom' });
+  const pick = el('select', { 'aria-label': 'Option' }, ...design.options.map((x) => el('option', { value: x.n, selected: x === o ? '' : undefined }, `Option ${x.n} · ${x.label}`)));
+  pick.onchange = () => { location.hash = `#/o/${pick.value}/${dev}`; };
+  const tools = el('div', { class: 'tools' }, pick, devices(`#/o/${o.n}`, dev), zoom,
+    ...(o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button'), link(`#/o/${o.n}/play/${dev}`, 'Play', 'button primary')]));
+
+  const options = el('ol', { class: 'list' }, ...design.options.map((x) => el('li', {}, el('a', { href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'page' : undefined },
+    el('span', { class: 'num' }, String(x.n)), el('span', { class: 'name' }, x.label), el('span', { class: 'muted' }, x.error ? 'cannot open' : pinsFor(x).length ? plural(pinsFor(x).length, 'comment') : '')))));
+  const notes = pins.length ? el('ol', { class: 'list' }, ...pins.map((p, i) => {
+    const b = el('button', { type: 'button' }, el('span', { class: 'num pin-num' }, String(i + 1)), el('span', { class: 'name' }, p.text));
+    b.onclick = () => document.querySelector(`.pin[data-i="${i}"]`)?.click(); // the pin with this number opens its comment on the canvas
+    return el('li', {}, b);
+  })) : el('p', { class: 'muted' }, 'No comments on this option.');
+  const side = el('aside', { class: 'side', 'aria-label': 'Design' },
+    el('section', {}, el('p', { class: 'kicker' }, 'Design'), el('h2', { class: 'title' }, design.name), el('p', { class: 'muted' }, plural(design.options.length, 'option'))),
+    el('section', {}, el('h3', { class: 'kicker' }, 'Options'), options),
+    el('section', {}, el('h3', { class: 'kicker' }, `Comments on Option ${o.n}`), notes));
+
+  const body = [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name, el('span', { class: 'muted' }, ` · Option ${o.n}`)), link('#/', 'All options', 'button')),
+    el('div', { class: 'studio' }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), stage), ...(o.error ? [] : [brief(o)]))];
+  return { body, dev, fit: art && (() => {
+    const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight);
+    art.rescale(scale);
+    zoom.textContent = `${f.width} × ${f.height} · ${Math.round(scale * 100)}%`;
+  }) };
 }
 
 function full(o) {
@@ -148,31 +194,30 @@ function playControls() {
 }
 
 function play(o, device) {
-  const dev = playDevice(device, innerWidth), f = FRAMES[dev];
+  const dev = deviceFor(device, innerWidth), f = FRAMES[dev];
   const iframe = frame(o, `Option ${o.n} Play at ${f.width}px`, false, '?play');
   playing = { iframe, screens: [], current: null, canBack: false };
   const controls = el('div', { class: 'play-controls' }, ...playControls());
-  const pins = pinsFor(o);
-  const art = dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe), pins);
+  const art = artFor(dev, iframe, pinsFor(o));
   const stage = el('main', { class: 'stage' }, art);
-  const tabs = ['phone', 'desktop'].map((d) => el('a', { href: `#/o/${o.n}/play/${d}`, class: 'button', 'aria-current': d === dev ? 'true' : undefined }, `${d === 'phone' ? 'Phone' : 'Desktop'} · ${FRAMES[d].width}`));
-  return { body: [el('header', { class: 'bar' }, link(`#/o/${o.n}`, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), el('nav', {}, ...tabs)),
-    controls, errorBar(o.n), ...pinsNotice(), stage], fit: () => art.rescale(fitPlay(dev, stage.clientWidth, stage.clientHeight)) };
+  return { body: [el('header', { class: 'bar' }, link(`#/o/${o.n}/${dev}`, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), devices(`#/o/${o.n}/play`, dev)),
+    controls, errorBar(o.n), ...pinsNotice(), stage], dev, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight)) };
 }
 
 function render() {
-  const [, n, mode, device] = location.hash.match(/^#\/o\/(\d+)(?:\/(full|play)(?:\/(phone|desktop))?)?$/) ?? [];
+  const [, n, mode, device] = location.hash.match(/^#\/o\/(\d+)(?:\/(full|play))?(?:\/(phone|desktop))?$/) ?? [];
   const o = n && option(Number(n));
   const page = pageFor(o, mode);
   playing = null;
   if (page !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   frames = [];
   resize?.disconnect();
-  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : page === 'play' ? play(o, device) : canvas(o);
+  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : page === 'play' ? play(o, device) : canvas(o, device);
   document.title = o ? `Option ${o.n} · ${design.name}` : design.name;
   app.className = `page-${page}`;
   app.replaceChildren(...view.body);
-  if (view.fit) { resize = new ResizeObserver(view.fit); resize.observe(app); }
+  // With no device in the route, the page follows the window: a resize past the phone width switches the device.
+  if (view.fit) { resize = new ResizeObserver(() => (!device && deviceFor(undefined, innerWidth) !== view.dev ? render() : view.fit())); resize.observe(app); }
 }
 
 const current = () => Number(location.hash.match(/^#\/o\/(\d+)/)?.[1]);

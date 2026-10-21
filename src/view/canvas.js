@@ -8,17 +8,6 @@ export const SANDBOX = 'allow-scripts';
 // resized to the two widths first-draft designs for: 390 and 1280.
 export const FRAMES = { phone: { width: 390, height: 844, bezel: 3 }, desktop: { width: 1280, height: 800 } };
 
-// PreviewPane.tsx computeFitPreviewZoom fits one artboard; this fits phone and desktop on one row,
-// and stacks them, each fitted to the width, when that row would be too small to read.
-const PADDING = 48, GAP = 32, MIN_ROW = 0.45;
-export function fitCanvas(containerWidth) {
-  const phone = FRAMES.phone.width + FRAMES.phone.bezel * 2, desktop = FRAMES.desktop.width;
-  const available = Math.max(1, containerWidth - PADDING);
-  const row = Math.min(1, available / (phone + GAP + desktop));
-  if (row >= MIN_ROW) return { stacked: false, phone: row, desktop: row };
-  return { stacked: true, phone: Math.min(1, available / phone), desktop: Math.min(1, available / desktop) };
-}
-
 // mode is the route's suffix: 'full', 'play', or nothing.
 export function pageFor(option, mode) {
   if (!option) return 'grid';
@@ -26,9 +15,11 @@ export function pageFor(option, mode) {
   return mode;
 }
 
-// Play shows one device at a time, as large as the stage allows without upscaling.
-export const playDevice = (device, viewportWidth) => device ?? (viewportWidth < 760 ? 'phone' : 'desktop');
-export function fitPlay(device, width, height) {
+// The canvas and Play show one device at a time, the one the route names or else the one that fits the viewport,
+// as large as the stage allows without upscaling (PreviewPane.tsx computeFitPreviewZoom).
+export const deviceFor = (device, viewportWidth) => device ?? (viewportWidth < 760 ? 'phone' : 'desktop');
+const PADDING = 48;
+export function fitDevice(device, width, height) {
   const f = FRAMES[device], w = f.width + (f.bezel ?? 0) * 2, h = f.height + (f.bezel ?? 0) * 2;
   return Math.min(1, Math.max(1, width - PADDING) / w, Math.max(1, height - PADDING) / h);
 }
