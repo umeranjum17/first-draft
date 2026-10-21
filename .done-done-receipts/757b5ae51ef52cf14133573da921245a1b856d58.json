@@ -1,0 +1,32 @@
+{
+  "schema": 2,
+  "repo": "first-draft",
+  "head": "757b5ae51ef52cf14133573da921245a1b856d58",
+  "tree": "38404ff50f4bc3b0806c3ba5f39b6bbd75c660fe",
+  "claim": "make keeps the page it wrote when the model hits the 12-turn cap (mending unclosed tags and dead links) and retries a call whose stream is cut, so the command succeeds",
+  "result": "pass",
+  "at": "2026-10-21T02:16:22.691Z",
+  "files": [
+    {
+      "path": "<evidence root>/20261021T021556Z-757b5ae5-71fa8b/make-journeys.txt",
+      "sha256": "83c27d336997e9d4988a787bac4be93fdda06b1f1725d9cae7d54d2ab2f4f6e4"
+    }
+  ],
+  "judge": {
+    "route": "claude-code",
+    "model": "claude-haiku-5-5",
+    "independence": "session-only",
+    "author": {
+      "agent": "claude",
+      "model": "claude-haiku-5-5"
+    },
+    "verdicts": [
+      {
+        "path": "<evidence root>/20261021T021556Z-757b5ae5-71fa8b/make-journeys.txt",
+        "sha256": "83c27d336997e9d4988a787bac4be93fdda06b1f1725d9cae7d54d2ab2f4f6e4",
+        "verdict": "pass",
+        "seen": "I read all 3 entries. Entry 1: 'a model that keeps patching past the turn cap still gives the page it wrote' passed. Entry 2: 'at the turn cap a page left unclosed or with a dead anchor is mended and kept' passed. Entry 3: 'a call that times out, one whose connection closes and one whose stream is cut are asked again, then the page is made' passed. The summary shows tests 3, pass 3, fail 0, cancelled 0, skipped 0, and exit=0. These match the outcome's turn-cap mending and stream-cut retry claims, and the command succeeded. The outcome names no separate parts, so parts and covers are empty."
+      }
+    ]
+  }
+}
