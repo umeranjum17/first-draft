@@ -337,6 +337,26 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /Brand values are data, not memory/);
 });
 
+test('a prompt that asks for a landing page carries the landing-page brief, another prompt does not', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  await run('make', 'Make a landing page for my tool done-done. Its README is below.', '--out', join(dir, 'landing.html'));
+  const sent = JSON.stringify(seen[0].body);
+  assert.match(sent, /Landing page brief/);
+  assert.match(sent, /a hero .*about three benefit blocks.*how it works in three steps.*one proof block.*install .*closing call to action/); // the shape of the page
+  assert.match(sent, /about 6,000 px tall at 390/); // the length of the page
+  assert.match(sent, /Do not mirror the source's headings/); // the source is summarised, not copied
+  assert.match(sent, /doc paths, file names, maintainer commands, flags, config keys, release notes/);
+  assert.match(sent, /One screen, not a multi-screen flow/);
+  await run('make', 'a notes dashboard', '--out', join(dir, 'notes.html'));
+  assert.doesNotMatch(JSON.stringify(seen[3].body), /Landing page brief/, 'a prompt with no landing page gets no landing brief');
+});
+
 test('script-free prose is exported, not mistaken for script', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
