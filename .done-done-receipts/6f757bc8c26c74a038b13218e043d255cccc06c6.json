@@ -1,0 +1,33 @@
+{
+  "schema": 2,
+  "repo": "first-draft",
+  "head": "6f757bc8c26c74a038b13218e043d255cccc06c6",
+  "tree": "01774b03d66e1ff8ba6f84f5a3e1830d7523ae8d",
+  "claim": "the first-draft view opens a design and shows its option in a grid",
+  "skill": "done-done-verify-first-draft",
+  "result": "pass",
+  "at": "2026-10-21T02:13:44.511Z",
+  "files": [
+    {
+      "path": "<evidence root>/20261021T021255Z-6f757bc8-65506a/grid-of-every-option.png",
+      "sha256": "d38dacde2d6b8a9c4cc61fc63ed2c1fa52feac76c681b7d1ede2f92344556043"
+    }
+  ],
+  "judge": {
+    "route": "claude-code",
+    "model": "claude-haiku-5-5",
+    "independence": "session-only",
+    "author": {
+      "agent": "claude",
+      "model": "claude-haiku-5-5"
+    },
+    "verdicts": [
+      {
+        "path": "<evidence root>/20261021T021255Z-6f757bc8-65506a/grid-of-every-option.png",
+        "sha256": "d38dacde2d6b8a9c4cc61fc63ed2c1fa52feac76c681b7d1ede2f92344556043",
+        "verdict": "pass",
+        "seen": "The outcome names a design opened in a grid showing its option. The screenshot's header reads \"sign-in\" with \"3 options\", and below it a grid of cards labeled \"Option 1 sign-in-1\", \"Option 2 sign-in-2\", and \"Option 3 sign-in-3\", each with a sign-in form preview. That matches the outcome. No error, dialog, or overlay is visible."
+      }
+    ]
+  }
+}

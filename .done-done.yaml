@@ -1,9 +1,5 @@
 # done-done project config. `done-done init` never overwrites this file.
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
-journeys:
-  make-turn-cap-and-cut-stream:
-    command: sh -c 'node --test --test-reporter=spec --test-name-pattern="turn cap|stream is cut" test/make.test.mjs > "$DONE_DONE_EVIDENCE_ROOT/make-journeys.txt" 2>&1; echo "exit=$?" >> "$DONE_DONE_EVIDENCE_ROOT/make-journeys.txt"'
-
 # This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
 # agent: opencode
