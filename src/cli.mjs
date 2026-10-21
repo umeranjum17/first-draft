@@ -98,6 +98,7 @@ if (command === 'make') {
   const files = [];
   let tokens_in = 0, tokens_out = 0;
   const blocked = new Set(), cut = [];
+  let render_check = 'checked';
   for (let i = 0; i < count; i++) {
     let made;
     try {
@@ -111,9 +112,10 @@ if (command === 'make') {
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
     made.remote.forEach((r) => blocked.add(r));
+    if (made.render_check === 'skipped') render_check = 'skipped';
     if (made.truncated) cut.push(numbered);
   }
-  console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out },
+  console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check },
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
     help: [...(cut.length ? [`${cut.length} design(s) ran out of the engine's 12 turns before finishing: they hold the screens written so far, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',

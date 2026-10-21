@@ -10,6 +10,8 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
+// These journeys test the engine loop with bare pages; the render check has its own test (render-check.test.mjs).
+process.env.FIRST_DRAFT_CHROME = '/nonexistent';
 const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -252,7 +254,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.notDeepEqual(seen[0].body.input, seen[3].body.input, 'the two options vary');
   assert.ok(seen[0].body.tools.some((t) => t.name === 'str_replace_based_edit_tool'));
   assert.match(JSON.stringify(seen[1].body.input), /Created index.html/);
-  assert.match(JSON.stringify(seen[2].body.input), /no syntactic issues/);
+  assert.match(JSON.stringify(seen[2].body.input), /no syntactic or runtime issues/);
   assert.match(JSON.stringify(seen[0].body), /no remote URL/); // the system's own rules ride along
 
   await run('make', 'a notes dashboard', '--out', join(dir, 'mocks/design'), '--count', '2');

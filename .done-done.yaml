@@ -1,5 +1,10 @@
 # done-done project config. `done-done init` never overwrites this file.
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
+journeys:
+  render-check:
+    command: bash journeys/render-check.sh
+    timeout: 40m
+
 # This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
 # agent: opencode

@@ -16,7 +16,7 @@ npm test
 From `package.json`.
 
 Ready: The view command prints one JSON line with viewing.url (its default port is 4430 or $FIRST_DRAFT_VIEW_PORT), and GET on that url returns 200 with the design JSON block. For the test path, the process exits 0. Tear down what you started; never kill by process name.
-Isolation: Each run uses its own temporary folder holding a copy of the design HTML and any comments.json. It binds 127.0.0.1 with FIRST_DRAFT_VIEW_HOST and a unique FIRST_DRAFT_VIEW_PORT, so it does not share a port with the owner's view. FIRST_DRAFT_HOME points at a temporary folder so the owner's config.json is never read or written. Never run make or post here: those call a model or the sign-off board.
+Isolation: Each run uses its own temporary folder holding a copy of the design HTML and any comments.json. It binds 127.0.0.1 with FIRST_DRAFT_VIEW_HOST and a unique FIRST_DRAFT_VIEW_PORT, so it does not share a port with the owner's view. FIRST_DRAFT_HOME points at a temporary folder so the owner's config.json is never read or written. Never run post here (it uses the sign-off board). Run make only for the render-check feature, on the real model route with its key given by path to that one command; make calls a model.
 When the repo's .done-done.yaml has an instance block, done-done already runs the app at $DONE_DONE_BASE_URL (its own port and HOME): BASE is then that URL, never a hard-coded port.
 
 ## Drive
@@ -29,6 +29,7 @@ Harness: A shell runs the CLI and curl for the url. A browser tool opens the url
 - [Comment pins read from the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design (`src/view.mjs`)
 - [View startup output and error codes](features/view-startup-output-and-error-codes.md): Run the view command in a shell (`src/cli.mjs`)
 - [Make a landing page from a README](features/make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README (`src/make.mjs`)
+- [Make render check at 390 and in dark](features/make-render-check-390-and-dark.md): Run `first-draft-axi make` on the real model route with Chrome or Chromium installed (`src/render-check.mjs`)
 
 ## Evidence
 
