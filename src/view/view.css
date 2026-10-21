@@ -97,6 +97,7 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
   .zoom { display: none; }
   .tools .button.primary { margin-left: auto; }
   .stage.dotted { flex: none; height: min(68dvh, 620px); }
+  .stage.dotted:has(.artboard) { height: auto; aspect-ratio: 1328 / 848; } /* the desktop artboard plus the stage padding */
   .side { border: 0; border-top: 1px solid var(--border); padding: 20px 16px 24px; }
   .brief { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 4; margin: 0 8px 8px; padding: 8px 8px 8px 12px; border-radius: 16px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.16); }
   .brief > .kicker, .brief > .brief-row .muted { display: none; }
