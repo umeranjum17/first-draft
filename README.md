@@ -51,7 +51,7 @@ The screenshots below show three options from one real `make --count 3` run on `
 `view` shows a design: the `--out` path given to `make`, a folder of options, or option files.
 
 - **Grid**: every option side by side. Open one to see it on the canvas.
-- **Canvas**: the option at phone width (390) and desktop width (1280) side by side, stacked on a narrow screen, with Fullscreen and Play.
+- **Canvas**: the option at phone width (390) or desktop width (1280), switched with Phone and Desktop, beside a column with the design's options, the option's comments and a brief that becomes the `refine` command for your next change. Fullscreen and Play are one tap away.
 
   <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/canvas-1280.webp" width="760" alt="One option on the canvas: a phone frame at 390 and a desktop frame at 1280">
 

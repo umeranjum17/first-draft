@@ -58,7 +58,7 @@ const HELP = `usage: first-draft-axi <command> [flags]
 commands[6]:
   make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
-  view <design> [--host H] [--port P]   serve a design's options as a grid, a phone + desktop canvas and fullscreen, until stopped
+  view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
   doctor                              show whether the configured agent is ready, with no paid call
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
