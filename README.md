@@ -44,7 +44,7 @@ Run `first-draft-axi --help` for every command and flag.
 
 The screenshots below show three options from one real `make --count 3` run on `MiniMax-M3.1-Flash-Preview`; the pin's comment was written by hand.
 
-`make` turns the prompt into 1 to 5 options (`--count`). With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty.
+`make` turns the prompt into 1 to 5 options (`--count`). With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty. When Chrome or Chromium is installed, `make` also renders each page headless at 390px, in light and in dark, and the page is not accepted until it fits 390px with no sideways scroll and paints differently in dark; `render_check` in the output says `checked` or `skipped`, and with no browser it skips with one warning line.
 
 `refine` takes one option and a follow-up prompt, for example `first-draft-axi refine mocks/sign-in-2.html "warmer palette, add an empty state" --out mocks/sign-in-2-warm.html`, and writes the result as a new option; the original is untouched. It runs the same model as `make`; keep the change short.
 

@@ -1,5 +1,6 @@
 import { createAssistantMessageEventStream, registerApiProvider } from '@mariozechner/pi-ai';
 import { respond, routeOf } from './byokit.mjs';
+import { renderCheck } from './render-check.mjs';
 const engine = () => import('../dist/engine.mjs');
 export async function engineDoctor() {
   try {
@@ -19,6 +20,8 @@ const TASTE = 'Design bar: Apple/Linear-grade, calm and exact, never a template.
 // A prompt that asks for a landing page gets a landing-page brief: without it the model rebuilds the source as a documentation site, 12,000 to 22,000 px tall, and spends the whole turn budget on it.
 const LANDING = /\blanding[\s-]?pages?\b/i;
 const LANDING_BRIEF = 'Landing page brief (the prompt asks for a landing page): write a short landing page that makes a visitor want the product, not a documentation site. Read the source for what the product does, who it is for and how to start, then write the page in your own words. At most about 6 sections, in this order: a hero (one promise in plain words, one primary action), the value (about three benefit blocks, one idea each), how it works in three steps, one proof block (a real number, result or quote from the source), install (the one command a user runs first and one sentence; no flags, alternatives or setup detail) and a closing call to action. Keep the whole page about 6,000 px tall at 390, or less. Do not mirror the source\'s headings or order, and leave out its doc paths, file names, maintainer commands, flags, config keys, release notes and other reference material. One screen, not a multi-screen flow, unless the prompt asks for screens: no data-oc-screen, no form-state screens, no setup wizard, no reference pages.';
+// The two rules the render check holds the page to: the page is rendered at 390px, in light and in dark, and both renders are checked before it is accepted.
+const OUTPUT_RULES = 'Output rules: the page is rendered at 390px, in light and in dark, and both renders are checked before it is accepted. (1) It must fit a 390px phone with no sideways scroll: wrap every pre and table in a container with overflow-x:auto, write grid columns as minmax(0,1fr) instead of 1fr, give every grid and flex child min-width:0, and let long text wrap. (2) It must have a dark theme: put the colours in :root custom properties and override them in a @media (prefers-color-scheme: dark) block.';
 
 // The page at the turn cap, mended the way done checks it: close what is left open (a closer for a tag further up the stack closes the tags between), drop closers with no opener, and drop the href of an anchor whose destination does not exist.
 const mend = (html) => {
@@ -52,7 +55,9 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
     strReplace: (path, old, text) => { const s = get(path), hits = s.split(old).length - 1; if (hits !== 1) throw new Error(hits === 0 ? `old_str not found in ${key(path)}` : `old_str is ambiguous in ${key(path)}; provide more context`); return put(path, s.replace(old, () => text)); },
     insert: (path, line, text) => { const lines = get(path).split('\n'); if (!Number.isInteger(line) || line < 0 || line > lines.length) throw new Error('insert_line is outside the file'); lines.splice(line, 0, text); return put(path, lines.join('\n')); },
   };
-  const done = makeDoneTool({ ...fs, view: (path) => key(path) === 'index.html' ? fs.view(path) : null, listDir: (dir) => fs.listDir(dir).filter((p) => key(p) === 'index.html') });
+  // The page is rendered headless at 390px, in light and in dark, and both renders are checked inside the loop, so a page that overflows on a phone or has no dark theme is fixed before the command ends.
+  const render = renderCheck((warning) => process.stderr.write(`first-draft-axi: ${warning}\n`));
+  const done = makeDoneTool({ ...fs, view: (path) => key(path) === 'index.html' ? fs.view(path) : null, listDir: (dir) => fs.listDir(dir).filter((p) => key(p) === 'index.html') }, render.verify);
   const failed = new AbortController(), signal = failed.signal;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   // A call that timed out or whose connection closed is asked again on the same route and model, twice at most; anything else is the real failure.
@@ -66,7 +71,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
       }
     }
   };
-  let turns = 0, verified = null, capped = null, used = { inputTokens: 0, outputTokens: 0 };
+  let turns = 0, verified = null, lastErrors = '', capped = null, used = { inputTokens: 0, outputTokens: 0 };
   const answer = (_model, context, options) => {
     const stream = createAssistantMessageEventStream();
     (async () => {
@@ -93,10 +98,11 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
       ? `Revise this index.html: ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Call the editor once with command "create", path "index.html" and the complete revised file, then done(path="index.html").\n\nCurrent index.html:\n${start}`
       : `Revise the existing index.html (read it first): ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Make the change in a few str_replace edits (each old_str one distinctive line, new_str may be long), then call done(path="index.html") as your last step.`) : variation ? `${prompt}\nVariation: ${variation}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
-    systemPrompt: `${NO_SCRIPT}\n\n${composeSystemPrompt({ mode: start !== undefined ? 'revise' : 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. ${TASTE} Use semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Screens: a design with more than one screen puts each in its own top-level element with a unique id and a data-oc-screen attribute (<section id="home" data-oc-screen>), the first being the opening screen. Link screens only with in-page hash links (<a href="#cart">, also for buttons that move on): no script, no network, no other href, no top-level navigation. Give every screen after the first a visible link back. Show form states (empty, filled, submitted) as their own screens, such as signin, signin-filled and signed-in, with the filled values as static text; they are reached by those links. A one-screen design needs no data-oc-screen. Use the supplied editor to write it, then done(path="index.html"). Only two tools exist — that editor and done; skill, scaffold, tweaks, set_title and every other tool are unavailable, so never call them.${LANDING.test(prompt) ? `\n\n${LANDING_BRIEF}` : ''}`,
+    systemPrompt: `${NO_SCRIPT}\n\n${composeSystemPrompt({ mode: start !== undefined ? 'revise' : 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. ${TASTE} ${OUTPUT_RULES} Use semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Screens: a design with more than one screen puts each in its own top-level element with a unique id and a data-oc-screen attribute (<section id="home" data-oc-screen>), the first being the opening screen. Link screens only with in-page hash links (<a href="#cart">, also for buttons that move on): no script, no network, no other href, no top-level navigation. Give every screen after the first a visible link back. Show form states (empty, filled, submitted) as their own screens, such as signin, signin-filled and signed-in, with the filled values as static text; they are reached by those links. A one-screen design needs no data-oc-screen. Use the supplied editor to write it, then done(path="index.html"). Only two tools exist — that editor and done; skill, scaffold, tweaks, set_title and every other tool are unavailable, so never call them.${LANDING.test(prompt) ? `\n\n${LANDING_BRIEF}` : ''}`,
   }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), doneTool],
     onEvent: (e) => {
       if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html') verified = files.get('index.html');
+      if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError) lastErrors = e.result.details?.status === 'ok' ? '' : (e.result.details?.errors ?? []).map((x) => x.message).join('; ');
     } }).catch(async (e) => {
     const reason = failed.signal.reason ?? e;
     if (reason !== capped || !files.has('index.html')) throw reason;
@@ -106,14 +112,14 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
     if (details.status !== 'ok') throw new Error(`${reason.message}, and the page so far fails done: ${details.errors.map((x) => x.message).join('; ')}`);
     verified = files.get('index.html');
     return used;
-  });
+  }).finally(() => render.close()); // the browser the render check used goes with the run
   const source = files.get('index.html');
   if (!source || !/<head(?:\s[^>]*)?>|<html[^>]*>|<!doctype[^>]*>/i.test(source)) throw new Error('engine produced no complete index.html');
   if (start !== undefined && bare(source) === bare(start)) throw new Error('the engine left the option unchanged');
-  if (verified === null || verified !== source) throw new Error('engine did not verify index.html with done');
+  if (verified === null || verified !== source) throw new Error(`engine did not verify index.html with done${lastErrors ? `; the last done check failed: ${lastErrors}` : ''}`);
   if ((source.match(TAG) ?? []).some((tag) => /^<script\b|\son(?!ce\b)[a-z]+\s*=|(?:href|src|action|formaction|xlink:href|poster)\s*=\s*["']?\s*javascript:|url\(\s*["']?\s*javascript:/i.test(tag))) throw new Error('engine output contains script; only script-free HTML is supported');
   const html = /<head(?:\s[^>]*)?>/i.test(source) ? source.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
   return { html, truncated: capped !== null, remote: [...new Set([...html.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').matchAll(REMOTE_URL)].map((url) => url[0])))],
-    tokens_in: output.inputTokens, tokens_out: output.outputTokens };
+    tokens_in: output.inputTokens, tokens_out: output.outputTokens, render_check: render.status };
 }
