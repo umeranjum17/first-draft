@@ -49,7 +49,9 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 
 .scaled { position: relative; flex-shrink: 0; }
 .scaled-inner { transform-origin: top left; }
-.artboard { width: 100%; height: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
+.artboard { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: 10px; background: var(--canvas); box-shadow: var(--shadow); }
+/* The edge is drawn over the page, not around it: scaled down, a light page would otherwise show through the thin border as a strip on the right and bottom edges in dark. */
+.artboard::after { content: ""; position: absolute; inset: 0; border: 1px solid var(--border); border-radius: inherit; pointer-events: none; }
 
 /* Studio: the column (design, options, comments) and the brief on the left, the canvas on the right; the page never scrolls, the column does. */
 .page-canvas { height: 100dvh; }
