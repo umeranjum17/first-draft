@@ -131,6 +131,8 @@ let job = null; // { n, started } while a change is being made
 let result = null; // { n, text } for the option it ended on, or { n, error, help } for the option it failed on
 let clock = null;
 
+const withCode = (s) => s.split('`').map((part, i) => (i % 2 ? el('code', {}, part) : part)); // a hint's `command` is shown as code, not with its backticks
+
 function status(o) {
   const box = el('div', { class: 'run', role: 'status', 'aria-live': 'polite', hidden: '' });
   if (job) {
@@ -142,7 +144,7 @@ function status(o) {
   } else if (result && result.n === o.n) {
     box.className = `run${result.error ? ' failed' : ''}`;
     box.setAttribute('role', result.error ? 'alert' : 'status');
-    box.replaceChildren(el('span', {}, result.error ?? result.text), ...(result.help ?? []).map((h) => el('span', { class: 'muted' }, h)));
+    box.replaceChildren(el('span', {}, result.error ?? result.text), ...(result.help ?? []).map((h) => el('span', { class: 'muted' }, ...withCode(h))));
     box.hidden = false;
   }
   return box;
