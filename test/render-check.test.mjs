@@ -59,7 +59,7 @@ test('a page that overflows at 390 or has no dark theme fails done, and the mode
   assert.match(told, /has_errors/);
   assert.match(told, /px wide on a 390px phone/);
   assert.match(told, /<div class=\\+"card\\+">/); // the body is JSON, so its quotes are escaped
-  assert.match(told, /no dark theme/);
+  assert.match(told, /no real light and dark themes/);
   // The model fixed both, so the run ended with a page that fits and has a dark theme.
   const html = readFileSync(out, 'utf8');
   assert.match(html, /A card that fits the phone/);

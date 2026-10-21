@@ -30,6 +30,7 @@ wait "$after"
 wait "$release"
 cp "$d/after.html" "$extra/after.html"
 cp "$d/before.html" "$before/page.html"
+grep -q 'src="data:image/' "$d/after.html" || { echo "the page embeds none of the project's screenshots" >&2; exit 1; }
 cp "$d/after-make.stderr" "$extra/after-make.stderr"
 grep -q '"render_check":"checked"' "$extra/after-make.json" || { echo "the render check did not run on this checkout's make" >&2; exit 1; }
 
@@ -39,6 +40,7 @@ chrome-devtools-axi open "file://$d/after.html" >/dev/null # emulation needs a p
 shot() { # <dir> <name> <page> <width> <height> <scheme> [--full-page]
   chrome-devtools-axi emulate --viewport "$4x$5x1" --color-scheme "$6" >/dev/null
   chrome-devtools-axi open "file://$3" >/dev/null
+  chrome-devtools-axi open "file://$3" >/dev/null # the first open after a change of viewport still lays out at the old width
   if [ -z "${7:-}" ]; then # the full-page shot has the same metrics as its viewport shot
     echo "$2: $(chrome-devtools-axi eval '() => `viewport ${innerWidth}px, page scroll width ${document.documentElement.scrollWidth}px, dark colour scheme ${matchMedia("(prefers-color-scheme: dark)").matches}, background ${getComputedStyle(document.body).backgroundColor}, text ${getComputedStyle(document.body).color}`' | head -1)" >> "$1/metrics"
   fi

@@ -2,7 +2,7 @@
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -345,7 +345,7 @@ test('a prompt that asks for a landing page carries the landing-page brief, anot
   const seen = [], server = await standIn(seen, null);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir }); // a folder with no screenshot
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   await run('make', 'Make a landing page for my tool done-done. Its README is below.', '--out', join(dir, 'landing.html'));
   const sent = JSON.stringify(seen[0].body);
@@ -355,8 +355,34 @@ test('a prompt that asks for a landing page carries the landing-page brief, anot
   assert.match(sent, /Do not mirror the source's headings/); // the source is summarised, not copied
   assert.match(sent, /doc paths, file names, maintainer commands, flags, config keys, release notes/);
   assert.match(sent, /One screen, not a multi-screen flow/);
+  assert.match(sent, /every heading is followed by 16px or more before its text, and sections are 64px or more apart/); // a heading never sits on its text
+  assert.match(sent, /:root holds the light palette.*prefers-color-scheme: dark.*Never write one dark palette for both/); // a real light theme
+  assert.match(sent, /no screenshot or recording, so make the hero visual typeset.*Do not reference or invent any image file/); // this folder has none
   await run('make', 'a notes dashboard', '--out', join(dir, 'notes.html'));
   assert.doesNotMatch(JSON.stringify(seen[3].body), /Landing page brief/, 'a prompt with no landing page gets no landing brief');
+});
+
+test('a landing page is told about the project\'s screenshot and gets it embedded as the hero visual', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'docs', 'media'), { recursive: true });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  writeFileSync(join(dir, 'docs', 'media', 'canvas.png'), png);
+  writeFileSync(join(dir, 'docs', 'logo.png'), png); // a logo is a mark of the project, not a view of it
+  const page = '<!doctype html><html><head><title>T</title></head><body><h1>First draft</h1><img alt="The canvas" src="docs/media/canvas.png"><img alt="Nope" src="docs/missing.png"></body></html>';
+  const seen = [], server = await standIn(seen, null, true, 'index.html', page);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const out = join(dir, 'landing.html');
+  await run('make', 'Make a landing page for my tool first-draft.', '--out', out);
+  const sent = JSON.stringify(seen[0].body);
+  assert.match(sent, /Hero visual: this project has real product screenshots.*docs\/media\/canvas\.png\./);
+  assert.doesNotMatch(sent, /logo\.png/);
+  const html = readFileSync(out, 'utf8');
+  assert.match(html, new RegExp(`src="data:image/png;base64,${png.toString('base64').replace(/[+/=]/g, '\\$&')}"`)); // the listed path is the file itself
+  assert.match(html, /src="docs\/missing\.png"/); // a path the host never listed is left alone
 });
 
 test('script-free prose is exported, not mistaken for script', async (t) => {

@@ -185,7 +185,7 @@ class Renderer {
       errors.push({ source: 'render', message: `the page is ${light.measured.scrollWidth}px wide on a ${PHONE}px phone; it must fit ${PHONE}px. ${light.measured.count} element(s) overflow, the widest is ${worst ? name(worst) : 'an unknown element'} at ${worst ? worst.right : light.measured.scrollWidth}px. The overflow comes from ${light.measured.causes.map(name).join(', ') || 'the elements above'}: wrap a pre or table in a container with overflow-x:auto, write grid columns as minmax(0,1fr) instead of 1fr, give grid and flex children min-width:0, and let long text wrap. Then call done again.` });
     }
     if (light.png.equals(dark.png) || light.sig === dark.sig) {
-      errors.push({ source: 'render', message: `the page has no dark theme: it paints the same in light and in dark. Put the colours in :root custom properties and override them in a @media (prefers-color-scheme: dark) block, then call done again.` });
+      errors.push({ source: 'render', message: `the page has no real light and dark themes: it paints the same in light and in dark. Put a light palette in :root custom properties (a light background, dark text), override every colour in a @media (prefers-color-scheme: dark) block with a dark palette (a dark background, light text), and set color-scheme: light dark, then call done again.` });
     }
     return errors;
   }
