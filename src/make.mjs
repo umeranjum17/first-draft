@@ -11,10 +11,25 @@ export async function engineDoctor() {
 const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; form-action 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:" />`;
 const REMOTE = /\b(?:src|href|srcset|action)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))|url\(\s*["']?([^"')]+)["']?\s*\)/gi;
 const REMOTE_URL = /(?:https?:)?\/\/[^\s,]+/g;
+const VOID = /^(?:area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)$/;
 const TAG = /<[a-z](?:"[^"]*"|'[^']*'|[^>"'])*>/gi;
 
 const NO_SCRIPT = 'Hard rule, first and above all: the page is refused if any tag is a <script> element, has an on* event-handler attribute (onclick, onsubmit, onload, onchange, onerror and every other on...), or has a javascript: URL (in href, src, action, formaction, xlink:href, poster or CSS url()). Write no JavaScript at all. Screens link to each other only with in-page hash links (<a href="#cart">, also for buttons that move on); style states with CSS (:hover, :focus), never with handlers.';
 const TASTE = 'Design bar: Apple/Linear-grade, calm and exact, never a template. Type: system font stack, a fixed scale (12/14/16/20/28/40px), at most two weights, tight letter-spacing on headings, 1.5 line-height on body. Space: an 8px scale only (8/16/24/32/48/64), generous padding, one consistent radius. Hierarchy: one clear primary action per screen, secondary actions quiet, labels small and muted. Colour: one accent on a neutral ramp, body text at least 4.5:1 contrast, no default blue links, no rainbow gradients, no emoji as icons (draw inline SVG). Content: real, specific copy and plausible data for the product, never lorem or "Your text here". Layout: no generic centred form floating on a blank page; give each screen a structure (a sidebar, a split with product context, a list with detail), and make 390px a designed layout, not a squeezed one.';
+
+// The page at the turn cap, mended the way done checks it: close what is left open (a closer for a tag further up the stack closes the tags between), drop closers with no opener, and drop the href of an anchor whose destination does not exist.
+const mend = (html) => {
+  const open = [];
+  const closed = html.replace(/<(\/?)([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*?(\/)?>/g, (tag, close, name, self) => {
+    name = name.toLowerCase();
+    if (self || VOID.test(name)) return tag;
+    if (!close) { open.push(name); return tag; }
+    const at = open.lastIndexOf(name);
+    return at < 0 ? '' : open.splice(at).slice(1).reverse().map((n) => `</${n}>`).join('') + tag;
+  }) + open.reverse().map((n) => `</${n}>`).join('');
+  const ids = new Set([...closed.matchAll(/\bid\s*=\s*["']([^"']+)["']/g)].map((m) => m[1]));
+  return closed.replace(/\s+href\s*=\s*["']#([^"']*)["']/g, (m, id) => id === '' || (!id.startsWith('/') && !ids.has(id)) ? '' : m);
+};
 
 export async function make({ prompt, agent, model, timeoutMs, variation, seed }) {
   const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool } = await engine();
@@ -38,7 +53,7 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
   const failed = new AbortController(), signal = failed.signal;
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   // A call that timed out or whose connection closed is asked again on the same route and model, twice at most; anything else is the real failure.
-  const dropped = (e, call) => call.reason?.name === 'TimeoutError' || /other side closed|stream ended before message_stop|fetch failed|ECONNRESET|socket hang up|took too long|was cancelled|operation was aborted/i.test(e.message);
+  const dropped = (e, call) => call.reason?.name === 'TimeoutError' || /other side closed|stream ended before message_stop|terminated|fetch failed|ECONNRESET|socket hang up|took too long|was cancelled|operation was aborted/i.test(e.message);
   const ask = async (args, outer) => {
     for (let retry = 0; ; retry++) {
       const call = AbortSignal.any([signal, ...(outer ? [outer] : []), AbortSignal.timeout(timeoutMs)]); // timeoutMs bounds each call: turn 1 writes the whole page (30k+ tokens, 6 min) and must not eat the budget of the whole design
@@ -82,8 +97,9 @@ export async function make({ prompt, agent, model, timeoutMs, variation, seed })
     } }).catch(async (e) => {
     const reason = failed.signal.reason ?? e;
     if (reason !== capped || !files.has('index.html')) throw reason;
-    // Out of turns with a page written: the page must still pass done, and its errors are the failure shown.
-    const { details } = await doneTool.execute('turn-cap', { path: 'index.html' });
+    // Out of turns with a page written: mend it, then it must still pass done, and its errors are the failure shown.
+    let { details } = await doneTool.execute('turn-cap', { path: 'index.html' });
+    if (details.status !== 'ok') { put('index.html', mend(files.get('index.html'))); ({ details } = await doneTool.execute('turn-cap', { path: 'index.html' })); }
     if (details.status !== 'ok') throw new Error(`${reason.message}, and the page so far fails done: ${details.errors.map((x) => x.message).join('; ')}`);
     verified = files.get('index.html');
     return used;
