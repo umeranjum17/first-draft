@@ -8,4 +8,5 @@ The repo's maintained verification map; a proof that drives one entry point is i
 - [Comment pins read from the design's comments file](comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design
 - [View startup output and error codes](view-startup-output-and-error-codes.md): Run the view command in a shell
 - [Make a landing page from a README](make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README
+- [Make with a named design style](make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>`
 - [Make render check at 390 and in dark](make-render-check-390-and-dark.md): Run `first-draft-axi make` with Chrome or Chromium installed

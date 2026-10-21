@@ -29,6 +29,7 @@ Harness: A shell runs the CLI and curl for the url. A browser tool opens the url
 - [Comment pins read from the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design (`src/view.mjs`)
 - [View startup output and error codes](features/view-startup-output-and-error-codes.md): Run the view command in a shell (`src/cli.mjs`)
 - [Make a landing page from a README](features/make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README (`src/make.mjs`)
+- [Make with a named design style](features/make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>` (`src/styles.mjs`)
 - [Make render check at 390 and in dark](features/make-render-check-390-and-dark.md): Run `first-draft-axi make` on the real model route with Chrome or Chromium installed (`src/render-check.mjs`)
 
 ## Evidence
