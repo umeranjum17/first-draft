@@ -217,7 +217,7 @@ function render() {
   app.className = `page-${page}`;
   app.replaceChildren(...view.body);
   // With no device in the route, the page follows the window: a resize past the phone width switches the device.
-  if (view.fit) { resize = new ResizeObserver(() => (!device && deviceFor(undefined, innerWidth) !== view.dev ? render() : view.fit())); resize.observe(app); }
+  if (view.fit) { resize = new ResizeObserver(() => (view.dev && !device && deviceFor(undefined, innerWidth) !== view.dev ? render() : view.fit())); resize.observe(app); }
 }
 
 const current = () => Number(location.hash.match(/^#\/o\/(\d+)/)?.[1]);
