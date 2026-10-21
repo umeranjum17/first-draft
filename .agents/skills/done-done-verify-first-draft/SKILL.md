@@ -28,6 +28,7 @@ Harness: A shell runs the CLI and curl for the url. A browser tool opens the url
 - [Play: click through the screens of an option](features/play-click-through-the-screens-of-an-opt.md): From the canvas, press the Play button, or open <url>#/o/1/play (`src/view.mjs`)
 - [Comment pins read from the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design (`src/view.mjs`)
 - [View startup output and error codes](features/view-startup-output-and-error-codes.md): Run the view command in a shell (`src/cli.mjs`)
+- [Make a landing page from a README](features/make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README (`src/make.mjs`)
 
 ## Evidence
 

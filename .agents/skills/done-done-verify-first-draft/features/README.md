@@ -7,3 +7,4 @@ The repo's maintained verification map; a proof that drives one entry point is i
 - [Play: click through the screens of an option](play-click-through-the-screens-of-an-opt.md): From the canvas, press the Play button, or open <url>#/o/1/play
 - [Comment pins read from the design's comments file](comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design
 - [View startup output and error codes](view-startup-output-and-error-codes.md): Run the view command in a shell
+- [Make a landing page from a README](make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README
