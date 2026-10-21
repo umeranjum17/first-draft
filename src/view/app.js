@@ -103,7 +103,7 @@ function grid() {
     return el('a', { class: 'card', href: `#/o/${o.n}` }, body, el('div', { class: 'card-label' }, el('strong', {}, `Option ${o.n}`), ` ${o.label}`));
   });
   const fit = () => document.querySelectorAll('.thumb .scaled').forEach((s) => s.rescale(s.parentElement.clientWidth / FRAMES.desktop.width));
-  return { body: [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name), el('span', { class: 'muted' }, `${design.options.length} option${design.options.length === 1 ? '' : 's'}`)),
+  return { body: [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name), el('span', { class: 'muted' }, plural(design.options.length, 'option'))),
     el('main', { class: 'grid' }, ...cards)], fit };
 }
 
