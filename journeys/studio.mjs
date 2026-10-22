@@ -78,7 +78,7 @@ try {
   const states = [];
   // What a capture shows, measured on the page: the window width, the theme the page is in, and whether the column and the composer show.
   const state = async (capture, more = {}) => states.push({ capture, ...await evaluate(`({ width: innerWidth, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', column: !!document.querySelector('.side')?.getClientRects().length, composer: (()=>{const b=document.querySelector('form.brief')?.getBoundingClientRect();return b?.width?{top:Math.round(b.top),bottom:Math.round(b.bottom)}:'hidden'})(), stageWidth: Math.round(document.querySelector('.stage')?.getBoundingClientRect().width ?? 0), button: document.querySelector('.bar .fold')?.getClientRects().length ? document.querySelector('.bar .fold').textContent : 'none' })`), ...more });
-  const shot = async (name, dir = out) => {
+  const shot = async (name, dir) => {
     if (!dir) return;
     await settle();
     await evaluate('scrollTo(0,0)');
@@ -108,7 +108,7 @@ try {
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
     await viewport(w, theme);
     await open('#/o/1');
-    await shot(`studio-${w}-${theme}`);
+    await shot(`studio-${w}-${theme}`, out);
     await state(`studio-${w}-${theme}.png`);
     if (w > 700) {
       // Brief collapses the column (design, options, comments and the composer), the canvas takes its room, and Brief brings it back.
@@ -118,7 +118,7 @@ try {
       assert.equal(await shown('form.brief'), false, 'Brief hides the composer');
       assert.ok(await width('.stage') > stage + 200, 'the canvas takes the column\'s room');
       assert.equal(await evaluate('document.querySelector(\'.bar [aria-controls="studio-side"]\').getAttribute(\'aria-expanded\')'), 'false');
-      await shot(`studio-collapsed-${w}-${theme}`);
+      await shot(`studio-collapsed-${w}-${theme}`, out);
       await state(`studio-collapsed-${w}-${theme}.png`, { after: 'Hide brief pressed' });
       await click('.bar [aria-controls="studio-side"]');
       assert.equal(await shown('.side'), true, 'Brief shows the column again');
