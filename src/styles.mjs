@@ -206,6 +206,7 @@ export const STYLES = [
   "name": "OLED Dark + Neon",
   "family": "Dark & Techno",
   "vibe": "Electric, quiet, serious",
+  "dark": true,
   "line": "True-black canvas with a single rationed electric accent — the native dialect of dev-tool and AI-SaaS dark-firsts. (Linear/Raycast/Vercel Geist, 2022–25.)",
   "tokens": [
    "Ground: `#000`/`#080808` true OLED black (never dark gray masquerading as black).",
@@ -224,6 +225,7 @@ export const STYLES = [
   "name": "Cyberpunk / Techno-HUD",
   "family": "Dark & Techno",
   "vibe": "Angular, machine, alert",
+  "dark": true,
   "line": "Dystopian OS / game-interface aesthetic — hue-cast dark ground, monospace, HUD chrome brackets, scanlines, two neon channels. (Cyberpunk 2077 2020 → security/dev-culture dashboards.)",
   "tokens": [
    "Ground: NOT pure black — charcoal-purple `#0A0A14` / gunmetal `#0D0F0F` / teal-black `#060C0C`. The hue-cast is the identity.",
@@ -242,6 +244,7 @@ export const STYLES = [
   "name": "Dark Glass / Cinematic Editorial",
   "family": "Dark & Techno",
   "vibe": "Cinematic, luxe, slow",
+  "dark": true,
   "line": "High-fashion editorial dark luxury — warm-dark (not black) grounds, frosted-glass panels over ambient light-bleed gradients, oversized editorial serif italic, film imagery, slow cinematic motion. (The Apple/A24 register, 2023–26.)",
   "tokens": [
    "Ground: NOT pure black (reads void) — warm editorial dark `#0D0B0A`/`#0F0E0C`/`#0B0C0D`. The warmth is the soul.",
@@ -310,6 +313,7 @@ export const STYLES = [
   "name": "Aurora / Gradient-Mesh",
   "family": "Gradient & Organic",
   "vibe": "Luminous, premium, calm",
+  "dark": true,
   "line": "Soft luminous color fields from blended radial gradients (or WebGL mesh) through heavy blur — northern-lights. (Stripe's WebGL hero 2021–23 → default \"premium SaaS\" dark landing.)",
   "tokens": [
    "Ground: near-black `#0a0a0f→#0d1117` or deep navy (never pure white in full aurora). Cream works for a \"light aurora\" variant.",
@@ -412,6 +416,7 @@ export const STYLES = [
   "name": "Vaporwave",
   "family": "Maximal & Retro",
   "vibe": "Nostalgic, ironic, neon",
+  "dark": true,
   "line": "Ironic retro-futurist nostalgia — 1980s Japanese mall imagery, Greek statues, Windows 95 chrome, neon Miami-sunset grids. Use seriously only when the concept earns the irony. (2010–14 music microgenre.)",
   "tokens": [
    "Ground: dark purple `#1a0533`/`#250a42` or deep navy `#0a0a2e`; often a retrowave perspective grid.",
@@ -446,8 +451,11 @@ export const STYLES = [
 
 export const styleIds = () => STYLES.map((s) => s.id);
 
+// The named style a direction is, if it is one. A dark-first style is dark by default: its page is dark in light and in dark, and the render check holds it to that.
+export const styleOf = (direction) => STYLES.find((x) => x.id === direction?.trim().toLowerCase());
+
 // The direction text the engine is given: a style's full grammar when the id names one, else the person's own words.
 export const directionText = (direction) => {
-  const s = STYLES.find((x) => x.id === direction.trim().toLowerCase());
+  const s = styleOf(direction);
   return s ? `${s.name} (${s.family}; ${s.vibe}). ${s.line} Commit to this one style across the whole page, in every section and state, with no tokens borrowed from another style. Tokens: ${s.tokens.join(' ')}` : direction;
 };

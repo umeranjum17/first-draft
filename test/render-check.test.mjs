@@ -15,10 +15,12 @@ const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const BROKEN = '<!doctype html><html><head><title>Notes</title><style>body{margin:0;font:16px/1.5 system-ui,sans-serif}.card{width:820px;padding:8px;background:#eee}</style></head><body><h1>Notes</h1><div class="card">A card far too wide for a phone.</div></body></html>';
 const FIXED = '<!doctype html><html><head><title>Notes</title><style>:root{--bg:#fff;--fg:#111}@media (prefers-color-scheme: dark){:root{--bg:#101418;--fg:#e8eaed}}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}.card{max-width:100%;padding:8px;background:#eee}</style></head><body><h1>Notes</h1><div class="card">A card that fits the phone.</div></body></html>';
 
+const DARK_ONLY = '<!doctype html><html><head><title>Notes</title><style>:root{color-scheme:dark}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#050505;color:#e8ffe8}.card{max-width:100%;padding:8px;background:#111}</style></head><body><h1>Notes</h1><div class="card">A dark page on a phone.</div></body></html>';
+
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 
 // A stand-in model that writes the broken page, checks it, reads the failure and writes the fixed page.
-function standIn(seen) {
+function standIn(seen, [first, second] = [BROKEN, FIXED]) {
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
@@ -27,9 +29,9 @@ function standIn(seen) {
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const n = seen.length - 1;
       const call = (name, args) => ({ type: 'function_call', id: `fc${n}`, call_id: `c${n}`, name, arguments: JSON.stringify(args) });
-      const item = n === 0 ? call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: BROKEN })
+      const item = n === 0 ? call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: first })
         : n === 1 ? call('done', { path: 'index.html' })
-        : n === 2 ? call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: FIXED })
+        : n === 2 ? call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: second })
         : n === 3 ? call('done', { path: 'index.html' })
         : { type: 'message', id: 'm1', status: 'completed', content: [{ type: 'output_text', text: 'The design is ready.' }] };
       res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
@@ -80,4 +82,32 @@ test('with no browser on the machine the render check is skipped with one warnin
   assert.equal(stderr.trim().split('\n').length, 1, 'one clear warning line');
   assert.match(stderr, /no Chrome or Chromium was found/);
   assert.equal(existsSync(out), true);
+});
+
+test('a named dark style must render a dark page: a light page fails done, one dark in light and in dark passes; a page with no style still needs a light and a dark theme', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-render-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const run = async (seen, pages, ...args) => {
+    const server = await standIn(seen, pages);
+    t.after(() => server.close());
+    const env = { ...home(dir), FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+    return promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  };
+  await run([], [BROKEN, FIXED], 'init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  // oled-neon is dark-first: the model first writes a page with a light default (FIXED), is told so, and writes a dark one.
+  const seen = [], out = join(dir, 'neon.html');
+  const { stdout } = await run(seen, [FIXED, DARK_ONLY], 'make', 'a notes page', '--out', out, '--direction', 'oled-neon');
+  if (JSON.parse(stdout).made.render_check === 'skipped') return t.skip('no Chrome or Chromium on this machine');
+  assert.match(seen[0], /dark-first, so the page is dark by default/);
+  assert.doesNotMatch(seen[0], /Never write one dark palette for both/);
+  assert.match(seen.slice(2).join(''), /the style is dark-first but the page paints a light background in light/);
+  const html = readFileSync(out, 'utf8');
+  assert.match(html, /A dark page on a phone/);
+  assert.doesNotMatch(html, /prefers-color-scheme/);
+  // With no style the same dark-only page is still refused: the page needs a real light theme and a real dark one.
+  const plain = [], outPlain = join(dir, 'plain.html');
+  await run(plain, [DARK_ONLY, FIXED], 'make', 'a notes page', '--out', outPlain);
+  assert.match(plain[0], /Never write one dark palette for both/);
+  assert.match(plain.slice(2).join(''), /no real light and dark themes/);
+  assert.match(readFileSync(outPlain, 'utf8'), /A card that fits the phone/);
 });
