@@ -382,13 +382,14 @@ test('a prompt that asks for a landing page carries the landing-page brief, anot
   assert.doesNotMatch(JSON.stringify(seen[3].body), /Landing page brief/, 'a prompt with no landing page gets no landing brief');
 });
 
-test('a landing page is told about the project\'s screenshot and gets it embedded as the hero visual', async (t) => {
+test('a landing page is told about the project\'s screenshot and gets it embedded as the hero visual, only when the brief is about that project', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, 'docs', 'media'), { recursive: true });
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
   writeFileSync(join(dir, 'docs', 'media', 'canvas.png'), png);
   writeFileSync(join(dir, 'docs', 'logo.png'), png); // a logo is a mark of the project, not a view of it
+  writeFileSync(join(dir, 'README.md'), '# first-draft\n\nTurns a prompt into design mocks.\n'); // the project in this folder
   const page = '<!doctype html><html><head><title>T</title></head><body><h1>First draft</h1><img alt="The canvas" src="docs/media/canvas.png"><img alt="Nope" src="docs/missing.png"></body></html>';
   const seen = [], server = await standIn(seen, null, true, 'index.html', page);
   t.after(() => server.close());
@@ -403,6 +404,13 @@ test('a landing page is told about the project\'s screenshot and gets it embedde
   const html = readFileSync(out, 'utf8');
   assert.match(html, new RegExp(`src="data:image/png;base64,${png.toString('base64').replace(/[+/=]/g, '\\$&')}"`)); // the listed path is the file itself
   assert.match(html, /src="docs\/missing\.png"/); // a path the host never listed is left alone
+  // The folder you run in is not the product the prompt describes: a landing page for another product never gets this project's screenshots, whatever this folder holds.
+  const other = join(dir, 'fieldnotes.html'), before = seen.length;
+  await run('make', 'A landing page for Fieldnotes, an offline-first note-taking app for field biologists.', '--out', other);
+  const sentOther = JSON.stringify(seen[before].body);
+  assert.doesNotMatch(sentOther, /docs\/media\/canvas\.png/);
+  assert.match(sentOther, /no screenshot or recording, so make the hero visual typeset/);
+  assert.doesNotMatch(readFileSync(other, 'utf8'), /data:image\/png/); // nothing of this project's is embedded in it
 });
 
 test('script-free prose is exported, not mistaken for script', async (t) => {
