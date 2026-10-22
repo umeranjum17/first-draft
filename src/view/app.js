@@ -10,6 +10,7 @@ const errors = new Map(); // option number -> runtime error lines
 let frames = []; // [{ n, iframe }] currently mounted
 let resize = null;
 let draft = ''; // the Studio brief being written, kept across options and devices
+let column = true; // the Studio's column (and its brief) shown on a wide screen; Hide brief folds it away until Show brief
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -210,7 +211,7 @@ function brief(o) {
 }
 
 // Studio: the design, its options and the open option's comments in a column beside the canvas, the brief under them.
-// Under 860px (view.css) the column moves below the canvas and the brief docks at the bottom of the screen.
+// Hide brief folds the column away on a wide screen; under 860px (view.css) the column moves below the canvas and the brief docks at the bottom of the screen.
 function canvas(o, device) {
   const dev = deviceFor(device, innerWidth), f = FRAMES[dev], pins = pinsFor(o);
   const art = o.error ? null : artFor(dev, frame(o, `Option ${o.n} at ${f.width}px`), pins);
@@ -228,18 +229,28 @@ function canvas(o, device) {
     b.onclick = () => document.querySelector(`.pin[data-i="${i}"]`)?.click(); // the pin with this number opens its comment on the canvas
     return el('li', {}, b);
   })) : el('p', { class: 'muted' }, 'No comments on this option.');
-  const side = el('aside', { class: 'side', 'aria-label': 'Design' },
+  const side = el('aside', { id: 'studio-side', class: 'side', 'aria-label': 'Design' },
     el('section', {}, el('p', { class: 'kicker' }, 'Design'), el('h2', { class: 'title' }, design.name), el('p', { class: 'muted' }, plural(design.options.length, 'option'))),
     el('section', {}, el('h3', { class: 'kicker' }, 'Options'), options),
     el('section', {}, el('h3', { class: 'kicker' }, `Comments on Option ${o.n}`), notes));
 
-  const body = [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name, el('span', { class: 'muted' }, ` · Option ${o.n}`)), link('#/', 'All options', 'button')),
-    el('div', { class: 'studio' }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), stage), ...(o.error ? [] : [brief(o)]))];
-  return { body, dev, fit: art && (() => {
+  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), stage), ...(o.error ? [] : [brief(o)]));
+  const fit = art && (() => {
     const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight, pins.length ? PIN_GUTTER : 0);
     art.rescale(scale);
     zoom.textContent = `${f.width} × ${f.height} · ${Math.round(scale * 100)}%`;
-  }) };
+  });
+  // Wide screens only (view.css): the canvas takes the column's room; under 860px the column is below the canvas and the brief is docked.
+  const fold = el('button', { type: 'button', class: 'button fold', 'aria-controls': 'studio-side', 'aria-expanded': String(column) }, column ? 'Hide brief' : 'Show brief');
+  fold.onclick = () => {
+    column = !column;
+    studio.classList.toggle('folded', !column);
+    fold.setAttribute('aria-expanded', String(column));
+    fold.textContent = column ? 'Hide brief' : 'Show brief';
+    fit?.();
+  };
+  const body = [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name, el('span', { class: 'muted' }, ` · Option ${o.n}`)), fold, link('#/', 'All options', 'button')), studio];
+  return { body, dev, fit };
 }
 
 function full(o) {
