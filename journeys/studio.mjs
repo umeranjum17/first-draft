@@ -172,10 +172,10 @@ try {
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
     start: "first-draft view, the app frame around a user's design: a two-option 'notes.' sign-in page shown inside a dotted canvas, with two comments and no agent set, in headless Chromium",
-    steps: ["At 1280 px wide, in light and in dark: the top bar has a 'Hide brief' button beside the left column (Design, Options, Comments and the Next brief box); capture this state",
-      "Press 'Hide brief': the column is hidden, the button reads 'Show brief' and the canvas fills the width (the zoom label grows from 66% to 77%); capture this state",
+    steps: ["At 1280 px wide, in light and in dark: the top bar has a 'Hide brief' button beside the left column (Design, Options, Comments and the Next brief box); captured as studio-1280-light.png and studio-1280-dark.png",
+      "Press 'Hide brief': the column is hidden, the button reads 'Show brief' and the canvas fills the width (the zoom label grows from 66% to 77%); captured as studio-collapsed-1280-light.png and studio-collapsed-1280-dark.png",
       "Press 'Show brief': the first state returns (the column and the Next brief box show again)",
-      "At 390 px wide (a phone), in light and in dark: by design there is no Hide brief button, and the 'Describe a change' box is docked at the bottom of the screen under the phone mock; capture this state",
+      "At 390 px wide (a phone), in light and in dark: by design there is no Hide brief button, and the 'Describe a change' box is docked at the bottom of the screen under the phone mock; this 390 px wide phone state is captured as studio-390-light.png and studio-390-dark.png",
       'Switch Phone/Desktop and back; click a comment in the left column and its pin opens on the canvas',
       "At 1280 px hide the column and switch device: it stays hidden until 'Show brief'",
       'Open Option 2; type a change in the Next brief box and press Send with no agent set: the set-up hint shows; press Play, then Exit'],
