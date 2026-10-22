@@ -5,9 +5,10 @@
 // Fullscreen in a More menu (phone), Phone/Desktop switch, a comment opens its pin, another option opens, Send without an agent shows the
 // set-up hint, Fullscreen (phone, from More), Play and back.
 // The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets one capture per claim and theme: hide-brief-1280-<theme>.png
-// (the 1280 Studio before and after Hide brief, side by side), studio-390-<theme>.png, studio-more-390-<theme>.png (More open),
-// studio-composer-focused-390-<theme>.png, press-play-390-<theme>.png (Play held), and studio-states.json (each state's measured width,
-// theme and column); the single 1280 states, Send and Play captures go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
+// (the 1280 Studio before and after Hide brief, side by side); at 390, light and dark side by side in each: phone-row-390.png (the control
+// row and the whole phone above the one-line brief), more-menu-390.png (More open), press-play-390.png (Play at rest and held) and
+// composer-390.png (the brief at rest and tapped); and studio-states.json (each state's measured width, theme and column). The single
+// captures (each width and theme, Send, Play, More, the tapped brief) go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -81,16 +82,17 @@ try {
   };
   const shown = (selector) => evaluate(`!!document.querySelector(${JSON.stringify(selector)})?.getClientRects().length`);
   // A press state: the element's look changes while the mouse is held on it. The release happens off the element, so nothing is clicked.
-  const press = async (selector, capture) => {
+  const press = async (selector, keep) => {
     const look = `(()=>{const s=getComputedStyle(document.querySelector(${JSON.stringify(selector)}));return[s.backgroundColor,s.color,s.translate,s.scale].join('|')})()`;
     const at = await point(selector), rest = await evaluate(look);
     await c('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...at });
     const held = await evaluate(look);
-    if (capture) { await shot(capture, out); await state(`${capture}.png`, { held: selector }); }
+    const capture = keep && await shot(keep, extra);
     await c('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
     await c('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, x: 1, y: 1 });
     await evaluate('document.activeElement?.blur()'); // a press focuses the button; leave the page as it was
     assert.notEqual(held, rest, `${selector} shows no press state`);
+    return capture; // the page while it was held, when `keep` names it
   };
   const box = (selector) => evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height}})()`);
   const width = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().width`);
@@ -120,12 +122,13 @@ try {
     if (dir) { writeFileSync(join(dir, `${name}.png`), Buffer.from(data, 'base64')); console.log(`captured ${name}.png`); }
     return data;
   };
-  // Before and after side by side in one capture, each labelled with what was pressed, so the capture shows the change on its own.
-  const sideBySide = async (name, theme, before, after) => {
+  // Captures side by side in one capture, each labelled with what it shows (before and after a press, or each theme), so the capture
+  // shows its claim on its own. `panels` is [[label, png], ...] of captures w by h; `theme` sets the backdrop.
+  const sideBySide = async (name, theme, panels, w = 1280, h = 800) => {
     await c('Page.navigate', { url: 'about:blank' });
-    await c('Emulation.setDeviceMetricsOverride', { width: 2640, height: 900, deviceScaleFactor: 1, mobile: false });
-    await evaluate(`(()=>{const bg=${JSON.stringify(theme)}==='dark'?['#111','#eee']:['#ddd','#111'];document.body.style.cssText='margin:0;display:flex;gap:40px;padding:20px;background:'+bg[0]+';color:'+bg[1]+';font:600 30px system-ui,sans-serif';
-      for(const [label,data] of [['Before: Hide brief not pressed',${JSON.stringify(before)}],['After pressing Hide brief',${JSON.stringify(after)}]]){const f=document.createElement('figure');f.style.margin='0';const cap=document.createElement('figcaption');cap.textContent=label;cap.style.marginBottom='12px';const img=new Image();img.src='data:image/png;base64,'+data;img.width=1280;img.height=800;f.append(cap,img);document.body.append(f);}
+    await c('Emulation.setDeviceMetricsOverride', { width: 40 + panels.length * (w + 40) - 40, height: h + (w > 700 ? 100 : 150), deviceScaleFactor: 1, mobile: false });
+    await evaluate(`(()=>{const bg=${JSON.stringify(theme)}==='dark'?['#111','#eee']:['#ddd','#111'];document.body.style.cssText='margin:0;display:flex;gap:40px;padding:20px;background:'+bg[0]+';color:'+bg[1]+';font:600 ${w > 700 ? 30 : 20}px system-ui,sans-serif';
+      for(const [label,data] of ${JSON.stringify(panels)}){const f=document.createElement('figure');f.style.cssText='margin:0;width:${w}px';const cap=document.createElement('figcaption');cap.textContent=label;cap.style.marginBottom='12px';const img=new Image();img.src='data:image/png;base64,'+data;img.width=${w};img.height=${h};f.append(cap,img);document.body.append(f);}
       return Promise.all([...document.images].map(i=>i.decode()))})()`);
     const { data } = await c('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(out, `${name}.png`), Buffer.from(data, 'base64'));
@@ -136,13 +139,15 @@ try {
     await c('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
   };
 
+  const phones = { light: {}, dark: {} }; // the 390 captures of each theme, framed side by side after the loop
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
     await viewport(w, theme);
     await open('#/o/1');
-    const before = await shot(`studio-${w}-${theme}`, w > 700 ? extra : out);
-    await state(w > 700 ? `hide-brief-${w}-${theme}.png (before)` : `studio-${w}-${theme}.png`);
+    const before = await shot(`studio-${w}-${theme}`, extra);
+    await state(w > 700 ? `hide-brief-${w}-${theme}.png (before)` : `studio-${w}-${theme}.png, phone-row-390.png (${theme}), press-play-390.png (${theme}, at rest), composer-390.png (${theme}, one line)`);
     // Every kind of button in the Studio shows a press state.
-    await press('.tools a.primary', w < 700 ? `press-play-390-${theme}` : undefined);
+    const held = await press('.tools a.primary', w < 700 ? `press-play-390-${theme}` : undefined);
+    if (w < 700) Object.assign(phones[theme], { rest: before, held });
     for (const selector of ['.devices a:not([aria-current])', '.bar a.button', '.side .list a', '.side .list button', 'form.brief [type=submit]', w > 700 ? '.tools .full-link' : '.tools .more', ...(w > 700 ? ['.bar .fold', 'form.brief .link'] : [])]) await press(selector);
     if (w > 700) {
       // Brief collapses the column (design, options, comments and the composer), the canvas takes its room, and Brief brings it back.
@@ -158,7 +163,7 @@ try {
       assert.equal(await shown('.side'), true, 'Brief shows the column again');
       assert.equal(await shown('form.brief'), true, 'Brief shows the composer again');
       await state(null, { after: 'Show brief pressed: no capture, the page is as before' });
-      await sideBySide(`hide-brief-${w}-${theme}`, theme, before, after);
+      await sideBySide(`hide-brief-${w}-${theme}`, theme, [['Before: Hide brief not pressed', before], ['After pressing Hide brief', after]]);
     } else {
       // Phone width: the phone mock alone, the composer docked at the bottom of the first screen, no Brief button (the column follows below).
       assert.equal(await shown('.phone'), true, 'the phone mock shows');
@@ -178,19 +183,26 @@ try {
       assert.equal(await shown('form.brief .link'), false, 'the terminal command link waits until the brief is used');
       await click('.tools .more');
       assert.equal(await shown('#more-menu a[href="#/o/1/full"]'), true, 'More opens a menu with Fullscreen');
-      await shot(`studio-more-390-${theme}`, out);
-      await state(`studio-more-390-${theme}.png`, { after: 'More pressed' });
+      phones[theme].more = await shot(`studio-more-390-${theme}`, extra);
+      await state(`more-menu-390.png (${theme})`, { after: 'More pressed' });
       await press('#more-menu a');
       await key('Escape');
       assert.equal(await shown('#more-menu'), false, 'Escape closes the More menu');
       await click('form.brief textarea');
       assert.equal(await shown('form.brief .link'), true, 'a focused brief shows the terminal command link');
       assert.ok((await box('form.brief')).height > form.height + 20, 'a focused brief opens up');
-      await shot(`studio-composer-focused-390-${theme}`, out);
-      await state(`studio-composer-focused-390-${theme}.png`, { after: 'the brief box tapped' });
+      phones[theme].focused = await shot(`studio-composer-focused-390-${theme}`, extra);
+      await state(`composer-390.png (${theme}, tapped)`, { after: 'the brief box tapped' });
       await press('form.brief .link');
     }
   }
+
+  // One capture per 390 claim, light and dark side by side, each panel labelled with what it shows.
+  const { light: l, dark: d } = phones;
+  await sideBySide('phone-row-390', 'light', [['390 px, light: Play is the one filled button, next to More (⋯). The whole phone shows above the one-line brief box', l.rest], ['390 px, dark: Play is the one filled button, next to More (⋯). The whole phone shows above the one-line brief box', d.rest]], 390, 844);
+  await sideBySide('more-menu-390', 'light', [['390 px, light: More (⋯) pressed. Its menu holds Fullscreen', l.more], ['390 px, dark: More (⋯) pressed. Its menu holds Fullscreen', d.more]], 390, 844);
+  await sideBySide('press-play-390', 'light', [['390 px, light: Play at rest', l.rest], ['390 px, light: Play held down turns orange', l.held], ['390 px, dark: Play at rest', d.rest], ['390 px, dark: Play held down turns orange', d.held]], 390, 844);
+  await sideBySide('composer-390', 'light', [['390 px, light: the brief box at rest is one line, below the whole phone', l.rest], ['390 px, light: the brief box tapped opens up, with Copy terminal command', l.focused], ['390 px, dark: the brief box at rest is one line, below the whole phone', d.rest], ['390 px, dark: the brief box tapped opens up, with Copy terminal command', d.focused]], 390, 844);
 
   for (const w of [1280, 390]) {
     await viewport(w, 'light');
@@ -242,14 +254,14 @@ try {
       "Pressing 'Hide brief' removes the left column: it is gone, the button reads 'Show brief' and the design fills the canvas (zoom 66% to 77%)",
       "The capture hide-brief-1280-light.png (and hide-brief-1280-dark.png) shows before and after side by side",
       "Press 'Show brief': the left column is shown again",
-      "At 390 px wide, in light and in dark: the whole design preview in a phone frame shows above a one-line Next brief box with its Send button; the row above the preview is Desktop/Phone, a More button (three dots) and Play; captured as studio-390-light.png and studio-390-dark.png",
-      "At 390 px, holding Play down darkens it; captured while held as press-play-390-light.png and press-play-390-dark.png. Every other kind of button also changes while held",
-      "At 390 px, pressing More opens a small menu with Fullscreen; captured as studio-more-390-light.png and studio-more-390-dark.png; Escape closes it",
-      "At 390 px, tapping the Next brief box opens it up (a taller box and a 'Copy terminal command' link); captured as studio-composer-focused-390-light.png and studio-composer-focused-390-dark.png",
+      "At 390 px wide, in light and in dark: the whole design preview in a phone frame shows above a one-line Next brief box with its Send button; the row above the preview is Desktop/Phone, a More button (three dots) and Play, the one filled button; phone-row-390.png shows light and dark side by side",
+      "At 390 px, holding Play down turns it orange; press-play-390.png shows Play at rest and held, light and dark. Every other kind of button also changes while held",
+      "At 390 px, pressing More opens a small menu with Fullscreen; more-menu-390.png shows it in light and dark; Escape closes it",
+      "At 390 px, tapping the Next brief box opens it up (a taller box and a 'Copy terminal command' link); composer-390.png shows it at rest and tapped, light and dark",
       'Switch Phone/Desktop and back; click a comment in the left column and its pin opens on the canvas',
       "At 1280 px hide the column and switch device: it stays hidden until 'Show brief'",
       'Open Option 2; type a change in the Next brief box and press Send with no agent set: the set-up hint shows; at 390 open Fullscreen from More and Exit; press Play, then Exit'],
-    result: "In the Studio at 1280 px wide, pressing 'Hide brief' removes the left column and the design fills the canvas; each hide-brief capture shows before (left column with the Next brief box shown, button 'Hide brief') and after (left column gone, button 'Show brief') side by side. In the Studio at 390 px wide, the whole design preview in a phone frame shows above a one-line Next brief box with Send, the row above it is Desktop/Phone, More and Play (the one dark button), More opens a menu with Fullscreen, Play visibly darkens while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
+    result: "In the Studio at 1280 px wide, pressing 'Hide brief' removes the left column and the design fills the canvas; each hide-brief capture shows before (left column with the Next brief box shown, button 'Hide brief') and after (left column gone, button 'Show brief') side by side. In the Studio at 390 px wide, the whole design preview in a phone frame shows above a one-line Next brief box with Send, the row above it is Desktop/Phone, More and Play (the one filled button), More opens a menu with Fullscreen, Play turns orange while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: Brief collapse, docked one-line composer clear of the phone, the phone control row and its More menu, press states, device switch, pins, option switch, Send hint, Fullscreen, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();

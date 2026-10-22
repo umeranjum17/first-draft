@@ -175,7 +175,7 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .pin-bubble.up { top: auto; bottom: 12px; }
 .pin-bubble[hidden] { display: none; }
 
-/* Press states: whatever is pressed darkens and sinks a pixel (translate, so it adds to a transform such as Exit's centring).
+/* Press states: whatever is pressed changes colour and sinks a pixel (translate, so it adds to a transform such as Exit's centring).
    Last in the file, so a press shows over a selected row or device too. */
 :is(.button, .card):active:not([disabled]) { translate: 0 1px; }
 .button:active:not([disabled]), button.icon:active, .devices a:active, .list :is(a, button):active { background: var(--border); }
