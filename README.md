@@ -29,7 +29,7 @@ Replace `YOUR_MODEL` with a model your installed, signed-in Codex CLI supports. 
 
 <img src="docs/media/canvas-390.webp" width="200" alt="The viewer in a 390px-wide window: the option on a phone canvas">
 
-The screenshots come from one real run of `first-draft-axi make "A notes app for Umer with a sign-in screen and a notes dashboard" --count 3`, with no editing. Options 1 and 3 hit the engine's turn cap, and `make` said so: they hold the screens written so far. The large screenshot at the top is option 1. Generating needs your chosen model; viewing does not call it. These are prototypes, not production apps.
+The screenshots come from one real run of `first-draft-axi make "A notes app for Umer with a sign-in screen and a notes dashboard" --count 3` (first-draft-axi 0.2.4, no `--direction`, so each option took a different named style), with no editing. Options 2 and 3 hit the engine's turn cap, and `make` said so: they hold the screens written so far. The large screenshot at the top is option 1. Generating needs your chosen model; viewing does not call it. These are prototypes, not production apps.
 
 ## Models
 
