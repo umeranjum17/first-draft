@@ -2,7 +2,8 @@
 // A two-option design with comments is served from a temporary folder with its own FIRST_DRAFT_HOME (no agent set). Each width and theme
 // is captured; then the journey runs at both widths: Brief collapses and reopens the column (desktop), the composer is docked at the bottom
 // (phone), Phone/Desktop switch, a comment opens its pin, another option opens, Send without an agent shows the set-up hint, Play and back.
-// Captures go to $DONE_DONE_EVIDENCE_ROOT (or the first argument). Chrome is $CHROME, else chromium or google-chrome on PATH.
+// The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets only the Studio and Hide brief captures and studio-states.json
+// (each capture's measured width, theme and column); the Send and Play captures go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,11 +11,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
-const out = process.env.DONE_DONE_EVIDENCE_ROOT ?? process.argv[2];
+const out = process.env.DONE_DONE_EVIDENCE_ROOT ?? process.argv[2], extra = process.env.FD_EXTRA_OUT;
 if (!out) throw new Error('Give an evidence folder: $DONE_DONE_EVIDENCE_ROOT or the first argument');
 const chrome = [process.env.CHROME, 'chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable'].find((c) => c && execFileSync('sh', ['-c', `command -v "${c}" || true`]).toString().trim());
 if (!chrome) throw new Error('No Chrome or Chromium on PATH; set $CHROME');
 mkdirSync(out, { recursive: true });
+if (extra) mkdirSync(extra, { recursive: true });
 const dir = mkdtempSync(join(tmpdir(), 'first-draft-studio-'));
 for (const n of [1, 2]) copyFileSync(join(root, 'journeys/fixtures/notes.html'), join(dir, `notes-${n}.html`));
 writeFileSync(join(dir, 'notes.comments.json'), JSON.stringify([{ option: 1, x: 0.2, y: 0.3, text: 'Umer: make the headline a little smaller' }, { option: 1, x: 0.8, y: 0.6, text: 'Umer: a warmer button colour' }]));
@@ -73,7 +75,11 @@ try {
   const shown = (selector) => evaluate(`!!document.querySelector(${JSON.stringify(selector)})?.getClientRects().length`);
   const width = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().width`);
   // A capture waits until every visible option frame has painted its page.
-  const shot = async (name) => {
+  const states = [];
+  // What a capture shows, measured on the page: the window width, the theme the page is in, and whether the column and the composer show.
+  const state = async (capture, more = {}) => states.push({ capture, ...await evaluate(`({ width: innerWidth, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', column: !!document.querySelector('.side')?.getClientRects().length, composer: (()=>{const b=document.querySelector('form.brief')?.getBoundingClientRect();return b?.width?{top:Math.round(b.top),bottom:Math.round(b.bottom)}:'hidden'})(), stageWidth: Math.round(document.querySelector('.stage')?.getBoundingClientRect().width ?? 0), button: document.querySelector('.bar .fold')?.getClientRects().length ? document.querySelector('.bar .fold').textContent : 'none' })`), ...more });
+  const shot = async (name, dir = out) => {
+    if (!dir) return;
     await settle();
     await evaluate('scrollTo(0,0)');
     const expected = await evaluate("[...document.querySelectorAll('iframe')].filter(f=>f.getClientRects().length).length");
@@ -91,7 +97,7 @@ try {
     assert.ok(ready, `${name}: the option frame did not paint`);
     assert.equal(await evaluate('document.documentElement.scrollWidth > innerWidth'), false, `${name}: the page scrolls sideways`);
     const { data } = await c('Page.captureScreenshot', { format: 'png' });
-    writeFileSync(join(out, `${name}.png`), Buffer.from(data, 'base64'));
+    writeFileSync(join(dir, `${name}.png`), Buffer.from(data, 'base64'));
     console.log(`captured ${name}.png`);
   };
   const viewport = async (w, theme) => {
@@ -103,6 +109,7 @@ try {
     await viewport(w, theme);
     await open('#/o/1');
     await shot(`studio-${w}-${theme}`);
+    await state(`studio-${w}-${theme}.png`);
     if (w > 700) {
       // Brief collapses the column (design, options, comments and the composer), the canvas takes its room, and Brief brings it back.
       const stage = await width('.stage');
@@ -112,9 +119,11 @@ try {
       assert.ok(await width('.stage') > stage + 200, 'the canvas takes the column\'s room');
       assert.equal(await evaluate('document.querySelector(\'.bar [aria-controls="studio-side"]\').getAttribute(\'aria-expanded\')'), 'false');
       await shot(`studio-collapsed-${w}-${theme}`);
+      await state(`studio-collapsed-${w}-${theme}.png`, { after: 'Hide brief pressed' });
       await click('.bar [aria-controls="studio-side"]');
       assert.equal(await shown('.side'), true, 'Brief shows the column again');
       assert.equal(await shown('form.brief'), true, 'Brief shows the composer again');
+      await state(null, { after: 'Show brief pressed: no capture, the page is as in ' + `studio-${w}-${theme}.png` });
     } else {
       // Phone width: the phone mock alone, the composer docked at the bottom of the first screen, no Brief button (the column follows below).
       assert.equal(await shown('.phone'), true, 'the phone mock shows');
@@ -151,13 +160,14 @@ try {
     await c('Input.insertText', { text: 'Umer: make the next iteration feel a little calmer.' });
     await click('form.brief button[type=submit]');
     await until("document.querySelector('.run.failed')?.textContent.includes('init --agent')", 'the set-up hint after Send with no agent');
-    await shot(`studio-send-no-agent-${w}`);
+    await shot(`studio-send-no-agent-${w}`, extra);
     await click('.tools a.primary');
     assert.match(await evaluate('location.hash'), /^#\/o\/2\/play\//);
-    await shot(`play-${w}`);
+    await shot(`play-${w}`, extra);
     await click('.bar a');
     assert.match(await evaluate('location.hash'), /^#\/o\/2\/(phone|desktop)$/);
   }
+  writeFileSync(join(out, 'studio-states.json'), JSON.stringify(states, null, 2));
   // done-done's step record: what was driven, from where, and what a user sees at the end.
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
