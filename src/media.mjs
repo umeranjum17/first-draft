@@ -1,6 +1,8 @@
 // The project's own screenshots and recordings, for the hero visual of a landing page: found in
 // the README text and in the usual folders, offered to the model by path, and embedded as data:
 // URIs (the page loads nothing from the network). Nothing is invented: no file, no listing.
+// They are the project's own only when the brief is about the project in the working folder:
+// the folder you run in says nothing about the product a prompt describes.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, relative, resolve } from 'node:path';
 
@@ -21,9 +23,21 @@ const walk = (dir, depth = 0) => {
   return names.flatMap((e) => e.isDirectory() ? (e.name === 'node_modules' || e.name.startsWith('.') ? [] : walk(join(dir, e.name), depth + 1)) : [join(dir, e.name)]);
 };
 
+// Is the brief about the project in this folder? Yes when it carries that project's README, or names the project (the package name or the README's title).
+const aboutThisProject = (text, root) => {
+  const readme = readdirSync(root).filter((n) => /^readme(\.\w+)?$/i.test(n)).map((n) => readFileSync(join(root, n), 'utf8'))[0] ?? '';
+  const flat = (t) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  let pkg = ''; try { pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name ?? ''; } catch { /* no package.json */ }
+  const title = readme.match(/<h1[^>]*>([^<]+)<\/h1>/i)?.[1] ?? readme.match(/^#\s+(.+)$/m)?.[1] ?? '';
+  const names = [pkg.replace(/^@[^/]+\//, ''), title].map((n) => n.trim()).filter((n) => n.length >= 4);
+  const brief = flat(text);
+  return (readme.trim() && brief.includes(flat(readme).slice(0, 200))) || names.some((n) => new RegExp(`(?<![\\w-])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'i').test(text));
+};
+
 // The files to offer, README-mentioned first: [{ path (relative, forward slashes), mime, bytes, video }].
 export const projectMedia = (text = '', cwd = process.cwd()) => {
   const root = resolve(cwd);
+  if (!aboutThisProject(text, root)) return [];
   const found = [...mentioned(text).map((p) => resolve(root, p.replace(/^\//, ''))), ...FOLDERS.flatMap((f) => walk(join(root, f)))];
   const seen = new Set(), media = [];
   let total = 0;
