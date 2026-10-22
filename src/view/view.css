@@ -76,6 +76,11 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .stage { flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; background: var(--canvas); }
 .stage.dotted { border: 1px solid var(--border); border-radius: 14px; background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 18px 18px; }
 .work .error-bar { border: 1px solid var(--border); border-radius: 10px; }
+/* Hide brief: the column and its composer fold away and the canvas takes the full width (wide screens only). */
+@media (min-width: 860px) {
+  .studio.folded { grid-template-columns: minmax(0, 1fr); grid-template-areas: "work" "work"; background: none; }
+  .studio.folded > :is(.side, .brief) { display: none; }
+}
 
 /* The brief: a composer at the foot of the column; its command appears above the text. */
 .brief { grid-area: brief; display: flex; flex-direction: column; gap: 10px; margin: 0 16px 16px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
@@ -101,7 +106,7 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 /* Under 860px: the canvas first at a phone's height, the column below it, the brief docked at the bottom of the screen. */
 @media (max-width: 859px) {
   .page-canvas { height: auto; }
-  .bar h1 .muted { display: none; }
+  .bar h1 .muted, .bar .fold { display: none; }
   .studio { display: flex; flex-direction: column; background: none; }
   .work { order: -1; padding: 12px; }
   .tools select { display: block; flex: 1 1 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
