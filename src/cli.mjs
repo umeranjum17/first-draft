@@ -8,6 +8,7 @@ import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
+import { STYLES } from './styles.mjs';
 
 const VERSION = '0.2.3';
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
@@ -15,7 +16,8 @@ const PICK = 'which BYOKit route and model to use (first-draft picks none), then
 const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
-const VARIATIONS = ['a calm minimal layout with generous whitespace', 'a bold colorful layout with strong hierarchy', 'a dense information-rich dashboard layout'];
+// What each option takes when --count asks for several and the person names no direction: styles from different families, so options differ in kind.
+const DIRECTIONS = ['editorial', 'oled-neon', 'bento', 'organic', 'neobrutalism'];
 
 const read = () => {
   try {
@@ -69,8 +71,9 @@ const refineHtml = async (seed, change) => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[6]:
-  make "<prompt>" --out <file.html> [--count N]   make N design mocks: self-contained HTML pages (one engine run each)
+commands[7]:
+  make "<prompt>" --out <file.html> [--count N] [--direction "<look>"]   make N design mocks: self-contained HTML pages (one engine run each); --direction names the look all of them take (a style, a brand, a reference), else several options each get a different one
+  styles                              list the named design styles that make --direction <id> takes (or write your own direction in words)
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
@@ -87,8 +90,10 @@ const [command, ...rest] = process.argv.slice(2);
 if (!command || command === '--help' || command === '-h') { console.log(HELP); process.exit(0); }
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
-if (command === 'make') {
-  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' } });
+if (command === 'styles') {
+  console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
+} else if (command === 'make') {
+  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' }, direction: { type: 'string' } });
   const prompt = positionals.join(' ').trim();
   const count = Number(values.count);
   if (!prompt || !values.out) fail('USAGE', 'make needs a prompt and --out <file.html>', ['Run `first-draft-axi make "<prompt>" --out <file.html>`']);
@@ -102,7 +107,7 @@ if (command === 'make') {
   for (let i = 0; i < count; i++) {
     let made;
     try {
-      made = await make({ prompt, ...c, variation: count > 1 ? `${i + 1} of ${count}: ${VARIATIONS[i % VARIATIONS.length]}` : undefined });
+      made = await make({ prompt, ...c, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const numbered = values.out.includes('{i}') ? values.out.replace('{i}', String(i + 1)) : count > 1 ? values.out.slice(0, -extname(values.out).length || undefined) + `-${i + 1}` + extname(values.out) : values.out;
     const out = resolve(numbered);

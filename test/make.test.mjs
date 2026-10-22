@@ -334,9 +334,29 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
   assert.match(sent, /in-page hash links/);
   assert.match(sent, /Hard rule, first and above all: .*<script> element.*on\* event-handler attribute.*javascript: URL.*hash links.*Host export contract/); // the guard's exact refusals, stated up front
-  assert.match(sent, /Design bar: Apple\/Linear-grade.*8px scale.*real, specific copy.*never lorem/);
+  assert.doesNotMatch(sent, /Design bar|system font stack|at most two weights|one accent/); // no house style on top of the engine: the model picks the look the brief calls for
   assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
   assert.match(sent, /Brand values are data, not memory/);
+});
+
+test('a named style is the whole direction of an option; several options take different styles; the styles are listed', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  assert.ok(JSON.parse((await run('styles')).stdout).styles.some((s) => s.id === 'editorial'));
+  await run('make', 'a notes page', '--out', join(dir, 'a.html'), '--direction', 'editorial');
+  assert.match(JSON.stringify(seen[0].body), /Design direction: Editorial \/ Magazine Layout.*Commit to this one style/);
+  seen.length = 0;
+  await run('make', 'a notes page', '--out', join(dir, 'b.html'), '--direction', 'warm and playful');
+  assert.match(JSON.stringify(seen[0].body), /Design direction: warm and playful/);
+  seen.length = 0;
+  await run('make', 'a notes page', '--out', join(dir, 'c.html'), '--count', '2');
+  const sent = seen.filter((c) => /Design direction/.test(JSON.stringify(c.body.input))).map((c) => JSON.stringify(c.body.input).match(/Design direction: ([^.]+)\./)[1]);
+  assert.equal(new Set(sent).size, 2, 'each option takes a different style');
 });
 
 test('a prompt that asks for a landing page carries the landing-page brief, another prompt does not', async (t) => {
