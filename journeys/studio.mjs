@@ -77,7 +77,7 @@ try {
   // A capture waits until every visible option frame has painted its page.
   const states = [];
   // What a capture shows, measured on the page: the window width, the theme the page is in, and whether the column and the composer show.
-  const state = async (capture, more = {}) => states.push({ capture, ...await evaluate(`({ width: innerWidth, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', column: !!document.querySelector('.side')?.getClientRects().length, composer: (()=>{const b=document.querySelector('form.brief')?.getBoundingClientRect();return b?.width?{top:Math.round(b.top),bottom:Math.round(b.bottom)}:'hidden'})(), stageWidth: Math.round(document.querySelector('.stage')?.getBoundingClientRect().width ?? 0), button: document.querySelector('.bar .fold')?.getClientRects().length ? document.querySelector('.bar .fold').textContent : 'none' })`), ...more });
+  const state = async (capture, more = {}) => states.push({ capture, ...await evaluate(`({ width: innerWidth, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', column: !!document.querySelector('.side')?.getClientRects().length, composer: (()=>{const b=document.querySelector('form.brief')?.getBoundingClientRect();return b?.width?{top:Math.round(b.top),bottom:Math.round(b.bottom)}:'hidden'})(), stageWidth: Math.round(document.querySelector('.stage')?.getBoundingClientRect().width ?? 0), zoom: document.querySelector('.zoom')?.getClientRects().length ? document.querySelector('.zoom').textContent : 'none', button: document.querySelector('.bar .fold')?.getClientRects().length ? document.querySelector('.bar .fold').textContent : 'none' })`), ...more });
   const shot = async (name, dir) => {
     if (!dir) return;
     await settle();
@@ -171,12 +171,15 @@ try {
   // done-done's step record: what was driven, from where, and what a user sees at the end.
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
-    start: 'first-draft-axi view of a two-option design with two comments, no agent set, in headless Chromium',
-    steps: ['At 1280 and 390, light and dark, open Option 1 in the Studio', 'At 1280 press Hide brief: the column and composer fold away and the canvas widens; press Show brief: they come back',
-      'At 390 see the phone mock alone and the brief docked at the bottom, with no Hide brief button', 'Switch Phone/Desktop and back', 'Click a comment in the column: its pin opens',
-      'At 1280 fold the column, switch device: it stays folded; show it again', 'Open Option 2 (column list at 1280, the select at 390)', 'Type a brief and press Send with no agent set',
-      'Press Play, then Exit'],
-    result: 'Hide brief folds the column and Show brief restores it at 1280; at 390 the brief is docked at the bottom; Send shows the set-up hint; Play opens on the device and Exit returns' }, null, 2));
+    start: "first-draft view, the app frame around a user's design: a two-option 'notes.' sign-in page shown inside a dotted canvas, with two comments and no agent set, in headless Chromium",
+    steps: ["At 1280 px wide, in light and in dark: the top bar has a 'Hide brief' button beside the left column (Design, Options, Comments and the Next brief box); capture this state",
+      "Press 'Hide brief': the column is hidden, the button reads 'Show brief' and the canvas fills the width (the zoom label grows from 66% to 77%); capture this state",
+      "Press 'Show brief': the first state returns (the column and the Next brief box show again)",
+      "At 390 px wide (a phone), in light and in dark: by design there is no Hide brief button, and the 'Describe a change' box is docked at the bottom of the screen under the phone mock; capture this state",
+      'Switch Phone/Desktop and back; click a comment in the left column and its pin opens on the canvas',
+      "At 1280 px hide the column and switch device: it stays hidden until 'Show brief'",
+      'Open Option 2; type a change in the Next brief box and press Send with no agent set: the set-up hint shows; press Play, then Exit'],
+    result: "Each capture shows one of these states, in light and in dark: at 1280 px wide the 'Hide brief' button beside the left column; after pressing it the column hidden, 'Show brief', and the canvas filling the width (zoom label 66% to 77%); at 390 px wide no Hide brief button and the 'Describe a change' box docked at the bottom of the screen under the phone mock. studio-states.json records each capture's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: Brief collapse, docked composer, device switch, pins, option switch, Send hint, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();
