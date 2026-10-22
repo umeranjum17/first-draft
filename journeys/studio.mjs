@@ -2,8 +2,9 @@
 // A two-option design with comments is served from a temporary folder with its own FIRST_DRAFT_HOME (no agent set). Each width and theme
 // is captured; then the journey runs at both widths: Brief collapses and reopens the column (desktop), the composer is docked at the bottom
 // (phone), Phone/Desktop switch, a comment opens its pin, another option opens, Send without an agent shows the set-up hint, Play and back.
-// The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets only the Studio and Hide brief captures and studio-states.json
-// (each capture's measured width, theme and column); the Send and Play captures go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
+// The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets one capture per claim and theme: hide-brief-1280-<theme>.png
+// (the 1280 Studio before and after Hide brief, side by side), studio-390-<theme>.png, and studio-states.json (each state's measured width,
+// theme and column); the single 1280 states, Send and Play captures go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -78,8 +79,8 @@ try {
   const states = [];
   // What a capture shows, measured on the page: the window width, the theme the page is in, and whether the column and the composer show.
   const state = async (capture, more = {}) => states.push({ capture, ...await evaluate(`({ width: innerWidth, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', column: !!document.querySelector('.side')?.getClientRects().length, composer: (()=>{const b=document.querySelector('form.brief')?.getBoundingClientRect();return b?.width?{top:Math.round(b.top),bottom:Math.round(b.bottom)}:'hidden'})(), stageWidth: Math.round(document.querySelector('.stage')?.getBoundingClientRect().width ?? 0), zoom: document.querySelector('.zoom')?.getClientRects().length ? document.querySelector('.zoom').textContent : 'none', button: document.querySelector('.bar .fold')?.getClientRects().length ? document.querySelector('.bar .fold').textContent : 'none' })`), ...more });
+  // A capture of the page as the user sees it, saved to `dir` when given; it returns the PNG either way.
   const shot = async (name, dir) => {
-    if (!dir) return;
     await settle();
     await evaluate('scrollTo(0,0)');
     const expected = await evaluate("[...document.querySelectorAll('iframe')].filter(f=>f.getClientRects().length).length");
@@ -97,7 +98,18 @@ try {
     assert.ok(ready, `${name}: the option frame did not paint`);
     assert.equal(await evaluate('document.documentElement.scrollWidth > innerWidth'), false, `${name}: the page scrolls sideways`);
     const { data } = await c('Page.captureScreenshot', { format: 'png' });
-    writeFileSync(join(dir, `${name}.png`), Buffer.from(data, 'base64'));
+    if (dir) { writeFileSync(join(dir, `${name}.png`), Buffer.from(data, 'base64')); console.log(`captured ${name}.png`); }
+    return data;
+  };
+  // Before and after side by side in one capture, each labelled with what was pressed, so the capture shows the change on its own.
+  const sideBySide = async (name, theme, before, after) => {
+    await c('Page.navigate', { url: 'about:blank' });
+    await c('Emulation.setDeviceMetricsOverride', { width: 2640, height: 900, deviceScaleFactor: 1, mobile: false });
+    await evaluate(`(()=>{const bg=${JSON.stringify(theme)}==='dark'?['#111','#eee']:['#ddd','#111'];document.body.style.cssText='margin:0;display:flex;gap:40px;padding:20px;background:'+bg[0]+';color:'+bg[1]+';font:600 30px system-ui,sans-serif';
+      for(const [label,data] of [['Before: Hide brief not pressed',${JSON.stringify(before)}],['After pressing Hide brief',${JSON.stringify(after)}]]){const f=document.createElement('figure');f.style.margin='0';const cap=document.createElement('figcaption');cap.textContent=label;cap.style.marginBottom='12px';const img=new Image();img.src='data:image/png;base64,'+data;img.width=1280;img.height=800;f.append(cap,img);document.body.append(f);}
+      return Promise.all([...document.images].map(i=>i.decode()))})()`);
+    const { data } = await c('Page.captureScreenshot', { format: 'png' });
+    writeFileSync(join(out, `${name}.png`), Buffer.from(data, 'base64'));
     console.log(`captured ${name}.png`);
   };
   const viewport = async (w, theme) => {
@@ -108,8 +120,8 @@ try {
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
     await viewport(w, theme);
     await open('#/o/1');
-    await shot(`studio-${w}-${theme}`, out);
-    await state(`studio-${w}-${theme}.png`);
+    const before = await shot(`studio-${w}-${theme}`, w > 700 ? extra : out);
+    await state(w > 700 ? `hide-brief-${w}-${theme}.png (before)` : `studio-${w}-${theme}.png`);
     if (w > 700) {
       // Brief collapses the column (design, options, comments and the composer), the canvas takes its room, and Brief brings it back.
       const stage = await width('.stage');
@@ -118,12 +130,13 @@ try {
       assert.equal(await shown('form.brief'), false, 'Brief hides the composer');
       assert.ok(await width('.stage') > stage + 200, 'the canvas takes the column\'s room');
       assert.equal(await evaluate('document.querySelector(\'.bar [aria-controls="studio-side"]\').getAttribute(\'aria-expanded\')'), 'false');
-      await shot(`studio-collapsed-${w}-${theme}`, out);
-      await state(`studio-collapsed-${w}-${theme}.png`, { after: 'Hide brief pressed' });
+      const after = await shot(`studio-collapsed-${w}-${theme}`, extra);
+      await state(`hide-brief-${w}-${theme}.png (after)`, { after: 'Hide brief pressed' });
       await click('.bar [aria-controls="studio-side"]');
       assert.equal(await shown('.side'), true, 'Brief shows the column again');
       assert.equal(await shown('form.brief'), true, 'Brief shows the composer again');
-      await state(null, { after: 'Show brief pressed: no capture, the page is as in ' + `studio-${w}-${theme}.png` });
+      await state(null, { after: 'Show brief pressed: no capture, the page is as before' });
+      await sideBySide(`hide-brief-${w}-${theme}`, theme, before, after);
     } else {
       // Phone width: the phone mock alone, the composer docked at the bottom of the first screen, no Brief button (the column follows below).
       assert.equal(await shown('.phone'), true, 'the phone mock shows');
@@ -171,15 +184,16 @@ try {
   // done-done's step record: what was driven, from where, and what a user sees at the end.
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
-    start: "first-draft view, the app frame around a user's design: a two-option 'notes.' sign-in page shown inside a dotted canvas, with two comments and no agent set, in headless Chromium",
-    steps: ["At 1280 px wide, in light and in dark: the top bar has a 'Hide brief' button beside the left column (Design, Options, Comments and the Next brief box); captured as studio-1280-light.png and studio-1280-dark.png",
-      "Press 'Hide brief': the column is hidden, the button reads 'Show brief' and the canvas fills the width (the zoom label grows from 66% to 77%); captured as studio-collapsed-1280-light.png and studio-collapsed-1280-dark.png",
-      "Press 'Show brief': the first state returns (the column and the Next brief box show again)",
-      "At 390 px wide (a phone), in light and in dark: by design there is no Hide brief button, and the 'Describe a change' box is docked at the bottom of the screen under the phone mock; this 390 px wide phone state is captured as studio-390-light.png and studio-390-dark.png",
+    start: "The Studio in first-draft view, the app frame around a user's design: a two-option 'notes.' sign-in page shown as a design preview inside a dotted canvas, with two comments and no agent set, in headless Chromium",
+    steps: ["At 1280 px wide, in light and in dark: the left column with the Next brief box is shown and the button reads 'Hide brief'",
+      "Pressing 'Hide brief' removes the left column: it is gone, the button reads 'Show brief' and the design fills the canvas (zoom 66% to 77%)",
+      "The capture hide-brief-1280-light.png (and hide-brief-1280-dark.png) shows before and after side by side",
+      "Press 'Show brief': the left column is shown again",
+      "At 390 px wide, in light and in dark: the design preview in a phone frame and the Send button are both visible on screen; captured as studio-390-light.png and studio-390-dark.png",
       'Switch Phone/Desktop and back; click a comment in the left column and its pin opens on the canvas',
       "At 1280 px hide the column and switch device: it stays hidden until 'Show brief'",
       'Open Option 2; type a change in the Next brief box and press Send with no agent set: the set-up hint shows; press Play, then Exit'],
-    result: "Hide brief works at 1280: studio-1280-light.png and studio-1280-dark.png show the Studio with Hide brief, studio-collapsed-1280-light.png and studio-collapsed-1280-dark.png show the column hidden. The Studio is usable at 390: studio-390-light.png and studio-390-dark.png show the phone mock with the brief docked at the bottom. In light and dark. Each capture shows one of these states, in light and in dark: at 1280 px wide the 'Hide brief' button beside the left column; after pressing it the column hidden, 'Show brief', and the canvas filling the width (zoom label 66% to 77%); at 390 px wide no Hide brief button and the 'Describe a change' box docked at the bottom of the screen under the phone mock. studio-states.json records each capture's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
+    result: "In the Studio at 1280 px wide, pressing 'Hide brief' removes the left column and the design fills the canvas; each hide-brief capture shows before (left column with the Next brief box shown, button 'Hide brief') and after (left column gone, button 'Show brief') side by side. In the Studio at 390 px wide, the design preview in a phone frame and the Send button are both visible on screen. studio-states.json records each state's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: Brief collapse, docked composer, device switch, pins, option switch, Send hint, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();
