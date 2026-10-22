@@ -73,6 +73,10 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .tools select { display: none; }
 .zoom { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tools .more { display: none; }
+/* The More menu (phone width): opens under its button, right-aligned to it (app.js sets top and right). */
+.menu { inset: auto; margin: 0; min-width: 160px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.menu .button { width: 100%; justify-content: flex-start; border: 0; background: none; }
 .stage { flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; background: var(--canvas); }
 .stage.dotted { border: 1px solid var(--border); border-radius: 14px; background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 18px 18px; }
 .work .error-bar { border: 1px solid var(--border); border-radius: 10px; }
@@ -103,22 +107,36 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .command[hidden] { display: none; }
 .command pre { margin: 0; padding: 10px; border-radius: 8px; background: var(--sunken); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Under 860px: the canvas first at a phone's height, the column below it, the brief docked at the bottom of the screen. */
+/* Under 860px: the canvas first, filling the first screen above the docked brief (one line until it is used), the column below it.
+   --bar is the top bar's height and --dock the one-line brief's (58px) with its 8px gap below and 8px above. */
 @media (max-width: 859px) {
-  .page-canvas { height: auto; }
+  .page-canvas { height: auto; --bar: 57px; --dock: calc(74px + env(safe-area-inset-bottom)); }
+  .page-canvas .bar { height: var(--bar); flex-wrap: nowrap; }
+  .page-canvas .bar h1 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .bar h1 .muted, .bar .fold { display: none; }
   .studio { display: flex; flex-direction: column; background: none; }
-  .work { order: -1; padding: 12px; }
+  .work { order: -1; height: calc(100dvh - var(--bar) - var(--dock)); padding: 12px; }
+  .work:has(.artboard) { height: auto; }
   .tools select { display: block; flex: 1 1 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
   .zoom { display: none; }
-  .tools .button.primary { margin-left: auto; }
-  .stage.dotted { flex: none; height: min(68dvh, 620px); }
+  .tools .full-link { display: none; }
+  .tools .more { display: inline-flex; min-width: 40px; margin-left: auto; padding: 0; font-size: 18px; }
+  .stage.dotted:has(.artboard) { flex: none; }
   .stage.dotted:has(.artboard) { height: auto; aspect-ratio: 1328 / 848; } /* the desktop artboard plus the stage padding */
   .side { border: 0; border-top: 1px solid var(--border); padding: 20px 16px 24px; }
-  .brief { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 4; margin: 0 8px 8px; padding: 8px 8px 8px 12px; border-radius: 16px; box-shadow: 0 8px 28px rgb(0 0 0 / 0.16); }
-  .brief { gap: 6px; padding-right: 12px; }
+  .brief { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 4; margin: 0 8px 8px; padding: 8px 8px 8px 12px; border-radius: 16px;
+    box-shadow: 0 8px 28px rgb(0 0 0 / 0.16), 0 8px 0 8px var(--bg); } /* the second shadow fills the gap under the dock, so the column never peeks out below it */
+  /* One line: the text and Send side by side; a status, the command and the terminal link (last) each take a full row when shown. */
+  .brief { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; }
   .brief > .kicker, .brief > .brief-row .muted { display: none; }
-  .brief textarea { min-height: 40px; height: 40px; padding: 10px 2px; line-height: 20px; resize: none; }
+  .brief > :is(.run, .command), .brief > .brief-row > .link { grid-column: 1 / -1; }
+  .brief > .brief-row { display: contents; }
+  .brief > .brief-row > .link { display: none; order: 1; justify-self: start; }
+  .brief > .brief-row > [type=submit] { align-self: end; min-height: 40px; }
+  .brief textarea { grid-column: 1; min-height: 40px; height: 40px; padding: 10px 2px; line-height: 20px; resize: none; }
+  /* In use (focused, written in, or showing its command) the brief opens up: a taller box and the terminal command link. */
+  .brief:is(:focus-within, :has(textarea:not(:placeholder-shown)), :has(.command:not([hidden]))) > .brief-row > .link { display: block; }
+  .brief:is(:focus-within, :has(textarea:not(:placeholder-shown))) textarea { height: 80px; }
   .tools .button, .devices a { min-height: 40px; }
 }
 
@@ -156,3 +174,12 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .pin-bubble { --w: min(320px, calc(100% - 16px)); position: absolute; z-index: 6; width: var(--w); left: clamp(8px, calc(var(--x) - var(--w) / 2), calc(100% - 8px - var(--w))); top: 12px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 14px; box-shadow: var(--shadow); pointer-events: auto; overflow-wrap: anywhere; }
 .pin-bubble.up { top: auto; bottom: 12px; }
 .pin-bubble[hidden] { display: none; }
+
+/* Press states: whatever is pressed darkens and sinks a pixel (translate, so it adds to a transform such as Exit's centring).
+   Last in the file, so a press shows over a selected row or device too. */
+:is(.button, .card):active:not([disabled]) { translate: 0 1px; }
+.button:active:not([disabled]), button.icon:active, .devices a:active, .list :is(a, button):active { background: var(--border); }
+.button.primary:active:not([disabled]) { background: color-mix(in srgb, var(--accent) 78%, #000); border-color: color-mix(in srgb, var(--accent) 78%, #000); color: var(--on-accent); }
+.card:active { border-color: var(--accent); }
+.link:active { color: var(--accent); }
+.pin:active { scale: 0.92; }

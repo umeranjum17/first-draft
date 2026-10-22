@@ -219,8 +219,16 @@ function canvas(o, device) {
   const zoom = el('span', { class: 'muted zoom' });
   const pick = el('select', { 'aria-label': 'Option' }, ...design.options.map((x) => el('option', { value: x.n, selected: x === o ? '' : undefined }, `Option ${x.n} · ${x.label}`)));
   pick.onchange = () => { location.hash = `#/o/${pick.value}/${dev}`; };
+  // Under 860px (view.css) Fullscreen moves into the More menu, so Play is the one primary in the row.
+  const more = el('button', { type: 'button', class: 'button more', popovertarget: 'more-menu', 'aria-label': 'More' }, '⋯');
+  const menu = el('div', { id: 'more-menu', class: 'menu', popover: '' }, link(`#/o/${o.n}/full`, 'Fullscreen', 'button'));
+  menu.addEventListener('beforetoggle', (e) => {
+    if (e.newState !== 'open') return;
+    const b = more.getBoundingClientRect();
+    Object.assign(menu.style, { top: `${b.bottom + 6}px`, right: `${innerWidth - b.right}px` });
+  });
   const tools = el('div', { class: 'tools' }, pick, devices(`#/o/${o.n}`, dev), zoom,
-    ...(o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button'), link(`#/o/${o.n}/play/${dev}`, 'Play', 'button primary')]));
+    ...(o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button full-link'), more, menu, link(`#/o/${o.n}/play/${dev}`, 'Play', 'button primary')]));
 
   const options = el('ol', { class: 'list' }, ...design.options.map((x) => el('li', {}, el('a', { href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'page' : undefined },
     el('span', { class: 'num' }, String(x.n)), el('span', { class: 'name' }, x.label), el('span', { class: 'muted' }, x.error ? 'cannot open' : pinsFor(x).length ? plural(pinsFor(x).length, 'comment') : '')))));
@@ -324,4 +332,5 @@ window.addEventListener('message', (e) => {
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') leaveFull(); });
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveFull(); });
 window.addEventListener('hashchange', render);
+document.addEventListener('touchstart', () => {}, { passive: true }); // iOS Safari shows :active (the press states) only on a page that listens for touches
 render();
