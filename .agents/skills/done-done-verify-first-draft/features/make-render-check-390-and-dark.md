@@ -15,3 +15,4 @@ Harness: a shell runs the CLI with a throwaway FIRST_DRAFT_HOME and the model ke
 3. Capture: open `<tmp>/page.html` at 390 and 1280, in light and in dark, and save the 390 screenshots in light and dark plus the scroll width (`document.documentElement.scrollWidth` is 390 at the 390 viewport) to `$DONE_DONE_EVIDENCE_ROOT`; keep the 1280 shots outside it, since they do not show the phone claim.
 4. Stop what you started.
 5. The light capture shows a light page and the dark capture a dark one; the check fails done when they paint the same.
+6. A dark-first named style (`--direction oled-neon`, `cyberpunk`, `dark-glass`, `aurora`, `vaporwave`) is the exception: its page is dark in the light capture too, and the check fails done when the page paints a light background (the same paint in light and in dark is right for it). The 390 light capture of such a page shows a dark page.

@@ -1,6 +1,6 @@
 // The render check: a page is rendered once headless at 390px, in light and in dark, and the
 // two facts that break a landing page on a phone are read off that render — the page must fit
-// 390px, and it must have a dark theme. The browser is the one already on the machine: no
+// 390px, and it must have a dark theme (or, for a dark-first style, be dark). The browser is the one already on the machine: no
 // dependency is added and no browser is bundled. With no browser the check is skipped, never
 // failed.
 import { spawn } from 'node:child_process';
@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const PHONE = 390; // the width a page must fit
+const DARK_BELOW = 0.18; // a page background lighter than this (0 black, 1 white) is a light page
 const NAMES = ['google-chrome-stable', 'google-chrome', 'chromium', 'chromium-browser', 'chrome', 'chromium-headless-shell', 'headless-shell'];
 const SPOTS = ['/opt/google/chrome/chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/lib/chromium/chromium', '/snap/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
 
@@ -78,6 +79,17 @@ const measurePage = () => {
   return { scrollWidth: Math.max(d.scrollWidth, document.body ? document.body.scrollWidth : 0), count: inner.length || off.length, worst: plain(inner[0] ?? off[0] ?? { tag: '', id: '', cls: '', right: 0 }), causes };
 };
 
+// How light the page's own background is, 0 (black) to 1 (white): the body's, else the root's, else the browser's white.
+const pageLightness = () => {
+  const rgba = (el) => {
+    const v = getComputedStyle(el).backgroundColor, n = (v.match(/[\d.]+/g) ?? []).map(Number), k = v.startsWith('color(') ? 255 : 1;
+    return [n[0] * k, n[1] * k, n[2] * k, n.length > 3 ? n[3] : 1];
+  };
+  const c = [rgba(document.body), rgba(document.documentElement)].find((x) => x[3] > 0.5) ?? [255, 255, 255, 1];
+  const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+};
+
 // What the page paints: every element's colours and box, hashed.
 const paintSignature = () => {
   let h = 2166136261;
@@ -94,7 +106,7 @@ const paintSignature = () => {
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 class Renderer {
-  constructor(bin, onWarn) { this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
+  constructor(bin, onWarn, dark) { this.dark = dark; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
@@ -135,8 +147,9 @@ class Renderer {
   async read(c) {
     const measured = await this.eval(c, `(${measurePage.toString()})()`);
     const sig = await this.eval(c, `(${paintSignature.toString()})()`);
+    const lightness = await this.eval(c, `(${pageLightness.toString()})()`);
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
-    return { measured, sig, png: Buffer.from(shot.data, 'base64') };
+    return { measured, sig, lightness, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -184,7 +197,11 @@ class Renderer {
       const worst = light.measured.worst.tag ? light.measured.worst : null;
       errors.push({ source: 'render', message: `the page is ${light.measured.scrollWidth}px wide on a ${PHONE}px phone; it must fit ${PHONE}px. ${light.measured.count} element(s) overflow, the widest is ${worst ? name(worst) : 'an unknown element'} at ${worst ? worst.right : light.measured.scrollWidth}px. The overflow comes from ${light.measured.causes.map(name).join(', ') || 'the elements above'}: wrap a pre or table in a container with overflow-x:auto, write grid columns as minmax(0,1fr) instead of 1fr, give grid and flex children min-width:0, and let long text wrap. Then call done again.` });
     }
-    if (light.png.equals(dark.png) || light.sig === dark.sig) {
+    if (this.dark) {
+      // A dark-first style is dark by default, so the page is dark in light and in dark: a page that renders light is the failure, and the same paint in both is right.
+      const light_ = light.lightness > DARK_BELOW ? 'light' : dark.lightness > DARK_BELOW ? 'dark' : null;
+      if (light_) errors.push({ source: 'render', message: `the style is dark-first but the page paints a light background in ${light_} (background lightness ${(light_ === 'light' ? light : dark).lightness.toFixed(2)} of 1). Make the page dark by default: a near-black page background with light text on :root, no light palette and no override that turns the background light, set color-scheme: dark, then call done again.` });
+    } else if (light.png.equals(dark.png) || light.sig === dark.sig) {
       errors.push({ source: 'render', message: `the page has no real light and dark themes: it paints the same in light and in dark. Put a light palette in :root custom properties (a light background, dark text), override every colour in a @media (prefers-color-scheme: dark) block with a dark palette (a dark background, light text), and set color-scheme: light dark, then call done again.` });
     }
     return errors;
@@ -192,14 +209,15 @@ class Renderer {
 }
 
 // The render check for one run: the browser starts with the first done and stops with the run.
-export const renderCheck = (onWarn = () => {}) => {
+// dark: the named style is dark-first, so the page must be dark in both renders instead of different in each.
+export const renderCheck = (onWarn = () => {}, { dark = false } = {}) => {
   const bin = findBrowser();
   if (!bin) {
     const warning = `no Chrome or Chromium was found on this machine, so the ${PHONE}px and dark-theme render check was skipped`;
     onWarn(warning);
     return { status: 'skipped', warning, verify: async () => [], close: () => {} };
   }
-  const render = new Renderer(bin, onWarn);
+  const render = new Renderer(bin, onWarn, dark);
   return {
     get status() { return render.state === 'ready' ? 'checked' : 'skipped'; },
     get warning() { return render.warning; },
