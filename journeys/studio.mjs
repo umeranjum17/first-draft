@@ -5,7 +5,7 @@
 // Captures go to $DONE_DONE_EVIDENCE_ROOT (or the first argument). Chrome is $CHROME, else chromium or google-chrome on PATH.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -158,6 +158,15 @@ try {
     await click('.bar a');
     assert.match(await evaluate('location.hash'), /^#\/o\/2\/(phone|desktop)$/);
   }
+  // done-done's step record: what was driven, from where, and what a user sees at the end.
+  const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
+  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
+    start: 'first-draft-axi view of a two-option design with two comments, no agent set, in headless Chromium',
+    steps: ['At 1280 and 390, light and dark, open Option 1 in the Studio', 'At 1280 press Hide brief: the column and composer fold away and the canvas widens; press Show brief: they come back',
+      'At 390 see the phone mock alone and the brief docked at the bottom, with no Hide brief button', 'Switch Phone/Desktop and back', 'Click a comment in the column: its pin opens',
+      'At 1280 fold the column, switch device: it stays folded; show it again', 'Open Option 2 (column list at 1280, the select at 390)', 'Type a brief and press Send with no agent set',
+      'Press Play, then Exit'],
+    result: 'Hide brief folds the column and Show brief restores it at 1280; at 390 the brief is docked at the bottom; Send shows the set-up hint; Play opens on the device and Exit returns' }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: Brief collapse, docked composer, device switch, pins, option switch, Send hint, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();
