@@ -1,118 +1,94 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/logo.svg" width="72" height="72" alt="first-draft logo">
-</p>
+# <img src="docs/logo.svg" width="32" height="32" alt=""> first-draft
 
-<h1 align="center">first-draft</h1>
+**A CLI that turns one prompt into several HTML design options.**
 
-<p align="center"><a href="https://umeranjum17.github.io/first-draft/">Visit the landing page</a></p>
+For developers and coding agents: pick a design **before writing app code**.
 
-<p align="center"><b>Write one prompt and get several first drafts of a screen.</b><br>Each option is a self-contained HTML page that opens with no network. Compare them at phone and desktop width, click through their screens, and read the comments people pinned on them.</p>
+[![First Draft's viewer showing one generated notes-app option at desktop width, with the Desktop and Phone switch, Fullscreen and Play](docs/media/hero.webp)](https://umeranjum17.github.io/first-draft/)
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/grid.webp" width="760" alt="The view: three options of a notes app sign-in page side by side">
-</p>
+### Start in three steps
 
-## Install
+Node **22.18+** and your own model subscription or API key. Three steps:
 
-Node 22.18 or later.
+1. `npm install -g first-draft-axi`
+2. `first-draft-axi init --agent byokit:codex --model YOUR_MODEL`
+3. `first-draft-axi make "A notes app" --out notes.html && first-draft-axi view notes.html`
 
-1. Install the command:
+Replace `YOUR_MODEL` with a model your installed, signed-in Codex CLI supports. [Other routes ↓](#models) · Open the URL that `view` prints. Stop it with Ctrl+C.
 
-   ```sh
-   npm install -g first-draft-axi
-   ```
+[Landing page](https://umeranjum17.github.io/first-draft/) · [Agent skill](skills/first-draft-axi/SKILL.md), to hand the CLI to your coding agent · [CLI reference ↓](#reference)
 
-2. Pick the model, on a plan or key you already have, and check it with no paid call:
+## Choose a direction, not just a screenshot
 
-   ```sh
-   first-draft-axi init --agent byokit:<route> --model <model>
-   first-draft-axi doctor
-   ```
+- **Make options.** Add `--count 3` to the `make` command to get three directions. Each is a self-contained HTML file, not app code, and with no `--direction` each takes a different named style (`first-draft-axi styles` lists them).
+- **Open one on the canvas.** Studio shows one option at a time at phone (390px) or desktop (1280px), switched with Phone and Desktop, beside its options, comments and a brief for your next change.
+- **Look closer.** Fullscreen gives the option the whole window; Play is one tap away.
+- **Refine the one you like.** A follow-up prompt writes a new option; your original stays untouched.
 
-3. Make three options and open them:
+![First Draft's grid of three notes-app options from one prompt, each in a different style](docs/media/grid.webp)
 
-   ```sh
-   first-draft-axi make "A sign-in page for a notes app" --out mocks/sign-in.html --count 3
-   first-draft-axi view mocks/sign-in.html
-   ```
+<img src="docs/media/canvas-390.webp" width="200" alt="The viewer in a 390px-wide window: the option on a phone canvas">
 
-   `view` prints the url to open. It keeps serving until you stop it.
-
-Run `first-draft-axi --help` for every command and flag.
-
-## What it does
-
-The screenshots below show three options from one real `make --count 3` run on `MiniMax-M3.1-Flash-Preview`; the pin's comment was written by hand.
-
-`make` turns the prompt into 1 to 5 options (`--count`). With `--count 3` and `--out mocks/sign-in.html` it writes `mocks/sign-in-1.html` to `mocks/sign-in-3.html`. Each page carries no scripts and its own content security policy, so it loads nothing from the network. If a design names a remote file, `make` lists it under `blocked_remote` and that part shows empty. When Chrome or Chromium is installed, `make` also renders each page headless at 390px, in light and in dark, and the page is not accepted until it fits 390px with no sideways scroll and paints differently in dark (a dark-first style such as `oled-neon` must instead paint a dark page in both); `render_check` in the output says `checked` or `skipped`, and with no browser it skips with one warning line.
-
-The look is yours to pick. `--direction <style-id>` gives every option one of 26 named styles, each a committed look with its own tokens (`first-draft-axi styles` lists them), and `--direction "<words>"` takes your own description, a brand or a reference. With `--count` above 1 and no direction, each option takes a different style, so the options differ in kind and not only in layout. No other house style is added: the engine's own design method does the rest.
-
-`refine` takes one option and a follow-up prompt, for example `first-draft-axi refine mocks/sign-in-2.html "warmer palette, add an empty state" --out mocks/sign-in-2-warm.html`, and writes the result as a new option; the original is untouched. It runs the same model as `make`; keep the change short.
-
-`view` shows a design: the `--out` path given to `make`, a folder of options, or option files.
-
-- **Grid**: every option side by side. Open one to see it on the canvas.
-- **Canvas**: the option at phone width (390) or desktop width (1280), switched with Phone and Desktop, beside a column with the design's options, the option's comments and a brief that becomes the `refine` command for your next change. Fullscreen and Play are one tap away.
-
-  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/canvas-1280.webp" width="760" alt="One option on the canvas: a phone frame at 390 and a desktop frame at 1280">
-
-  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/canvas-390.webp" width="260" alt="The canvas on a phone: the phone frame comes first, the desktop frame below it">
-
-- **Play**: click through the option's screens like a prototype, with a Back button, a button per screen and a phone/desktop switch.
-
-  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/play.webp" width="760" alt="Play: the second option's signed-in screen, reached from its sign-in screen, with Back and the screen buttons">
-
-- **Comment pins**: numbered pins over the canvas and Play, read-only. Click or tap one to read it.
-
-  <img src="https://raw.githubusercontent.com/umeranjum17/first-draft/main/docs/media/pin.webp" width="760" alt="A comment pin opened on the phone and desktop frames">
-
-Each option opens at `<url>#/o/<n>`; add `/full` for Fullscreen or `/play` for Play.
-
-Pins come from `<design>.comments.json` next to the design (`mocks/sign-in.html` reads `mocks/sign-in.comments.json`): an array of `{"option": 1, "x": 0.4, "y": 0.2, "text": "..."}`, with `x` and `y` as fractions of the frame. No file, no pins; a file that is not valid is named in a notice.
-
-`view` listens on this machine's tailnet address (from `tailscale ip -4`) on port 4430, so any of your devices can open it; `--host` and `--port` change that. Options render from the next port, a second origin, in a frame that may run scripts but loads and sends nothing over the network.
+The screenshots come from one real run of `first-draft-axi make "A notes app for Umer with a sign-in screen and a notes dashboard" --count 3`, with no editing. Options 1 and 3 hit the engine's turn cap, and `make` said so: they hold the screens written so far. The large screenshot at the top is option 1. Generating needs your chosen model; viewing does not call it. These are prototypes, not production apps.
 
 ## Models
 
-Every model call goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), on the model you choose. first-draft never picks one, and no route falls back to another account or model. `first-draft-axi init` with no flags lists the routes that are ready.
+Every generation goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), using the route and model **you** choose. First Draft never silently changes accounts or models.
 
-- **Your subscription CLI**: `byokit:codex` runs your installed, signed-in CLI with your normal home folder, and never copies its login.
-- **A plan key or an api key**: a plan-key route such as `byokit:zai:plan_key`, or an api-key route such as `byokit:minimax:key` (its model defaults to `MiniMax-M3.1-Flash-Preview` when `init` gets no `--model`). The key comes from the environment variable `doctor` names, goes only to BYOKit for the call, and is never saved.
+| Use what you have | Route for `init --agent` |
+| --- | --- |
+| Installed, signed-in Codex CLI | `byokit:codex` |
+| A plan key, such as Z.ai | `byokit:zai:plan_key` |
+| An API key, such as MiniMax | `byokit:minimax:key` |
 
-The choice lives in `$FIRST_DRAFT_HOME/config.json` (default `~/.first-draft/config.json`):
+Run `first-draft-axi init` with no flags to list ready routes. Set your route with `init --agent … --model …`, then run `first-draft-axi doctor` to check readiness **without a paid call**. MiniMax defaults to `MiniMax-M3.1-Flash-Preview` if `init` gets no `--model`.
 
-```json
-{ "agent": "byokit:<route>", "agent_config": { "byokit:<route>": { "model": "<model id>" } }, "agent_timeout": "10m" }
-```
+Subscription calls use your CLI's normal login without copying it. Key routes read the environment variable named by `doctor`; keys are never saved in First Draft's config. Config lives at `$FIRST_DRAFT_HOME/config.json`, default `~/.first-draft/config.json`.
 
-## With sign-off (optional)
+## Reference
 
-first-draft works on its own. If you use [sign-off](https://github.com/umeranjum17/sign-off) to get answers from people, `post` puts a design on a sign-off board as a pick-one card:
+Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pinned engine and model boundary.
+
+<details>
+<summary><strong>Files, refinement and viewer routes</strong></summary>
+
+`make --count N` accepts 1–5 options. `--out notes.html --count 3` writes `notes-1.html` through `notes-3.html`. Pass the original `notes.html` path to `view`; it finds those numbered options. You can also pass a folder or individual HTML files.
 
 ```sh
-first-draft-axi post mocks/sign-in.html --title "Pick the sign-in layout" --option a=Calm --option b=Bold --option c=Dense --recommend a
+first-draft-axi refine \
+  notes-2.html \
+  "Warmer palette" \
+  --out notes-warm.html
+first-draft-axi view \
+  notes-2.html notes-warm.html
 ```
 
-It copies the options into the board's `mocks/` (the nearest `.sign-off/`, or `--board`), starts `view` if it is not already serving them, and runs `sign-off-axi post`. Each option gets a tappable Open link under its mock, to its Play url; the same urls also end the card text as `Open in first-draft:`, for boards that do not draw the link. A link inside a mock does not work: the board shows mocks in a sandbox that blocks it. `post` needs `sign-off-axi` 0.5.0 or newer on the PATH.
+`refine` uses the configured model and writes a new file. Keep the change short.
 
-Journeys, tests and demos never ask for a pick: post with `--evidence --media shot.png` instead of `--recommend`. That files an Evidence card (the title, each option's Play url, your screenshots) and no Decide card.
+With Chrome or Chromium installed, `make` also renders each page at 390px, in light and in dark, and does not accept it until it fits with no sideways scroll and paints differently in dark (a dark-first style such as `oled-neon` must instead paint a dark page in both). `render_check` in the output says `checked` or `skipped`.
 
-first-draft needs nothing from Firstmate: inside it or outside it, it runs on its own config.
+The viewer's grid links to each canvas at `#/o/<n>`; add `/phone` or `/desktop` to pick the device, `/full` for Fullscreen or `/play` for Play.
 
-## Agent skill
+</details>
 
-`skills/first-draft-axi/SKILL.md` tells a coding agent how to drive the CLI.
+<details>
+<summary><strong>Networking, sandboxing and comment pins</strong></summary>
+
+`view` defaults to the machine's tailnet address (`tailscale ip -4`), port 4430. Use `--host` and `--port` to change it; `--host 127.0.0.1` keeps the viewer on this machine. Option frames use the next port, a separate origin.
+
+Generated files carry no scripts and their own content security policy. The viewer adds a sandboxed runtime for screen navigation, but options load and send nothing over the network. Remote assets named by a design are listed as `blocked_remote` and show empty.
+
+Comment pins are read-only. Put `notes.comments.json` next to `notes.html`, with an array such as `[{"option":1,"x":0.4,"y":0.2,"text":"More space here"}]`. Coordinates are fractions of the frame. Tap a numbered pin to read it. No file means no pins; an invalid file produces a notice.
+
+</details>
 
 ## Develop
 
 ```sh
 npm install
-npm test   # builds, then runs the real engine loop against local stand-ins; no paid call
+npm test
 ```
 
-[ENGINE.md](ENGINE.md) has the pinned design engine, its source and the model boundary. A change to a command, a default or the view updates this README, the skill and the screenshots in the same PR.
+Tests build and exercise the engine loop against local stand-ins, with no paid model call. A command, default or viewer change updates this README, the agent skill and the screenshots together.
 
-## License
-
-MIT. See `LICENSE`.
+MIT · [License](LICENSE)
