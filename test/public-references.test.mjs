@@ -51,8 +51,26 @@ else {
  let calls=[];
  if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
+ else if(tools.some(t=>t.name==='define_redesign_plan')){
+  if(JSON.parse(args[args.indexOf('--json-schema')+1]).properties.calls.maxItems!==1||process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS!=='8192')throw Error('structural single-response budget missing');
+  const q=JSON.parse(messages.at(-1).content),bad=process.env.FD_PLAN_BAD||(process.env.FD_PLAN_REPAIR&&q.attempt===1?'uri':'');
+  const css=${JSON.stringify(REDESIGN_PAGE.match(/<style>([\s\S]*?)<\/style>/)[1])}+(process.env.FD_PLAN_LARGE?'/*'+'x'.repeat(13000)+'*/':'')+(bad==='uri'?'.icon{background:url("data:image/svg+xml,%3Csvg/%3E")}':bad==='size'?'/*'+'x'.repeat(21000)+'*/':bad?'#screen-1{color:red}':'');
+  calls=[call('define_redesign_plan',{title:'Umer projects',css,notes:'Use the same metric and value classes everywhere'})];
+ }
+ else if(tools.some(t=>t.name==='write_redesign_screen')){
+  const q=JSON.parse(messages.at(-1).content),first=q.attempt===1;if(q.screen.id==='screen-2'&&!q.component_example?.html.includes('id="screen-1"'))throw Error('accepted component example missing');if(!args[args.indexOf('--system-prompt')+1].includes('all-state desktop board'))throw Error('responsive source preservation rule missing');
+  let page=process.env.FD_REVIEW_ALWAYS_FAIL?${JSON.stringify(BAD_SEMANTICS)}:first&&q.screen.id==='screen-1'?${JSON.stringify(BAD_STRUCTURE)}:first?${JSON.stringify(BAD_SEMANTICS)}:${JSON.stringify(REDESIGN_PAGE)};
+  let html=page.match(new RegExp('<section data-oc-screen id="'+q.screen.id+'">[\\\\s\\\\S]*?<\\\\/section>'))[0];
+  if(!q.screen.links.some(l=>l.target&&l.target!==q.screen.id))html=html.replace(/<a href="#[^"]+">([\\s\\S]*?)<\\/a>/g,'$1');
+  if(!q.previous_attempts&&!process.env.FD_REVIEW_ALWAYS_FAIL&&!process.env.FD_EXTRA_SCREEN&&q.screen.id==='screen-1'&&q.attempt>1){if(!q.feedback.some(f=>f.includes('clipped text'))||!q.feedback.some(f=>f.includes('Redesign semantic metrics')))throw Error('layout and semantic feedback were not aggregated');if(q.attempt===3&&!q.feedback.some(f=>f.includes('Remove diagnostic provenance notes')))throw Error('third attempt lost second-attempt feedback');if(q.attempt===2)html=html.replace('</section>','<p>(title cut off in source)</p></section>');}
+  if(process.env.FD_EXTRA_SCREEN)html+='<section data-oc-screen id="extra">Extra screen</section>';
+  calls=[call('write_redesign_screen',{id:q.screen.id,html})];
+ }
+ else if(tools.some(t=>t.name==='assess_reference_redesign')){if(!args[args.indexOf('--system-prompt')+1].includes('optional and not penalized'))throw Error('visual caption rubric missing');calls=[call('assess_reference_redesign',{verdict:'pass',checks:['reference-craft','metrics','coherence','content','responsive'].map((name,i)=>({name,passed:!(process.env.FD_VISUAL_BAD&&i===0),detail:'Fixture transport check only'}))})];}
  else if(tools.some(t=>t.name==='assess_redesign')) {
-  const bad=raw.includes('Remaining 3 tasks remaining')||process.env.FD_REVIEW_ALWAYS_FAIL;
+  if(Number(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS)!==8192)throw Error('semantic review reasoning budget missing');
+  const q=JSON.parse(messages.at(-1).content),system=args[args.indexOf('--system-prompt')+1];if(q.scope==='single-screen'){if(!system.includes('Do not ask for other screens content')||!system.includes('optional and not penalized')||!system.includes('do not restyle it')||!q.source_screen.id||typeof q.frozen_shared_style!=='string')throw Error('own-source/frozen-style/caption rubric missing');if((q.exported_html.match(/data-oc-screen/g)||[]).length!==1)throw Error('review not scoped to one screen');}
+  const bad=q.exported_html.includes('Remaining 3 tasks remaining')||q.exported_html.includes('magenta')||process.env.FD_REVIEW_ALWAYS_FAIL;
   calls=[call('assess_redesign',{checks:process.env.FD_REVIEW_MALFORMED?[{name:'metrics',passed:'yes',detail:'invalid'}]:[{name:'metrics',passed:!bad,detail:bad?'screen-1 metric: use one number and one label, not Remaining 3 tasks remaining':'Each metric has one number and one label'},{name:'tokens',passed:!bad,detail:bad?'screen-2 metric: remove magenta and 37px overrides; use shared tokens':'Both screens share global tokens'}]})];
  }
  else {
@@ -79,9 +97,12 @@ else {
   for(const shot of manifest.screenshots){const b=readFileSync(join(captured.cache,'..',shot.file));assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);}
   const redesignOut=join(project,'redesigned');
   const redesigned=JSON.parse((await run('redesign',origin+'/product.html','Make the projects clearer','--no-references','--out',redesignOut,'--max-pages','2')).stdout);
+  await promisify(execFile)(process.execPath,['--input-type=module','-e',`import assert from 'node:assert/strict';import {checkRedesign} from ${JSON.stringify(new URL('../src/redesign-check.mjs',import.meta.url).href)};await assert.rejects(checkRedesign({html:'<h1>Umer</h1>',agent:'byokit:claude',model:'claude-opus-5-5',timeoutMs:1}),/semantic review timed out after 1 ms/);`],{env,cwd:project,timeout:30000,maxBuffer:100000});
   assert.equal(redesigned.made.files.length,1);
   assert.equal(redesigned.made.render_check,'checked');
-  assert.equal(redesigned.made.files[0].self_check.reviews,2);
+  assert.equal(redesigned.made.files[0].self_check.reviews,5);
+  assert.equal(redesigned.made.files[0].source,'per-screen HTML');assert.equal(redesigned.made.files[0].tools.define_redesign_plan,1);assert.equal(redesigned.made.files[0].tools.write_redesign_screen,5);assert.deepEqual(redesigned.made.files[0].self_check.screen_attempts.map(p=>p.attempts),[3,2]);assert.equal(redesigned.made.files[0].self_check.screen_reviews.length,2);
+  const third=JSON.parse(readFileSync(join(redesignOut,'writer-option-1/screen-1-attempt-3.json')));for(const p of [/clipped text/,/Redesign semantic metrics/,/Remove diagnostic provenance notes/])assert.ok(third.feedback_sent.some(f=>p.test(f)),'third response gets every earlier finding');
   assert.ok(redesigned.made.files[0].self_check.semantic.every(c=>c.passed));
   assert.match(readFileSync(redesigned.made.files[0].file,'utf8'),/© Umer/,'copyright text is not emoji filler');
   assert.doesNotMatch(readFileSync(redesigned.made.files[0].file,'utf8'),/magenta|✨|clipped metric label/);
@@ -97,25 +118,31 @@ else {
   assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
   const sourceDir=join(project,'export');mkdirSync(sourceDir);
   writeFileSync(join(sourceDir,'index.html'),'<title>Umer export</title><h1>7 active projects</h1>');
+  for(const [bad,pattern] of [['1',/screen-specific/],['uri',/including data: URLs/],['size',/1-20000 characters/]]){env.FD_PLAN_BAD=bad;const badPlan=join(project,'bad-plan-'+bad);await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',badPlan),e=>/after 2 attempts/.test(e.stdout)&&pattern.test(e.stdout));const planDir=join(badPlan,'writer-option-1');assert.equal(JSON.parse(readFileSync(join(planDir,'shared-plan-attempt-2.json'))).passed,false);assert.equal(existsSync(join(planDir,'shared-plan-attempt-3.json')),false);assert.equal(existsSync(join(badPlan,'option-1.html')),false);}delete env.FD_PLAN_BAD;
+  env.FD_PLAN_LARGE='1';env.FD_PLAN_REPAIR='1';const largeOut=join(project,'large-shared-plan'),large=JSON.parse((await run('redesign',sourceDir,'Clearer','--no-references','--out',largeOut)).stdout);assert.equal(large.made.files[0].self_check.plan_responses,2);const acceptedPlan=JSON.parse(readFileSync(join(largeOut,'writer-option-1/shared-plan.json')));assert.ok(acceptedPlan.css.length>12000&&acceptedPlan.css.length<20000);assert.doesNotMatch(acceptedPlan.css,/url\s*\(/i);delete env.FD_PLAN_LARGE;delete env.FD_PLAN_REPAIR;
   await run('redesign',sourceDir,'Clearer projects','--no-references','--out',join(project,'local-redesign'));
   assert.equal(JSON.parse(readFileSync(join(project,'local-redesign/sources/sources.json'))).pages[0].url,'/index.html');
   await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
   await assert.rejects(run('redesign',origin+'/login','Clearer','--no-references','--out',redesignOut),e=>/Login/.test(e.stdout));
+  env.FD_EXTRA_SCREEN='1';const extraOut=join(project,'extra-screen');await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',extraOut),e=>/failed after 3 attempts.*Expected exactly/s.test(e.stdout));assert.equal(existsSync(join(extraOut,'writer-option-1/screen-1-attempt-4.json')),false);assert.equal(existsSync(join(extraOut,'option-1.html')),false);delete env.FD_EXTRA_SCREEN;
+  await promisify(execFile)(process.execPath,['--input-type=module','-e',`import assert from 'node:assert/strict';import {checkRedesign} from ${JSON.stringify(new URL('../src/redesign-check.mjs',import.meta.url).href)};const r=await checkRedesign({html:'<section id="screen-1" data-oc-screen><b>0</b><span>Review</span><small>Nothing to review</small></section>',agent:'byokit:claude',model:'claude-opus-5-5',screen:{id:'screen-1',title:'Review',text:'0 Review Nothing to review'},sharedStyle:':root{--bg:white}',sourceIntent:'Preserve this source screen caption'});assert.ok(r.checks.every(c=>c.passed));`],{env,cwd:project,timeout:30000,maxBuffer:100000});
   const generationInputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8');
-  assert.match(generationInputs,/7 active projects/);assert.match(generationInputs,/screen-2/);assert.match(generationInputs,/Missing navigation/,'the real done loop rejected and repaired a lost source edge');
-  for(const pattern of [/clipped text/,/Remove emoji filler/,/Redesign semantic metrics/,/Redesign semantic tokens/])assert.match(generationInputs,pattern,'actual done-loop feedback drives structural and semantic repairs');
+  assert.match(generationInputs,/7 active projects/);assert.match(generationInputs,/screen-2/);assert.match(generationInputs,/Never put diagnostic\/provenance notes/);assert.match(generationInputs,/source-present charts/);assert.match(generationInputs,/Missing navigation/,'the real per-screen writer rejected and repaired a lost source edge');
+  for(const pattern of [/Expected exactly 1 distinct/,/clipped text/,/Remove emoji filler/,/Remove diagnostic provenance notes/,/Redesign semantic metrics/,/Redesign semantic tokens/])assert.match(generationInputs,pattern,'actual per-screen feedback drives structural and semantic repairs');
   env.FD_REVIEW_MALFORMED='1';
   const refused=join(project,'invalid-review');
   await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',refused),e=>/invalid redesign semantic check/.test(e.stdout));
   assert.equal(existsSync(join(refused,'option-1.html')),false);delete env.FD_REVIEW_MALFORMED;
   const reviewCount=()=>readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>t.name==='assess_redesign')).length;
   const beforeReviews=reviewCount();env.FD_REVIEW_ALWAYS_FAIL='1';
-  await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',refused),e=>/failed after 3 versions/.test(e.stdout));
-  assert.equal(reviewCount()-beforeReviews,3,'semantic review is capped at three versions');delete env.FD_REVIEW_ALWAYS_FAIL;
+  await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',refused),e=>/failed after 3 attempts/.test(e.stdout));
+  assert.equal(reviewCount()-beforeReviews,3,'a persistently failing screen stops at the three-attempt contract');assert.equal(existsSync(join(refused,'writer-option-1/screen-1-attempt-4.json')),false);assert.equal(existsSync(join(refused,'option-1.html')),false);delete env.FD_REVIEW_ALWAYS_FAIL;
+  const budgetOut=join(project,'remaining-budget'),budgetBefore=reviewCount();env.FD_REVIEW_ALWAYS_FAIL='1';await assert.rejects(run('redesign',sourceDir,'Repair prior visual failure','--no-references','--out',budgetOut,'--used-screen-attempts','1','--used-plan-attempts','1'),e=>/failed after 3 attempts/.test(e.stdout));delete env.FD_REVIEW_ALWAYS_FAIL;assert.equal(reviewCount()-budgetBefore,2,'only two screen responses remain');for(const f of ['shared-plan-attempt-2.json','screen-1-attempt-2.json','screen-1-attempt-3.json'])assert.ok(existsSync(join(budgetOut,'writer-option-1',f)));for(const f of ['shared-plan-attempt-1.json','shared-plan-attempt-3.json','screen-1-attempt-1.json','screen-1-attempt-4.json'])assert.equal(existsSync(join(budgetOut,'writer-option-1',f)),false);for(const [flag,n]of [['--used-screen-attempts','3'],['--used-plan-attempts','2']])await assert.rejects(run('redesign',sourceDir,'Repair','--out',budgetOut,flag,n),e=>/budgets cannot be increased/.test(e.stdout));
   assert.ok(!requests.some(r=>r.url==='/never.js'));
   const before=requests.length;
   assert.equal(JSON.parse((await run('references','--like',origin+'/','--capture')).stdout).reference_capture.cached,true);
   assert.equal(requests.length,before,'fresh project cache makes no site calls');
+  const brokenBrowser=join(dir,'bin','broken-browser');writeFileSync(brokenBrowser,`#!${process.execPath}\nprocess.stderr.write('synthetic browser startup failure\\n');process.exit(7);`,{mode:0o700});env.FIRST_DRAFT_CHROME=brokenBrowser;await assert.rejects(run('references','--like',origin+'/browser-startup','--capture'),e=>/browser exited before it was ready/.test(e.stdout)&&e.stdout.includes(brokenBrowser)&&/synthetic browser startup failure/.test(e.stdout));delete env.FIRST_DRAFT_CHROME;
   for(const [path,pattern] of [['/blocked',/robots.txt disallows/],['/redirect',/public HTTPS/],['/cross-origin',/redirect left the source site/],['/?secret=x',/query strings/],['/huge',/byte cap/],['/slow',/timeout|aborted/i],['/no-terms',/permission is unclear/],['/login',/Login\/challenge/]]){
     await assert.rejects(run('references','--like',origin+path,'--capture'),e=>{assert.match(e.stdout,pattern);return true;});
   }
@@ -127,6 +154,8 @@ else {
   assert.ok(!requests.some(r=>['/blocked','/specific','/never.js','/never-frame'].includes(r.url)));
   assert.ok(requests.every(r=>!r.cookie&&!r.auth&&r.ua.includes('FirstDraftReference/1.0')),'all site requests are anonymous and polite');
   assert.ok(readdirSync(join(project,'.first-draft/refs')).length>=1);
+  const visualProbe=`import assert from 'node:assert/strict';import {reviewReferences} from ${JSON.stringify(new URL('../journeys/redesign-reference-check.mjs',import.meta.url).href)};const input={quality:[${JSON.stringify(join(captured.cache,'..',manifest.screenshots[0].file))}],diagnostics:[],captures:[{file:${JSON.stringify(join(captured.cache,'..',manifest.screenshots[1].file))},label:'fixture capture only'}],agent:'byokit:claude',model:'claude-opus-5-5'};if(process.env.FD_VISUAL_BAD)await assert.rejects(reviewReferences(input),/inconsistent visual benchmark/);else assert.equal((await reviewReferences(input)).verdict,'pass');`;
+  for(const bad of ['', '1'])await promisify(execFile)(process.execPath,['--input-type=module','-e',visualProbe],{env:{...env,FD_VISUAL_BAD:bad},cwd:project,timeout:30000,maxBuffer:100000});
   const out=join(project,'notes.html'),warm=join(project,'warm.html');
   const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--options','1','--out',out)).stdout);
   assert.equal(made.references.name,'Vercel');assert.equal(made.made.render_check,'checked');

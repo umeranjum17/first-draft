@@ -87,7 +87,7 @@ export async function imageSupport(route, model) {
 }
 
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
-export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [] }) {
+export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false }) {
   const problem = await check(route, model);
   if (problem) throw new Error(problem);
   if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
@@ -95,7 +95,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
     const { bin, account } = await launch(route);
     const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
     const schema = { type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
-      text: { type: 'string' }, calls: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
+      text: { type: 'string' }, calls: { type: 'array', ...(singleCall && { minItems: 1, maxItems: 1 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
     const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({
       system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });

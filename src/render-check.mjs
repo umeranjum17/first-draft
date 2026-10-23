@@ -171,19 +171,21 @@ export class Renderer {
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
-    let exited = false;
-    this.proc = spawn(this.bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--no-proxy-server', `--user-data-dir=${this.dir}`, '--remote-debugging-port=0', '--remote-allow-origins=*', 'about:blank'], { stdio: 'ignore' });
+    let exited = false, startupLog = '', spawnError;
+    const startupFailure = why => new Error(`${why} (${this.bin}): ${spawnError?.message || startupLog.trim() || 'no browser stderr'}`);
+    this.proc = spawn(this.bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--no-proxy-server', `--user-data-dir=${this.dir}`, '--remote-debugging-port=0', '--remote-allow-origins=*', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    this.proc.stderr.on('data', b => { startupLog = (startupLog + b.toString()).slice(-4000); });
     this.proc.on('exit', () => { exited = true; });
     process.once('exit', () => this.proc?.kill()); // Ctrl-C or a failed run must not leave the browser behind
-    this.proc.on('error', () => { exited = true; });
+    this.proc.on('error', e => { exited = true; spawnError = e; });
     const portFile = join(this.dir, 'DevToolsActivePort');
     let port = 0;
     for (let i = 0; i < 150 && !port; i++) {
       await new Promise((r) => setTimeout(r, 100));
-      if (exited) throw new Error('the browser exited before it was ready');
+      if (exited) throw startupFailure('the browser exited before it was ready');
       if (existsSync(portFile)) port = Number(readFileSync(portFile, 'utf8').split('\n')[0]);
     }
-    if (!port) throw new Error('the browser never opened its debugging port');
+    if (!port) throw startupFailure('the browser never opened its debugging port');
     const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
     const page = list.find((t) => t.type === 'page');
     if (!page) throw new Error('the browser opened no page to render in');
@@ -286,7 +288,8 @@ export class Renderer {
     }
     if (redesignPages) {
       const findings = await this.eval(this.client, `(${((pages) => {
-        const errors=[];
+        const errors=[],screens=[...document.querySelectorAll('[data-oc-screen]')];
+        if(screens.length!==pages.length||new Set(screens.map(e=>e.id)).size!==pages.length)errors.push('Expected exactly '+pages.length+' distinct screen section(s)');
         for(const p of pages) {
           const e=document.getElementById(p.id);
           if(!e?.hasAttribute('data-oc-screen')) { errors.push('Missing required screen '+p.id); continue; }
@@ -294,6 +297,7 @@ export class Renderer {
           for(const l of p.links) if(l.target && l.target!==p.id && !links.includes('#'+l.target)) errors.push('Missing navigation '+p.id+' -> '+l.target);
         }
         if(/\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/u.test(document.body.textContent)) errors.push('Remove emoji filler; use SVG icons or plain labels');
+        if(/\((?:title|rest of text) cut off in source\)/i.test(document.body.textContent))errors.push('Remove diagnostic provenance notes from product UI; keep readable source fragments without inventing completion');
         return [...new Set(errors)];
       }).toString()})(${JSON.stringify(redesignPages)})`);
       errors.push(...findings.map(message=>({source:'redesign',message})));
