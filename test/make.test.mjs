@@ -388,6 +388,8 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /Host export contract/);
   assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
   assert.match(sent, /in-page hash links/);
+  assert.match(sent, /ONE file.*390x844.*1280x800/);
+  assert.match(sent, /columns INSIDE each screen.*all other screens are hidden/);
   assert.match(sent, /refused if any tag is a <script> element.*on\* event-handler attribute.*javascript: URL/); // with no browser to draw JSX, the guard's exact refusals are stated
   assert.match(sent, /frontend-design-anti-slop/); // the engine's index of its method skills, design starters and scaffolds rides along
   assert.match(sent, /interaction-motion: Press, hover, focus and entrance motion/); // first-draft's own motion and press-state skill sits in that index

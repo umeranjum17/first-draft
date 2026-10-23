@@ -195,7 +195,13 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     let html;
     try { html = buildPreviewDocument(readFileSync(o.file, 'utf8'), { path: 'index.html' }); }
     catch (e) { return send(res, 500, 'text/plain', `${basename(o.file)} cannot be rendered: ${e.code ?? e.message}`); }
-    if (req.url.split('?')[1] === 'play') html = /<\/body>(?![\s\S]*<\/body>)/i.test(html) ? html.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => `${PLAY_BRIDGE}</body>`) : html + PLAY_BRIDGE;
+    const query = new URL(req.url, 'http://first-draft.invalid').searchParams, screen = query.get('screen');
+    if (screen !== null) {
+      if (!screen || screen.length > 200 || /[\u0000-\u0020\u007f]/.test(screen)) return send(res, 400, 'text/plain', 'screen must be an id of 1-200 characters without whitespace');
+      const escaped = screen.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+      html = html.replace(/<html\b(?:"[^"]*"|'[^']*'|[^>'"])*>/i, tag => tag.replace(/\sdata-oc-active-screen\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, '').slice(0, -1) + ` data-oc-active-screen="${escaped}">`);
+    }
+    if (query.has('play')) html = /<\/body>(?![\s\S]*<\/body>)/i.test(html) ? html.replace(/<\/body>(?![\s\S]*<\/body>)/i, () => `${PLAY_BRIDGE}</body>`) : html + PLAY_BRIDGE;
     send(res, 200, 'text/html; charset=utf-8', html, { 'content-security-policy': framePolicy(viewOrigin) });
   });
   await listen(view, port, host);

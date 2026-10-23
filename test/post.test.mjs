@@ -32,12 +32,15 @@ test('post copies the options to the board, links each to its Play route in a vi
   assert.equal(first.posted.view.started, true);
   assert.deepEqual(first.posted.options.map((o) => o.link), [1, 2].map((n) => `http://127.0.0.1:${port}/#/o/${n}/play`));
   assert.equal(readFileSync(join(dir, 'proj/.sign-off/mocks/x/option-2.html'), 'utf8'), MOCK('Option 2'));
+  assert.equal(first.posted.options[0].desktop, `http://127.0.0.1:${port}/#/o/1/play/desktop`);
+  assert.equal(first.posted.options[0].phone, `http://127.0.0.1:${port}/#/o/1/play/phone`);
   const args = readFileSync(join(dir, 'args'), 'utf8').split('\n');
   assert.deepEqual(args.slice(0, 1).concat(args.slice(2, 5)), ['post', '--type', 'design', '--title']);
   assert.ok(args.includes('b=mocks/x/option-2.html') && args.includes('b=Bold') && args.includes('b'), 'recommend 2 is option b');
   assert.ok(args.includes(`a=http://127.0.0.1:${port}/#/o/1/play`) && args.includes(`b=http://127.0.0.1:${port}/#/o/2/play`), 'each option gets its own --link');
   const tradeoff = args[args.indexOf('--tradeoff') + 1];
   assert.ok(tradeoff.includes(`Calm http://127.0.0.1:${port}/#/o/1/play`) && tradeoff.includes(`Bold http://127.0.0.1:${port}/#/o/2/play`));
+  assert.ok(tradeoff.includes(`Desktop ${first.posted.options[0].desktop}`) && tradeoff.includes(`Phone ${first.posted.options[0].phone}`));
   assert.match(await (await fetch(`http://127.0.0.1:${port}/`)).text(), /x-1/);
 
   const again = JSON.parse((await post(['--tradeoff', 'B is bolder.'])).stdout);
@@ -57,6 +60,7 @@ test('post copies the options to the board, links each to its Play route in a vi
   const evArgs = readFileSync(join(dir, 'args'), 'utf8').split('\n');
   assert.deepEqual(evArgs.slice(0, 4), ['post', evArgs[1], '--type', 'evidence']);
   assert.ok(evArgs.includes('shot.png') && evArgs[evArgs.indexOf('--about') + 1].includes(`Option 2 http://127.0.0.1:${port}/#/o/2/play`));
+  assert.ok(evArgs[evArgs.indexOf('--about') + 1].includes('/play/desktop') && evArgs[evArgs.indexOf('--about') + 1].includes('/play/phone'));
   for (const f of ['--recommend', '--option', '--mock', '--link', '--tradeoff', '--default']) assert.ok(!evArgs.includes(f), `no ${f} on an evidence card`);
   assert.equal(JSON.parse((await run(['post', 'design/x.html', '--title', 'T'], { cwd: join(dir, 'proj'), env })).stdout).error.code, 'USAGE', 'a Decide post still needs --recommend');
 });

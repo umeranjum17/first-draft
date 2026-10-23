@@ -64,14 +64,15 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   if (!evidence) mkdirSync(dir, { recursive: true });
   const options = files.map((file, i) => {
     const link = `${new URL(view.url).origin}/#/o/${i + 1}/play`;
-    if (evidence) return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, link };
+    const variants = { desktop: `${link}/desktop`, phone: `${link}/phone` };
+    if (evidence) return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, link, ...variants };
     const copy = join(dir, `option-${i + 1}.html`);
     if (resolve(file) === copy) throw new PostError('USAGE', `${file} is already the board copy; post the original option files`);
     copyFileSync(file, copy);
     writeOptionReferences(copy,readOptionReferences(file));
-    return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link };
+    return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link, ...variants };
   });
-  const open = `Open in first-draft: ${options.map((o) => `${o.label} ${o.link}`).join(' · ')}`;
+  const open = `Open in first-draft: ${options.map((o) => `${o.label} ${o.link} (Desktop ${o.desktop}; Phone ${o.phone})`).join(' · ')}`;
   const args = evidence ? ['post', boardFile, '--type', 'evidence', '--title', title, ...(key ? ['--key', key] : []), '--about', tradeoff ? `${tradeoff} ${open}` : open, ...media.flatMap((m) => ['--media', m])]
     : ['post', boardFile, '--type', 'design', '--title', title, ...(key ? ['--key', key] : []), '--tradeoff', tradeoff ? `${tradeoff} ${open}` : open, '--recommend', rec,
     ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`, '--link', `${o.option}=${o.link}`])];

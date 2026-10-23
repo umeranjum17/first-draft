@@ -49,8 +49,10 @@ it drew is kept as static HTML: scripts, handlers, `javascript:` URLs, `base` an
 policy tags removed, form values and canvases kept as markup. Its errors go back to
 the model. The Google Fonts stylesheets the page links or imports are fetched by the
 host and their latin faces embedded as `data:` URIs (`src/fonts.mjs`); images are
-inline SVG, CSS or `data:` URIs. That static page is what the 390px and dark-theme
-check and the board see. With no browser the contract asks the engine for
+inline SVG, CSS or `data:` URIs. That static page is what the board sees. The host
+checks the complete file and every screen independently at 390x844 and 1280x800,
+in light and dark, for overflow, visibility and themes. Desktop screen containers
+must exceed phone width; this structural check is not a visual-quality guarantee. With no browser the contract asks the engine for
 script-free `index.html` instead, and a page with script is refused. The engine ends
 a run when the model stops or after three failed `done` rounds, even when no version
 has passed `done`; upstream's app then waits for the user. make instead sends `done`'s
@@ -120,8 +122,13 @@ to a screen or back by clicking an in-page hash link, so the overlay does the sw
 view page keeps no history; the bridge keeps the screens visited. Messages are
 `{__firstDraft: true, type: 'SCREEN' | 'GO' | 'BACK'}`; the sandbox, CSP and 5 MB cap are
 unchanged, and the view posts with target `*` because the sandboxed option has no origin.
-`make`'s export contract now asks for this screen-link contract (`data-oc-screen`
-sections, hash links, no script); output stays script-free.
+`make`'s export contract asks for this screen-link contract (`data-oc-screen`
+sections, hash links, no script), with responsive columns inside each full-width
+screen rather than different screens used as desktop columns. Output stays script-free.
+A view URL's `?screen=<id>` (before the hash) selects that screen in Studio or Play;
+the host validates/escapes it and seeds the existing overlay's active-screen attribute.
+Play reflects the current screen in this query, so phone/desktop links keep it.
+`post` returns both device URLs and includes them in its fallback text.
 
 ### Comment pins
 

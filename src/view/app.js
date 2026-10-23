@@ -24,7 +24,9 @@ const el = (tag, attrs = {}, ...kids) => {
 function frame(option, title, lazy, query = '') {
   // sandbox is set before src so the first navigation is already sandboxed.
   const iframe = el('iframe', { sandbox: SANDBOX, referrerpolicy: 'no-referrer', title, loading: lazy ? 'lazy' : undefined });
-  iframe.src = `${design.frames}/o/${option.n}${query}`;
+  const screen = new URLSearchParams(location.search).get('screen');
+  const suffix = screen ? `${query || '?'}${query ? '&' : ''}screen=${encodeURIComponent(screen)}` : query;
+  iframe.src = `${design.frames}/o/${option.n}${suffix}`;
   frames.push({ n: option.n, iframe });
   return iframe;
 }
@@ -436,6 +438,11 @@ window.addEventListener('message', (e) => {
     const d = e.data;
     Object.assign(playing, { screens: Array.isArray(d.screens) ? d.screens.filter((id) => typeof id === 'string') : [], current: String(d.current ?? ''), canBack: d.canBack === true });
     document.querySelector('.play-controls')?.replaceChildren(...playControls());
+    if (playing.current && playing.current.length <= 200 && !/[\u0000-\u0020\u007f]/.test(playing.current) && new URLSearchParams(location.search).get('screen') !== playing.current) {
+      const url = new URL(location.href);
+      url.searchParams.set('screen', playing.current);
+      history.replaceState(null, '', url); // Hash-only device links keep the selected screen.
+    }
   }
 });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !stopCommenting?.()) leaveFull(); });
