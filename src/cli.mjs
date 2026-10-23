@@ -118,7 +118,7 @@ const refineHtml = async (seed, change, inherited) => {
 
 const HELP = `usage: first-draft-axi <command> [flags]
 commands[10]:
-  redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12] [--session <private.json>] [--max-requests N] [--max-bytes N]   discover linked pages and redesign them (anonymous by default; explicit signed-link session enables direct read-only JS capture)
+  redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12] [--session <private.json>] [--max-requests N] [--max-bytes N] [--max-resource-bytes N] [--capture-only]   discover linked pages and redesign them (anonymous by default; explicit signed-link session enables direct read-only JS capture)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
   assets                              detect installed asset providers without spending
   make "<prompt>" (--out <file.html> | --out-dir <folder>) [flags]   make self-contained HTML design options (one engine run each)
@@ -165,11 +165,11 @@ if (command === 'references') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
 } else if (command === 'make' || command === 'redesign') {
   const redesign = command === 'redesign';
-  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages', 'session', 'max-requests', 'max-bytes'] : [])].map((name) => [name, { type: 'string' }])) });
+  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...(redesign ? { 'capture-only': { type: 'boolean' } } : {}), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages', 'session', 'max-requests', 'max-bytes', 'max-resource-bytes'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file');
   if (redesign && values['max-pages'] !== undefined && !/^(?:[1-9]|1[0-2])$/.test(values['max-pages'])) fail('USAGE', '--max-pages must be 1-12');
-  for(const [name,max] of [['max-requests',512],['max-bytes',32000000]])if(values[name]!==undefined&&(!values.session||!/^\d+$/.test(values[name])||Number(values[name])<1||Number(values[name])>max))fail('USAGE',`--${name} requires --session and an integer from 1 to ${max}`);
+  for(const [name,max] of [['max-requests',512],['max-bytes',32000000],['max-resource-bytes',32000000]])if(values[name]!==undefined&&(!values.session||!/^\d+$/.test(values[name])||Number(values[name])<1||Number(values[name])>max))fail('USAGE',`--${name} requires --session and an integer from 1 to ${max}`);
   for (const [name, value] of Object.entries(values)) if (typeof value === 'string' && !value.trim()) fail('USAGE', `--${name} must not be empty`);
   for (const [a, b] of [['options', 'count'], ['direction', 'style'], ['out', 'out-dir']]) {
     if (values[a] !== undefined && values[b] !== undefined) fail('USAGE', `use --${a} or --${b}, not both`);
@@ -187,11 +187,16 @@ if (command === 'references') {
     if (!brief.length || brief.length > 100_000 || !brief.toString('utf8').trim() || !isUtf8(brief)) fail('USAGE', '--brief-file must be nonempty UTF-8 text, at most 100 KB');
     prompt = [prompt, brief.toString('utf8')].filter(Boolean).join('\n\n');
   }
-  if (!prompt || !(values.out || values['out-dir'])) fail('USAGE', 'make needs a prompt or --brief-file, and --out <file.html> or --out-dir <folder>');
+  if ((!prompt && !values['capture-only']) || !(values.out || values['out-dir'])) fail('USAGE', 'make needs a prompt or --brief-file, and --out <file.html> or --out-dir <folder>');
   let screens = values.screens?.split(',').map((s) => s.trim());
   if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
   if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
   const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
+  const sourceOptions = redesign ? { source, out: values.out, maxPages: Number(values['max-pages'] ?? 6), session: values.session, maxRequests: values['max-requests']===undefined?undefined:Number(values['max-requests']), maxBytes: values['max-bytes']===undefined?undefined:Number(values['max-bytes']), maxResourceBytes: values['max-resource-bytes']===undefined?undefined:Number(values['max-resource-bytes']) } : null;
+  if(values['capture-only']) {
+    if(values.ref?.length||values.like!==undefined||values.assets)fail('USAGE','--capture-only gathers product inputs only; omit --ref, --like and --assets');
+    try{const {inventory}=await redesignSource(sourceOptions);console.log(JSON.stringify({source_capture:{inventory:resolve(values.out,'sources/sources.json'),screens:inventory.pages.map(p=>({id:p.id,title:p.title})),pending:inventory.pending,limits:inventory.limits,omitted_frame_screens:inventory.pages.filter(p=>p.visible_frames_omitted).map(p=>p.id),limitations:inventory.limitations,model_calls:0},help:['Source inputs only; no agent, model, reference-discovery or generation calls. No redesigned output was made.']}));process.exit(0);}catch(e){fail('REDESIGN_SOURCE_FAILED',e.message);}
+  }
   const images = await readReferences(values.ref, values.model);
   let assetSession;
   try { assetSession = await prepareAssets(values, prompt, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
@@ -206,7 +211,7 @@ if (command === 'references') {
   let inventory;
   if (redesign) {
     try {
-      const captured = await redesignSource({ source, out: values.out, maxPages: Number(values['max-pages'] ?? 6), session: values.session, maxRequests: values['max-requests']===undefined?undefined:Number(values['max-requests']), maxBytes: values['max-bytes']===undefined?undefined:Number(values['max-bytes']) });
+      const captured = await redesignSource(sourceOptions);
       inventory = captured.inventory;
       prompt = `${prompt}\n\n${captured.brief}`;
       screens = inventory.pages.map(p => p.id);

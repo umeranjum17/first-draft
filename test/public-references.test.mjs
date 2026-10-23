@@ -21,11 +21,16 @@ test('public references: actual browser capture, project cache, named-brand make
   const dir=mkdtempSync(join(tmpdir(),'fd-public-')); t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const requests=[],timeouts=[]; let robots='User-agent: *\nAllow: /\nDisallow: /blocked\n';
   const site=createServer((req,res)=>{
-    requests.push({url:req.url,cookie:req.headers.cookie,auth:req.headers.authorization,ua:req.headers['user-agent']});
+    requests.push({method:req.method,url:req.url,cookie:req.headers.cookie,auth:req.headers.authorization,ua:req.headers['user-agent']});
     const send=(type,body,status=200)=>{res.writeHead(status,{'content-type':type,'set-cookie':'private=must-not-be-retained'});res.end(body);};
     if(req.url.startsWith('/session.html?')){res.writeHead(303,{location:'/session.html','set-cookie':'fd_session=umer; HttpOnly; SameSite=Lax'});return res.end();}
     if(req.url==='/session-data'){if(!req.headers.cookie?.includes('fd_session=umer'))return send('text/plain','Unauthorized',401);return send('application/json',JSON.stringify({padding:'x'.repeat(2_100_000),home:'Umer projects: 7 active projects',detail:'Umer project: 3 tasks remaining'}));}
-    if(req.url==='/session.html')return send('text/html',`<title>Umer live product</title><nav><a href="#home">Projects</a><a href="#detail">Project detail</a></nav><main id="app" class="skeleton">Loading</main><script>let data;const paint=()=>{if(data){app.className='';app.textContent=location.hash==='#detail'?data.detail:data.home;}};fetch('/session-data').then(r=>r.json()).then(d=>{data=d;paint()});addEventListener('hashchange',paint);fetch('/write-attempt',{method:'POST'}).catch(()=>{});</script>`);
+    if(req.url==='/session-sw.js')return send('application/javascript','self.addEventListener("install",e=>e.waitUntil(fetch("/sw-write",{method:"POST"}).catch(()=>{})));');
+    if(req.url==='/session-worker.js')return send('application/javascript','fetch("/worker-write",{method:"POST"}).catch(()=>{});');
+    if(req.url==='/session-frame.html')return send('text/html','<script>fetch("/frame-write",{method:"POST"}).catch(()=>{});</script>');
+    if(req.url==='/session-visible.svg')return send('image/svg+xml','<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#555"/></svg>');
+    if(req.url.startsWith('/session-hidden-'))return send('image/svg+xml','<svg xmlns="http://www.w3.org/2000/svg"><!--'+'x'.repeat(1_000_000)+'--></svg>');
+    if(req.url==='/session.html')return send('text/html',`<title>Umer live product</title><nav><a href="#home" aria-current="page">Projects</a><a href="#detail">Project detail</a></nav><h1 id="heading">Projects</h1><main id="app" class="skeleton">Loading</main><img src="/session-visible.svg" width="16" height="16"><div style="margin-top:5000px">${Array.from({length:40},(_,i)=>'<img src="/session-hidden-'+i+'.svg" width="16" height="16">').join('')}</div><iframe src="/session-frame.html" sandbox="allow-scripts" hidden></iframe><script>let data;const paint=()=>{if(data){app.className='';app.textContent=location.hash==='#detail'?data.detail:data.home;document.getElementById('heading').textContent=location.hash==='#detail'?'Project detail':'Projects';document.querySelectorAll('nav a').forEach(a=>a.setAttribute('aria-current',(a.hash===(location.hash||'#home'))?'page':'false'));}};fetch('/session-data').then(r=>r.json()).then(d=>{data=d;paint()});addEventListener('hashchange',paint);fetch('/session-capability?sw='+Number('serviceWorker'in navigator)+'&worker='+Number(typeof Worker==='function')).catch(()=>{});try{new Worker('/session-worker.js');}catch{}navigator.serviceWorker?.register('/session-sw.js').catch(()=>{});fetch('/write-attempt',{method:'POST'}).catch(()=>{});</script>`);
     if(req.url==='/robots.txt') return send('text/plain',robots);
     if(req.url==='/product.html') return send('text/html','<title>Umer projects</title><h1>Umer projects</h1><p>7 active projects</p><a href="/detail.html">Project detail</a><a href="https://outside.invalid/">Outside</a><script>fetch("/never.js")</script>');
     if(req.url==='/detail.html') return send('text/html','<title>Project detail</title><h1>Umer project</h1><p>3 tasks remaining</p><a href="/product.html">Projects</a>');
@@ -72,6 +77,11 @@ else {
   const project=join(dir,'project');mkdirSync(project);
   const env={...process.env,PATH:`${join(dir,'bin')}:/usr/bin`,HOME:dir,XDG_CONFIG_HOME:dir,XDG_DATA_HOME:dir,XDG_STATE_HOME:dir,TMPDIR:dir,FIRST_DRAFT_HOME:join(dir,'config'),FIRST_DRAFT_TEST_REF_ORIGIN:origin,FD_BRAND_ORIGIN:origin};
   const run=(...args)=>promisify(execFile)(process.execPath,[CLI,...args],{env,cwd:project,timeout:80_000,maxBuffer:10_000_000});
+  const previewDir=join(project,'capture-only');
+  const preview=JSON.parse((await run('redesign',origin+'/product.html','--capture-only','--out',previewDir,'--max-pages','1')).stdout);
+  assert.equal(preview.source_capture.model_calls,0);assert.equal(preview.source_capture.screens.length,1);assert.equal(existsSync(join(previewDir,'option-1.html')),false);
+  assert.equal(existsSync(join(env.FIRST_DRAFT_HOME,'config.json')),false);assert.equal(existsSync(join(env.FIRST_DRAFT_HOME,'native-inputs')),false,'capture-only needs no agent and never calls the native model');
+  await assert.rejects(run('redesign',origin+'/product.html','--capture-only','--like','Vercel','--out',previewDir),e=>/USAGE/.test(e.stdout));
   await run('init','--agent','byokit:claude','--model','claude-opus-5-5');
   const captured=JSON.parse((await run('references','make it like Vercel','--capture')).stdout).reference_capture;
   assert.equal(captured.name,'Vercel');assert.equal(captured.cached,false);assert.equal(captured.screenshots,2);
@@ -99,22 +109,31 @@ else {
   const session=join(dir,'session.json'),secret='synthetic-session-secret-umer';
   writeFileSync(session,JSON.stringify({version:1,url:origin+'/session.html?token='+secret}),{mode:0o600});
   const sessionStart=requests.length;
-  const live=JSON.parse((await run('redesign',origin+'/session.html','Clearer projects','--session',session,'--no-references','--out',join(project,'live-redesign'),'--max-pages','2','--max-requests','512','--max-bytes','8000000')).stdout);
+  const live=JSON.parse((await run('redesign',origin+'/session.html','Clearer projects','--session',session,'--no-references','--out',join(project,'live-redesign'),'--max-pages','2','--max-requests','512','--max-bytes','32000000','--max-resource-bytes','8000000')).stdout);
   let sessionEnd=requests.length;const liveInventory=JSON.parse(readFileSync(live.redesign.sources,'utf8'));
-  assert.deepEqual(liveInventory.limits,{requests:512,bytes:8000000});
+  assert.deepEqual(liveInventory.limits,{requests:512,bytes:32000000,resource_bytes:8000000});
+  assert.ok(liveInventory.largest_resource_bytes>2_000_000&&liveInventory.largest_resource_bytes<8_000_000);
+  assert.ok(liveInventory.deferred_image_requests>=40);assert.ok(requests.some(r=>r.url==='/session-visible.svg'));assert.ok(!requests.some(r=>r.url.startsWith('/session-hidden-')),'offscreen thumbnails never consume the transfer budget');
   assert.equal(liveInventory.pages.length,2);assert.ok(liveInventory.bytes>2_000_000,'browser streams a hydrated API response larger than the former proxy cap');
   assert.match(liveInventory.pages[0].text,/7 active projects/);assert.match(liveInventory.pages[1].text,/3 tasks remaining/);
   assert.equal(liveInventory.pages[0].links.find(l=>l.label==='Project detail').target,'screen-2');
-  assert.ok(liveInventory.blocked_requests.writes>0);assert.ok(!requests.some(r=>r.url==='/write-attempt'),'browser blocks source background POST before it reaches the server');
+  assert.equal(liveInventory.pages[0].links.find(l=>l.label==='Projects').target,'screen-1');assert.deepEqual(liveInventory.pages.map(p=>p.title),['Projects','Project detail']);
+  assert.ok(liveInventory.blocked_requests.writes>0);assert.deepEqual(requests.filter(r=>['/write-attempt','/worker-write','/frame-write','/sw-write'].includes(r.url)).map(r=>({method:r.method,url:r.url})),[],'no source, worker or frame POST may reach the server');
+  assert.ok(requests.some(r=>r.url==='/session-capability?sw=1&worker=1'),'negative control has native worker APIs');
+  assert.ok(!requests.some(r=>['/session-worker.js','/session-sw.js','/session-frame.html'].includes(r.url)),'capture CSP denies worker and frame creation, not just parent-page writes');
   assert.ok(!JSON.stringify(live).includes(secret)&&!readFileSync(live.redesign.sources,'utf8').includes(secret));
   for(const p of liveInventory.pages){assert.equal(p.screenshots.length,4);for(const shot of p.screenshots){const png=readFileSync(join(project,'live-redesign/sources',shot.file));assert.equal(png.readUInt32BE(16),shot.width);assert.equal(png.readUInt32BE(20),shot.height);}}
-  for(const [flag,value,pattern] of [['--max-requests','1',/2\/1 requests/],['--max-bytes','1',/exceeds 1 byte/]]){const refused=join(project,'limited-'+flag.slice(2));await assert.rejects(run('redesign',origin+'/session.html','Clearer','--session',session,'--no-references','--out',refused,flag,value),e=>{assert.match(e.stdout,pattern);assert.ok(!e.stdout.includes(secret));return true;});assert.equal(existsSync(join(refused,'option-1.html')),false);}
+  for(const [flag,value,pattern] of [['--max-requests','1',/2\/1 requests/],['--max-bytes','1',/exceeds 1 byte/],['--max-resource-bytes','2000000',/exceeds 2000000 byte resource budget/]]){const refused=join(project,'limited-'+flag.slice(2));await assert.rejects(run('redesign',origin+'/session.html','Clearer','--session',session,'--no-references','--out',refused,flag,value),e=>{assert.match(e.stdout,pattern);assert.ok(!e.stdout.includes(secret));return true;});assert.equal(existsSync(join(refused,'option-1.html')),false);}
   sessionEnd=requests.length;
-  for(const [flag,value] of [['--max-requests','513'],['--max-bytes','32000001']])await assert.rejects(run('redesign',origin+'/session.html','Clearer','--session',session,'--out',join(project,'invalid'),flag,value),e=>/USAGE/.test(e.stdout));
+  for(const [flag,value] of [['--max-requests','513'],['--max-bytes','32000001'],['--max-resource-bytes','32000001']])await assert.rejects(run('redesign',origin+'/session.html','Clearer','--session',session,'--out',join(project,'invalid'),flag,value),e=>/USAGE/.test(e.stdout));
   const capped=JSON.parse((await run('redesign',origin+'/product.html','Clearer','--no-references','--out',join(project,'capped'),'--max-pages','1')).stdout);
   assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
   const sourceDir=join(project,'export');mkdirSync(sourceDir);
   writeFileSync(join(sourceDir,'index.html'),'<title>Umer export</title><h1>7 active projects</h1>');
+  const benchmarkInput=join(dir,'benchmark.json'),benchmarkOut=join(project,'benchmark'),nativeBefore=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8');
+  writeFileSync(benchmarkInput,JSON.stringify({sources:[{name:'umer-lab',source:sourceDir,max_pages:1}],references:[join(captured.cache,'..',manifest.screenshots[0].file)]}));
+  await promisify(execFile)(process.execPath,[new URL('../journeys/redesign-benchmark.mjs',import.meta.url).pathname],{cwd:project,env:{...env,FD_BENCHMARK_INPUT:benchmarkInput,DONE_DONE_EVIDENCE_ROOT:benchmarkOut},timeout:80000,maxBuffer:1000000});
+  const benchmark=JSON.parse(readFileSync(join(benchmarkOut,'benchmark.json')));assert.equal(benchmark.model_calls,0);assert.equal(benchmark.cases[0].screens.length,1);assert.match(benchmark.redesign_benchmark,/not run/);assert.ok(benchmark.gaps.some(s=>s.includes('not generated')));assert.equal(readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8'),nativeBefore,'benchmark capture cannot invoke a configured model');
   await run('redesign',sourceDir,'Clearer projects','--no-references','--out',join(project,'local-redesign'));
   assert.equal(JSON.parse(readFileSync(join(project,'local-redesign/sources/sources.json'))).pages[0].url,'/index.html');
   await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
