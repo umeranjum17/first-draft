@@ -9,6 +9,7 @@ import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 import { STYLES } from './styles.mjs';
+import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
 
 const VERSION = '0.2.3';
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
@@ -71,7 +72,8 @@ const refineHtml = async (seed, change) => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[7]:
+commands[8]:
+  assets                              detect installed asset providers without spending
   make "<prompt>" --out <file.html> [--count N] [--direction "<look>"]   make N design mocks: self-contained HTML pages (one engine run each); --direction names the look all of them take (a style, a brand, a reference), else several options each get a different one
   styles                              list the named design styles that make --direction <id> takes (or write your own direction in words)
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
@@ -84,20 +86,29 @@ Journeys, tests and demos post with --evidence --media <shot>... (an Evidence ca
 A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
 view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.
 post copies the options into the board's mocks folder (the nearest .sign-off/, or --board), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) as that option's --link (a tappable Open under its mock; needs sign-off-axi 0.5.0+) and in the card's --tradeoff text as the fallback: the card's sandbox blocks a link inside the mock.
+${assetHelp}
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
 if (!command || command === '--help' || command === '-h') { console.log(HELP); process.exit(0); }
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
-if (command === 'styles') {
+if (command === 'assets') {
+  console.log(JSON.stringify({ providers: await detectAssets(), help: [assetHelp] }));
+} else if (command === 'styles') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
 } else if (command === 'make') {
-  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' }, direction: { type: 'string' } });
+  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' }, direction: { type: 'string' }, ...assetFlags });
   const prompt = positionals.join(' ').trim();
   const count = Number(values.count);
   if (!prompt || !values.out) fail('USAGE', 'make needs a prompt and --out <file.html>', ['Run `first-draft-axi make "<prompt>" --out <file.html>`']);
   if (!Number.isInteger(count) || count < 1 || count > 5) fail('USAGE', '--count is 1-5', ['Run `first-draft-axi make "<prompt>" --out <file.html> --count 3`']);
+  let assetSession;
+  try { assetSession = await prepareAssets(values, prompt, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
+  if (assetSession) {
+    if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
+    process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
+  }
   const c = agentOrAsk();
   const started = Date.now();
   const files = [];
@@ -105,11 +116,12 @@ if (command === 'styles') {
   const blocked = new Set(), cut = [];
   let render_check = 'checked';
   for (let i = 0; i < count; i++) {
+    const numbered = values.out.includes('{i}') ? values.out.replace('{i}', String(i + 1)) : count > 1 ? values.out.slice(0, -extname(values.out).length || undefined) + `-${i + 1}` + extname(values.out) : values.out;
     let made;
     try {
-      made = await make({ prompt, ...c, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
+      const assets = assetSession ? await assetSession.generate(numbered) : [];
+      made = await make({ prompt, ...c, assets, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
-    const numbered = values.out.includes('{i}') ? values.out.replace('{i}', String(i + 1)) : count > 1 ? values.out.slice(0, -extname(values.out).length || undefined) + `-${i + 1}` + extname(values.out) : values.out;
     const out = resolve(numbered);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, made.html);

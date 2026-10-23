@@ -20,6 +20,7 @@ async function launch() {
   if (!account.ok) throw new Error(account.message);
   return launched = { bin, account };
 }
+export { launch as installedCodex }; // Asset adapter reuses BYOKit's installed account by path.
 const MEMBER = 'first-draft';
 
 const KEY_VIA = ['plan_key', 'key'];

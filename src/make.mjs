@@ -38,7 +38,7 @@ const mend = (html) => {
   return closed.replace(/\s+href\s*=\s*["']#([^"']*)["']/g, (m, id) => id === '' || (!id.startsWith('/') && !ids.has(id)) ? '' : m);
 };
 
-export async function make({ prompt, agent, model, timeoutMs, direction, seed }) {
+export async function make({ prompt, agent, model, timeoutMs, direction, seed, assets = [] }) {
   const { generateViaAgent, composeSystemPrompt, makeTextEditorTool, makeDoneTool } = await engine();
   const key = (path) => path.trim().replace(/\\/g, '/').split('/').filter((p) => p && p !== '.').join('/') || '.';
   const files = new Map();
@@ -57,7 +57,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed })
     insert: (path, line, text) => { const lines = get(path).split('\n'); if (!Number.isInteger(line) || line < 0 || line > lines.length) throw new Error('insert_line is outside the file'); lines.splice(line, 0, text); return put(path, lines.join('\n')); },
   };
   // The page is rendered headless at 390px, in light and in dark, and both renders are checked inside the loop, so a page that overflows on a phone or has no dark theme is fixed before the command ends.
-  const media = LANDING.test(prompt) ? projectMedia(prompt) : []; // a landing page gets the project's own screenshots; done and the output see them embedded
+  const media = [...assets, ...(LANDING.test(prompt) && !assets.length ? projectMedia(prompt) : [])]; // a landing page gets the project's own screenshots; done and the output see them embedded
   const style = styleOf(direction); // a dark-first style is checked to be dark, not to differ between light and dark
   const render = renderCheck((warning) => process.stderr.write(`first-draft-axi: ${warning}\n`), { dark: style?.dark });
   const done = makeDoneTool({ ...fs, view: (path) => { const f = key(path) === 'index.html' ? fs.view(path) : null; return f && { ...f, content: embedMedia(f.content, media) }; }, listDir: (dir) => fs.listDir(dir).filter((p) => key(p) === 'index.html') }, render.verify);
@@ -101,7 +101,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed })
       ? `Revise this index.html: ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Call the editor once with command "create", path "index.html" and the complete revised file, then done(path="index.html").\n\nCurrent index.html:\n${start}`
       : `Revise the existing index.html (read it first): ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Make the change in a few str_replace edits (each old_str one distinctive line, new_str may be long), then call done(path="index.html") as your last step.`) : direction ? `${prompt}\nDesign direction: ${directionText(direction)}` : prompt, history: [], model: { provider: 'byokit', modelId: model },
     apiKey: '', allowKeyless: true, baseUrl: 'https://byokit.invalid', signal,
-    systemPrompt: `${NO_SCRIPT}\n\n${composeSystemPrompt({ mode: start !== undefined ? 'revise' : 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. ${outputRules(style?.dark)} Use semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Use the supplied editor to write it, then done(path="index.html"). Only two tools exist — that editor and done; skill, scaffold, tweaks, set_title and every other tool are unavailable, so never call them.${LANDING.test(prompt) ? `\n\n${LANDING_BRIEF} ${mediaBrief(media)}` : ''}`,
+    systemPrompt: `${NO_SCRIPT}\n\n${composeSystemPrompt({ mode: start !== undefined ? 'revise' : 'create' })}\nHost export contract (overrides JSX/runtime guidance): write index.html, NOT App.jsx. One complete self-contained HTML5 document; inline CSS/SVG only; no scripts, event handlers or javascript: URLs; no remote URL of any kind. ${outputRules(style?.dark)} Use semantic HTML and responsive layouts for 390px and 1280px. No DESIGN.md is required for this single-page export. Use the supplied editor to write it, then done(path="index.html"). Only two tools exist — that editor and done; skill, scaffold, tweaks, set_title and every other tool are unavailable, so never call them.${LANDING.test(prompt) ? `\n\n${LANDING_BRIEF} ${assets.length ? '' : mediaBrief(media)}` : ''}${assets.length ? `\nGenerated assets: ${assets.map((a) => JSON.stringify(a.path)).join(', ')}. Place each inside the relevant draft screen as an <img src="EXACT PATH" alt="description"> with max-width:100%; height:auto. These are real generated pictures, illustrations, icons, hero images or backgrounds as requested by the brief, NOT a separate asset sheet. The host embeds them. Do not invent other paths.` : ''}`,
   }, { fs, encourageToolUse: false, tools: [makeTextEditorTool(fs), doneTool],
     onEvent: (e) => {
       if (e.type === 'tool_execution_end' && e.toolName === 'done' && !e.isError && e.result.details?.status === 'ok' && e.result.details.path === 'index.html') verified = files.get('index.html');
@@ -123,6 +123,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed })
   if ((source.match(TAG) ?? []).some((tag) => /^<script\b|\son(?!ce\b)[a-z]+\s*=|(?:href|src|action|formaction|xlink:href|poster)\s*=\s*["']?\s*javascript:|url\(\s*["']?\s*javascript:/i.test(tag))) throw new Error('engine output contains script; only script-free HTML is supported');
   const plain = /<head(?:\s[^>]*)?>/i.test(source) ? source.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(source) ? source.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : source.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
   const html = embedMedia(plain, media);
+  if (assets.some((a) => !(html.match(/<img\b[^>]*>/gi) ?? []).some((tag) => tag.includes(a.dataUrl)))) throw new Error('The design did not place every generated asset into its screens');
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
   return { html, truncated: capped !== null, remote: [...new Set([...plain.matchAll(REMOTE)].flatMap((m) => [...(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').matchAll(REMOTE_URL)].map((url) => url[0])))],
     tokens_in: output.inputTokens, tokens_out: output.outputTokens, render_check: render.status };

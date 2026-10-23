@@ -23,6 +23,7 @@ When the repo's .done-done.yaml has an instance block, done-done already runs th
 
 Harness: A shell runs the CLI and curl for the url. A browser tool opens the url and each #/o/<n> route for screenshots. Drive through the repo's real handles that each feature file names:
 
+- [Generated assets inside a draft screen](features/generated-assets.md): Preview cost then, with explicit spending approval, run the paid asset journey with `FD_DESIGN_MODEL` set; capture loaded embedded assets at 390/1280 in light/dark (`src/assets.mjs`, `journeys/assets.mjs`)
 - [Grid of every option](features/grid-of-every-option.md): Open the view url at #/ (the root) (`src/view/app.js`)
 - [Studio: one option with desktop 1280 and phone 390 side by side (or one device), beside its brief column](features/canvas-for-one-option-at-phone-390-and-d.md): From the grid, click an option card, or open <url>#/o/1 (`src/view/app.js`)
 - [Play: click through the screens of an option](features/play-click-through-the-screens-of-an-opt.md): From the canvas, press the Play button, or open <url>#/o/1/play (`src/view.mjs`)
