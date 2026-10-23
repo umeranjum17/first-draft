@@ -12,7 +12,7 @@ You want to choose a direction before writing app code, not just look at one scr
 
 One prompt makes several self-contained HTML mock-up options. A person compares them, plays through them, comments, refines the one they like, and picks.
 
-first-draft becomes a complete design tool, not only layouts: the options look as good as the design engine it is built on can make them, finish the whole brief, and carry their own pictures, icons and hero images.
+first-draft becomes a complete design tool, not only layouts: the options look as good as the design engine it is built on can make them, finish the whole brief, and carry their own pictures, icons and hero images. The person running it is in control of each run (how many options and the other settings), not handed a fixed recipe.
 
 It is its own product, with its own CLI and agent skill, installable alone from npm. It works alone, and it works with [sign-off](https://github.com/umeranjum17/sign-off): sign-off uses it, and its cards link into first-draft to see things in detail.
 
