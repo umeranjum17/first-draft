@@ -1,13 +1,10 @@
 // Discovery only: model-suggested URLs are candidates, never fetched or treated as permission.
 import { respond, routeOf } from './byokit.mjs';
+import { referenceUrl } from './reference-network.mjs';
 
-export const discoveryHelp = 'references "<prompt>" [--like <brand-or-https-url>]: identify one reference candidate with your configured model; an explicit HTTPS URL needs no model. No site is fetched, verified or captured yet. Use make/refine --ref for existing local images.';
+export const discoveryHelp = 'references "<prompt>" [--like <brand-or-https-url>]: identify one reference candidate with your configured model; an explicit HTTPS URL needs no model. Discovery alone fetches nothing. Add --capture [--project <folder>] to check robots/terms, capture phone/desktop references and cache them. make/refine also gather references for named comparisons or --like. Use --ref for existing local images.';
 const NOTICE = 'Discovery only. No page fetched, robots or terms checked, screenshots saved, or design changed. A candidate URL is unverified; public access alone is not permission to capture or reuse it.';
-const urlOf = (value) => {
-  const url = new URL(value);
-  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Reference candidates need an HTTPS URL without credentials');
-  return url.href;
-};
+const urlOf = (value) => referenceUrl(value).href;
 export const explicitReferenceUrl = (like) => like !== undefined && /^[a-z][a-z\d+.-]*:/i.test(like.trim()) ? urlOf(like.trim()) : undefined;
 
 export async function discoverReference({ prompt = '', like, agent, model, timeoutMs = 60_000 }) {

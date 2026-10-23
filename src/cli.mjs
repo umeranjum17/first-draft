@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, imageSupport, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
 import { referenceDoctor, referenceFlags, referenceHelp, references } from './references.mjs';
 import { discoverReference, discoveryHelp, explicitReferenceUrl } from './reference-discovery.mjs';
+import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
@@ -81,10 +82,32 @@ const readReferences = async (paths) => {
     return images;
   } catch (e) { fail('REFERENCE_FAILED', e.message, [referenceHelp]); }
 };
+// A deterministic comparison gate avoids model calls for unrelated briefs; the user's model, never a brand list, identifies the name.
+const prepareReferences = async (values, prompt, c, images = [], inherited = null) => {
+  if (values['no-references'] && values.like !== undefined) throw new Error('--like conflicts with --no-references');
+  let metadata = !images.length ? inherited : null, added = optionReferenceImages(metadata), tokens_in = 0, tokens_out = 0;
+  if (!values['no-references'] && (values.like !== undefined || /\b(?:like|inspired\s+by|style\s+of|similar\s+to)\b|\b[a-z\d]+-like\b/i.test(prompt))) {
+    const discovery = await discoverReference({ prompt, like:values.like, ...c });
+    tokens_in += discovery.tokens_in; tokens_out += discovery.tokens_out;
+    if (discovery.candidate) {
+      if (images.length > 4) throw new Error('Two public reference screenshots plus --ref must fit the six-image limit');
+      if (!await imageSupport(routeOf(c.agent),c.model)) throw new Error(`${c.agent} / ${c.model} does not support reference images; no capture attempted`);
+      const captured = await captureReference({ candidate:discovery.candidate,project:values.project,...c });
+      metadata = captured.metadata; added = captured.images; tokens_in += captured.tokens_in; tokens_out += captured.tokens_out;
+    }
+  }
+  images = [...images,...added];
+  if (images.length > 6 || images.reduce((n,i)=>n+Buffer.from(i.dataUrl.slice(i.dataUrl.indexOf(',')+1),'base64').length,0)>10_000_000) throw new Error('Combined reference images exceed six images or 10 MB');
+  if (images.length && !await imageSupport(routeOf(c.agent),c.model)) throw new Error(`${c.agent} / ${c.model} does not support reference images; none were sent`);
+  return { images, metadata, tokens_in, tokens_out };
+};
 // The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
-const refineHtml = async (seed, change) => {
+const refineHtml = async (seed, change, inherited) => {
   const c = await agentOrThrow();
-  try { return (await make({ prompt: change, ...c, seed })).html; } catch (e) {
+  try {
+    const refs = await prepareReferences({},change,c,[],inherited);
+    return { html:(await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief })).html, reference:refs.metadata };
+  } catch (e) {
     const error = `${c.agent} (${c.model}) did not refine the design: ${e.message}`;
     throw Object.assign(new Error(error), { shown: { error, help: ['Run `first-draft-axi doctor` in a terminal to check the agent'] } });
   }
@@ -92,7 +115,7 @@ const refineHtml = async (seed, change) => {
 
 const HELP = `usage: first-draft-axi <command> [flags]
 commands[9]:
-  references "<prompt>" [--like <brand-or-https-url>]   discover a named reference candidate (no fetch or design change)
+  references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
   assets                              detect installed asset providers without spending
   make "<prompt>" --out <file.html> [--count N] [--direction "<look>"]   make N design mocks: self-contained HTML pages (one engine run each); --direction names the look all of them take (a style, a brand, a reference), else several options each get a different one
   styles                              list the named design styles that make --direction <id> takes (or write your own direction in words)
@@ -116,13 +139,15 @@ if (!command || command === '--help' || command === '-h') { console.log(HELP); p
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
 if (command === 'references') {
-  const { values, positionals } = flags(rest, { like: { type: 'string' } });
+  const { values, positionals } = flags(rest, { like: { type: 'string' }, capture: { type: 'boolean' }, project: { type: 'string' } });
   const prompt = positionals.join(' ').trim();
   if ((!prompt && values.like === undefined) || values.like?.trim() === '') fail('USAGE', 'references needs a prompt or --like <brand-or-https-url>', [discoveryHelp]);
   try {
-    const c = explicitReferenceUrl(values.like) ? {} : await agentOrThrow();
-    console.log(JSON.stringify({ reference_discovery: await discoverReference({ prompt, like: values.like, ...c }) }));
-  } catch (e) { fail(e.help ? e.code : 'REFERENCE_DISCOVERY_FAILED', e.message, e.help ?? [discoveryHelp]); }
+    const c = !values.capture && explicitReferenceUrl(values.like) ? {} : await agentOrThrow();
+    const discovery = await discoverReference({ prompt, like: values.like, ...c });
+    const captured = values.capture ? await captureReference({ candidate: discovery.candidate, project: values.project, ...c }) : null;
+    console.log(JSON.stringify({ reference_discovery: discovery, ...(captured && { reference_capture: { fetched:true, cache:captured.cache,cached:captured.cached,name:captured.metadata.name,url:captured.metadata.url,brief:captured.metadata.brief,licence_note:captured.metadata.licence_note,fetched_at:captured.metadata.fetched_at,screenshots:2 } }) }));
+  } catch (e) { fail(e.help ? e.code : values.capture ? 'REFERENCE_CAPTURE_FAILED' : 'REFERENCE_DISCOVERY_FAILED', e.message, e.help ?? [discoveryHelp]); }
 } else if (command === 'assets') {
   console.log(JSON.stringify({ providers: await detectAssets(), help: [assetHelp] }));
 } else if (command === 'styles') {
@@ -142,8 +167,10 @@ if (command === 'references') {
   }
   const c = await agentOrAsk();
   const started = Date.now();
+  let refs;
+  try { refs = await prepareReferences(values,prompt,c,images); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
   const files = [];
-  let tokens_in = 0, tokens_out = 0;
+  let tokens_in = refs.tokens_in, tokens_out = refs.tokens_out;
   const blocked = new Set(), cut = [];
   let render_check = 'checked';
   for (let i = 0; i < count; i++) {
@@ -151,11 +178,12 @@ if (command === 'references') {
     let made;
     try {
       const assets = assetSession ? await assetSession.generate(numbered) : [];
-      made = await make({ prompt, ...c, assets, references: images, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
+      made = await make({ prompt, ...c, assets, references:refs.images, referenceBrief:refs.metadata?.brief, direction:values.direction ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, made.html);
+    writeOptionReferences(out,refs.metadata);
     files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools });
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
@@ -164,6 +192,7 @@ if (command === 'references') {
     if (made.truncated) cut.push(numbered);
   }
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check },
+    ...(refs.metadata && { references:{name:refs.metadata.name,url:refs.metadata.url,fetched_at:refs.metadata.fetched_at} }),
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
     help: [...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
@@ -194,11 +223,14 @@ if (command === 'references') {
   const started = Date.now();
   let made;
   const images = await readReferences(values.ref);
-  try { made = await make({ prompt: change, ...c, seed, references: images }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+  let refs;
+  try { refs = await prepareReferences(values,change,c,images,readOptionReferences(file)); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
+  try { made = await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
   const out = resolve(values.out);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, made.html);
-  console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in, tokens_out: made.tokens_out },
+  writeOptionReferences(out,refs.metadata);
+  console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in + refs.tokens_in, tokens_out: made.tokens_out + refs.tokens_out },
     ...(made.remote.length && { blocked_remote: made.remote }),
     help: [`See both: first-draft-axi view ${resolve(file)} ${out}`] }));
 } else if (command === 'doctor') {

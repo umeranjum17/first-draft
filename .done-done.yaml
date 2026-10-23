@@ -2,6 +2,9 @@
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
 journeys:
+  references:
+    command: node journeys/references.mjs
+    timeout: 10m
   assets-recapture:
     command: node journeys/assets.mjs higgsfield --capture-only
     timeout: 10m

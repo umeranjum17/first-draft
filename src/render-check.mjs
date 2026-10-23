@@ -151,13 +151,13 @@ const staticPage = () => {
 
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
-class Renderer {
+export class Renderer {
   constructor(bin, onWarn, dark) { this.dark = dark; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
     let exited = false;
-    this.proc = spawn(this.bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage', `--user-data-dir=${this.dir}`, '--remote-debugging-port=0', '--remote-allow-origins=*', 'about:blank'], { stdio: 'ignore' });
+    this.proc = spawn(this.bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--no-proxy-server', `--user-data-dir=${this.dir}`, '--remote-debugging-port=0', '--remote-allow-origins=*', 'about:blank'], { stdio: 'ignore' });
     this.proc.on('exit', () => { exited = true; });
     process.once('exit', () => this.proc?.kill()); // Ctrl-C or a failed run must not leave the browser behind
     this.proc.on('error', () => { exited = true; });

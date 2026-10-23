@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { createServer } from 'node:http';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 
 const LIMIT = 5_000_000; // sign-off takes mocks of 5 MB or less
 const DIST = new URL('../dist/view/', import.meta.url);
@@ -114,7 +115,12 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       return st.size > LIMIT ? { status: 413, message: `${basename(o.file)} is ${st.size} bytes; options are 5 MB or less` } : null;
     } catch (e) { return { status: 404, message: `${basename(o.file)} cannot be read: ${e.code ?? e.message}` }; }
   };
-  const shown = (o) => ({ n: o.n, label: o.label, file: basename(o.file), error: sizeError(o)?.message });
+  const shown = (o) => {
+    const value={ n:o.n,label:o.label,file:basename(o.file),error:sizeError(o)?.message };
+    try { const r=readOptionReferences(o.file); if(r) value.references={...r,shots:r.shots.map((s,i)=>({width:s.width,height:s.height,src:`/refs/${o.n}/${i}`}))}; }
+    catch(e) { value.referenceError=`Reference images unavailable: ${e.message}`; }
+    return value;
+  };
   const page = () => {
     const { pins, error: pinsError } = readPins(comments);
     const data = { name, frames: frameOrigin, pins, pinsError, options: options.map(shown) };
@@ -151,9 +157,11 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     if (running) return reply(409, { error: 'Another change is still being made. Wait for it to finish.' });
     running = true;
     try {
-      const html = await refine(readFileSync(from.file, 'utf8'), text);
+      const inherited=readOptionReferences(from.file);
+      const made = await refine(readFileSync(from.file, 'utf8'),text,inherited);
       const file = refinedPath(from.file);
-      writeFileSync(file, html);
+      writeFileSync(file,typeof made === 'string' ? made : made.html);
+      writeOptionReferences(file,typeof made === 'string' ? inherited : made.reference);
       const added = { n: options.length + 1, label: basename(file, extname(file)), file };
       options.push(added);
       reply(200, { option: shown(added) });
@@ -165,6 +173,12 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     if (req.method === 'POST' && path === '/comments') return comment(req, res);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     if (path === '/') return send(res, 200, 'text/html; charset=utf-8', page(), { 'content-security-policy': viewPolicy(frameOrigin) });
+    const shot=path.match(/^\/refs\/(\d+)\/([01])$/);
+    if (shot) {
+      const o=options[Number(shot[1])-1]; if(!o) return send(res,404,'text/plain','not found');
+      try { const r=readOptionReferences(o.file),s=r?.shots[Number(shot[2])]; if(!s) return send(res,404,'text/plain','not found'); return send(res,200,'image/png',Buffer.from(s.dataUrl.slice(22),'base64')); }
+      catch(e) { return send(res,422,'text/plain',`Reference cannot be read: ${e.message}`); }
+    }
     if (ASSETS[path]) {
       try { return send(res, 200, ASSETS[path], readFileSync(new URL(path.slice(1), DIST))); }
       catch (e) { return send(res, 500, 'text/plain', `${path} cannot be read: ${e.code ?? e.message}`); }

@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { viewHost } from './view.mjs';
+import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 
 const CLI = new URL('./cli.mjs', import.meta.url).pathname;
 const LETTERS = 'abcdef'; // sign-off's design card shows up to 6 options
@@ -67,6 +68,7 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
     const copy = join(dir, `option-${i + 1}.html`);
     if (resolve(file) === copy) throw new PostError('USAGE', `${file} is already the board copy; post the original option files`);
     copyFileSync(file, copy);
+    writeOptionReferences(copy,readOptionReferences(file));
     return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link };
   });
   const open = `Open in first-draft: ${options.map((o) => `${o.label} ${o.link}`).join(' · ')}`;

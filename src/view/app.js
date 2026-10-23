@@ -277,6 +277,18 @@ function commentBox(o, dev, x, y, at, done) {
 // On a wide screen the canvas shows the desktop and the phone side by side (Both), each captioned with its own Play, or the one device
 // the switch picks. Hide brief folds the column away on a wide screen; under 860px (view.css) there is no Both, the column moves below
 // the canvas and the brief docks at the bottom of the screen. Comment (in the More menu under 860px) turns on comment mode.
+function referencePanel(o) {
+  if(o.referenceError) return [el('p',{class:'reference-error',role:'alert'},o.referenceError)];
+  const r=o.references; if(!r) return [];
+  const source=(href,text)=>el('a',{href,target:'_blank',rel:'noopener noreferrer',class:'reference-link'},text);
+  const heading=el('div',{class:'reference-heading'},el('h2',{},`References · ${r.name}`),el('p',{class:'muted'},`Captured ${new Date(r.fetched_at).toLocaleDateString()}`),
+    el('div',{},source(r.url,'Source'), ' · ',source(r.terms_url,'Permission note')),
+    el('details',{},el('summary',{},'Visual language'),el('p',{},r.brief),el('p',{},r.licence_note)));
+  const shots=r.shots.map((s,i)=>el('a',{href:s.src,target:'_blank',rel:'noopener',class:'reference-shot','aria-label':`Open ${i ? 'desktop' : 'phone'} reference`},
+    el('img',{src:s.src,alt:`${r.name} reference at ${s.width} pixels`,width:s.width,height:s.height}),el('span',{},`${i ? 'Desktop' : 'Phone'} · ${s.width}px`)));
+  return [el('section',{class:'references','aria-label':`Reference images for Option ${o.n}`},heading,...shots)];
+}
+
 function canvas(o, device) {
   const dev = deviceFor(device, innerWidth), f = FRAMES[dev], all = pinsFor(o);
   const gutter = (dev === 'both' ? all : pinsOn(o, dev)).length ? PIN_GUTTER : 0;
@@ -323,7 +335,7 @@ function canvas(o, device) {
     el('section', {}, el('h3', { class: 'kicker' }, 'Options'), options),
     el('section', {}, el('h3', { class: 'kicker' }, `Comments on Option ${o.n}`), notes));
 
-  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), stage), ...(o.error ? [] : [brief(o)]));
+  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), stage), ...(o.error ? [] : [brief(o)]));
   const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };
   tool.onclick = () => commenting(!studio.classList.contains('commenting'));
   add.onclick = () => { menu.hidePopover(); commenting(true); };
