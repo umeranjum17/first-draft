@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { doctor as routeDoctor, readyRoutes, routeOf } from './byokit.mjs';
+import { doctor as routeDoctor, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
@@ -50,21 +50,28 @@ const flags = (args, options) => {
     return parseArgs({ args, options, allowPositionals: true });
   } catch (e) { fail('USAGE', e.message, ['Run `first-draft-axi --help`']); }
 };
-const agentOrThrow = () => {
+const agentOrThrow = async () => {
   const c = read();
   // `shown` is what the view tells a person: no config path, and the set-up hint worded for them.
   const no = (code, message, shown = message) => Object.assign(new Error(message), { code, help: [ASK], shown: { error: shown, help: [`Choose ${PICK}`] } });
-  if (!c.agent) throw no('NO_AGENT', `no agent is set in ${CONFIG()}`, 'No agent is set up yet.');
+  if (!c.agent) {
+    const help = (await readySubscriptions()).map((s) => `${s.label}: ${s.init}`);
+    const error = no('NO_AGENT', 'No model source is set.');
+    if (help.length) { error.help = help; error.shown.help = help; }
+    throw error;
+  }
   if (!routeOf(c.agent)) throw no('BAD_AGENT', `agent ${c.agent} is not byokit:<route>; this release runs BYOKit routes only`);
+  const refusal = modelRouteProblem(routeOf(c.agent), c.model);
+  if (refusal) throw no('SUBSCRIPTION_ONLY', refusal);
   if (!c.model) throw no('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`, `No model is set for ${c.agent} yet.`);
   return c;
 };
-const agentOrAsk = () => {
-  try { return agentOrThrow(); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
+const agentOrAsk = async () => {
+  try { return await agentOrThrow(); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
 };
 // The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
 const refineHtml = async (seed, change) => {
-  const c = agentOrThrow();
+  const c = await agentOrThrow();
   try { return (await make({ prompt: change, ...c, seed })).html; } catch (e) {
     const error = `${c.agent} (${c.model}) did not refine the design: ${e.message}`;
     throw Object.assign(new Error(error), { shown: { error, help: ['Run `first-draft-axi doctor` in a terminal to check the agent'] } });
@@ -109,7 +116,7 @@ if (command === 'assets') {
     if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
     process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
   }
-  const c = agentOrAsk();
+  const c = await agentOrAsk();
   const started = Date.now();
   const files = [];
   let tokens_in = 0, tokens_out = 0;
@@ -159,7 +166,7 @@ if (command === 'assets') {
   if (resolve(values.out) === resolve(file)) fail('USAGE', '--out must be a new file, not the option being refined', ['Pass a different --out path']);
   let seed;
   try { seed = readFileSync(file, 'utf8'); } catch (e) { fail('NO_OPTIONS', `cannot read ${file}: ${e.message}`, ['Pass one option file made by `first-draft-axi make`']); }
-  const c = agentOrAsk();
+  const c = await agentOrAsk();
   const started = Date.now();
   let made;
   try { made = await make({ prompt: change, ...c, seed }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
@@ -173,21 +180,28 @@ if (command === 'assets') {
   const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor()];
   let c;
   try { c = read(); } catch (e) { fail('CONFIG', e.message, [`Fix ${CONFIG()}, then run \`first-draft-axi doctor\``]); }
-  const unready = (check) => { console.log(JSON.stringify({ ready: false, checks: [...rows, check], help: ['Fix the failing checks, then run `first-draft-axi doctor` again'] })); process.exit(1); };
-  if (!c.agent) unready({ status: 'fail', label: 'agent', detail: `no agent is set in ${CONFIG()}`, fix: ASK });
+  const subscriptions = await readySubscriptions();
+  const setup = subscriptions.map((s) => `${s.label}: ${s.init}`);
+  const unready = (check) => { console.log(JSON.stringify({ subscriptions, ready: false, checks: [...rows, check], help: setup.length ? setup : [ASK] })); process.exit(1); };
+  if (!c.agent) unready({ status: 'fail', label: 'agent', detail: 'No model source is set.', fix: setup[0] ?? ASK });
   if (!routeOf(c.agent)) unready({ status: 'fail', label: 'agent', detail: `${c.agent} is not byokit:<route>`, fix: ASK });
   rows.push(c.model ? { status: 'ok', label: 'model', detail: c.model } : { status: 'fail', label: 'model', detail: `no model is set for ${c.agent}`, fix: ASK });
   rows.push(await routeDoctor(routeOf(c.agent), c.model));
   const ready = rows.every((r) => r.status !== 'fail');
-  console.log(JSON.stringify({ ready, checks: rows, help: [ready ? 'Run `first-draft-axi make "<prompt>" --out <file.html>`' : 'Fix the failing checks, then run `first-draft-axi doctor` again'] }));
+  console.log(JSON.stringify({ subscriptions, ready, checks: rows, help: [ready ? 'Run `first-draft-axi make "<prompt>" --out <file.html>`' : 'Fix the failing checks, then run `first-draft-axi doctor` again'] }));
   if (!ready) process.exit(1);
 } else if (command === 'init') {
   const { values } = flags(rest, { agent: { type: 'string' }, model: { type: 'string' } });
   values.model ??= DEFAULT_MODEL[values.agent]; // only the routes named here have a shipped default
-  if (!values.agent || !values.model) fail('USAGE', `init needs the user's --agent byokit:<route> and --model <model>`, [ASK, `BYOKit routes: ${(await readyRoutes().catch(() => [])).map((r) => `byokit:${r}`).join(', ')}`]);
+  if (!values.agent || !values.model) {
+    const setup = (await readySubscriptions()).map((s) => `${s.label}: ${s.init}`);
+    fail('USAGE', 'Choose a model source and model.', setup.length ? setup : [ASK]);
+  }
   if (!routeOf(values.agent)) fail('BAD_AGENT', `agent ${values.agent} is not byokit:<route>`, [ASK]);
+  const refusal = modelRouteProblem(routeOf(values.agent), values.model);
+  if (refusal) fail('SUBSCRIPTION_ONLY', refusal);
   save(values);
-  console.log(JSON.stringify({ saved: { config: CONFIG(), agent: values.agent, model: values.model }, help: ['Run `first-draft-axi doctor`'] }));
+  console.log(JSON.stringify({ subscriptions: await readySubscriptions(), saved: { config: CONFIG(), agent: values.agent, model: values.model } }));
 } else if (command === 'view') {
   const { values, positionals } = flags(rest, { host: { type: 'string' }, port: { type: 'string' } });
   if (!positionals.length) fail('USAGE', 'view needs a design', ['Run `first-draft-axi view <file.html|folder>`']);
