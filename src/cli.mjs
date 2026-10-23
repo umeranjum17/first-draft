@@ -13,7 +13,7 @@ import { post } from './post.mjs';
 import { STYLES } from './styles.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
 
-const VERSION = '0.2.3';
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const PICK = 'which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
 const ASK = `Ask the user ${PICK}`;
