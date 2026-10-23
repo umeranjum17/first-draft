@@ -105,7 +105,7 @@ else {
   await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
   await assert.rejects(run('redesign',origin+'/login','Clearer','--no-references','--out',redesignOut),e=>/Login/.test(e.stdout));
   const generationInputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8');
-  assert.match(generationInputs,/7 active projects/);assert.match(generationInputs,/screen-2/);assert.match(generationInputs,/Missing navigation/,'the real done loop rejected and repaired a lost source edge');
+  assert.match(generationInputs,/7 active projects/);assert.match(generationInputs,/screen-2/);assert.match(generationInputs,/Never put diagnostic\/provenance notes/);assert.match(generationInputs,/source-present charts/);assert.match(generationInputs,/Missing navigation/,'the real done loop rejected and repaired a lost source edge');
   for(const pattern of [/clipped text/,/Remove emoji filler/,/Redesign semantic metrics/,/Redesign semantic tokens/])assert.match(generationInputs,pattern,'actual done-loop feedback drives structural and semantic repairs');
   env.FD_REVIEW_MALFORMED='1';
   const refused=join(project,'invalid-review');
