@@ -2,6 +2,14 @@
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
 journeys:
+  assets-higgsfield:
+    command: node journeys/assets.mjs higgsfield
+    spends: one Z Image plus design-model turns; previews credits first
+    timeout: 30m
+  assets-codex:
+    command: node journeys/assets.mjs codex
+    spends: one native Codex image plus design-model turns; subscription quota and overage unknown
+    timeout: 30m
   render-check:
     command: bash journeys/render-check.sh
     timeout: 40m

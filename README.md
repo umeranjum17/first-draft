@@ -60,6 +60,25 @@ Run `first-draft-axi init` with no flags to list ready routes. Set your route wi
 
 Subscription calls use your CLI's normal login without copying it. Key routes read the environment variable named by `doctor`; keys are never saved in First Draft's config. Config lives at `$FIRST_DRAFT_HOME/config.json`, default `~/.first-draft/config.json`.
 
+## Generated assets
+
+Opt-in pictures, illustrations, icons, hero visuals and backgrounds are placed **inside the draft screens**, not on a separate asset sheet. One image per option is the current ceiling. No asset calls happen by default (`--no-assets` makes that explicit).
+
+```sh
+first-draft-axi assets  # detect installed, signed-in providers; no generation
+first-draft-axi make "Umer's botanical shop with a leaf illustration" --out shop.html --assets higgsfield
+# Read the cost preview, then explicitly approve asset spending:
+first-draft-axi make "Umer's botanical shop with a leaf illustration" --out shop.html --assets higgsfield --allow-asset-spend
+```
+
+`--assets codex|higgsfield|auto` alone previews the total asset cost for `--count` and exits **before any design or image generation**. `auto` selects only when exactly one provider is ready; otherwise choose explicitly. With `--allow-asset-spend`, the preview is printed to stderr before generation. Design-model charges are separate and unchanged. Asset generation is refused in CI even with approval; tests use stand-ins only.
+
+- **Codex:** installed CLI with `codex login` (ChatGPT subscription), launched with its BYOKit installed-account path, never copied credentials. Uses native `image_generation` through `codex exec`, GPT-6 Luna, low effort, one small square image requested at lowest quality; shell tools are disabled. CLI/image-tool availability depends on the installed version and account. Codex provides **no price API**: the preview says unknown subscription quota/overage, never “free”. Approval explicitly accepts that uncertainty; exact image dimensions/quality are controlled by Codex's native tool.
+- **Higgsfield:** installed CLI with `higgsfield auth login`; uses Z Image, one square image, with the provider's live credit estimate. Your existing account pays; no keys are stored by First Draft. If a mise shim reports no runtime, run `mise exec node@26.1.0 -- first-draft-axi …` with your installed Node version.
+- **Optimization:** requires ImageMagick 7 (`magick`) on PATH, checked before spending. Each image is stripped of metadata, resized to at most 1024×1024 and encoded as WebP at quality 80 (800 KB maximum). Files live beside the output in `<name>.assets-*/image.webp`; HTML embeds them as data URIs, so viewing, copying and posting remain offline. `refine` keeps embedded images but does not generate new ones.
+
+The adapter contract is `detect()`, `estimate({prompt}) → {amount,unit,detail}`, and `generate({prompt,dir}) → local raster path` in `src/assets.mjs`. New providers use that same boundary; the host handles approval, image budget, optimization and embedding. No account switching or generation retries. A failed design can leave a paid asset on disk; the error is reported, not silently retried.
+
 ## Reference
 
 Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pinned engine and model boundary.

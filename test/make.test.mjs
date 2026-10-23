@@ -2,7 +2,7 @@
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +27,8 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const step = (seen.length - 1) % 3;
       if (step < 2) {
-        const content = body.includes('script fixture') ? page.replace('</body>', '<script>alert(1)</script></body>') : page;
+        const html = typeof page === 'function' ? page() : page;
+        const content = body.includes('script fixture') ? html.replace('</body>', '<script>alert(1)</script></body>') : html;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
           arguments: JSON.stringify(step === 0 ? { command: body.includes('view fixture') ? 'view' : 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
@@ -544,4 +545,55 @@ test('the view sends the Next brief to the person\'s agent and the refined optio
 
   assert.equal((await send({ option: 1, change: 'again' })).status, 200); // a second send never overwrites the first
   assert.deepEqual(await options(), ['a-1.html', 'a-1-refined.html', 'a-1-refined-2.html']);
+});
+
+test('asset CLI previews without spending, then embeds one optimized image per provider', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-assets-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const webp = 'UklGRjgAAABXRUJQVlA4ICwAAADQAQCdASoCAAIAAgA0JaACdLoB+AADsAD+8Oj3/yC5YXXI1/5sCua5+agAAA==';
+  const bin = join(dir, 'bin'); mkdirSync(bin);
+  const log = join(dir, 'calls');
+  const script = `#!${process.execPath}\nimport {appendFileSync,writeFileSync} from 'node:fs'; import {join,basename} from 'node:path';
+    const args=process.argv.slice(2), name=basename(process.argv[1]);
+    appendFileSync(${JSON.stringify(log)},JSON.stringify([name,...args])+'\\n');
+    if(name==='magick'){if(args[0]!=='-version')writeFileSync(args.at(-1),Buffer.from('${webp}','base64'));}
+    else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec')writeFileSync(join(args[args.indexOf('--cd')+1],'asset.png'),Buffer.from('${webp}','base64'));else console.log('codex-cli 0.159.2');}
+    else if(args[0]==='account')console.log('{"credits":10}');
+    else if(args[1]==='cost')console.log('{"credits":0.15}');
+    else console.log('[{"results":[{"url":"https://fixture.invalid/asset.png"}]}]');`;
+  for (const name of ['codex', 'higgsfield', 'magick']) writeFileSync(join(bin, name), script, { mode: 0o755 });
+  const hook = join(dir, 'fetch.mjs');
+  writeFileSync(hook, `const fetchReal=globalThis.fetch;globalThis.fetch=(url,options)=>url==='https://fixture.invalid/asset.png'?Promise.resolve(new Response(Buffer.from('${webp}','base64'))):fetchReal(url,options);`);
+  let provider;
+  const seen = [], server = await standIn(seen, null, true, 'index.html', () => {
+    const folder = readdirSync(dir).find((p) => p.startsWith(provider + '.assets-'));
+    return `<!doctype html><html><body><h1>Umer's botanical shop</h1><img alt="Leaf illustration" src="${join(dir, folder, 'image.webp')}"></body></html>`;
+  });
+  t.after(() => server.close());
+  const env = { ...process.env, PATH: bin, CI: '', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, ['--import', hook, CLI, ...args], { env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  for (provider of ['codex', 'higgsfield']) {
+    const out = join(dir, provider + '.html');
+    const args = ['make', 'Botanical shop with a leaf illustration', '--out', out, '--assets', provider];
+    const preview = JSON.parse((await run(...args)).stdout).asset_preview;
+    assert.equal(preview.images, 1); assert.equal(preview.approved, false);
+    assert.equal(preview.amount, provider === 'codex' ? null : 0.15);
+    assert.equal(existsSync(out), false); assert.equal(seen.length, provider === 'codex' ? 0 : 3);
+    assert.doesNotMatch(readFileSync(log, 'utf8'), provider === 'codex' ? /"exec"/ : /"create"/);
+    await run(...args, '--allow-asset-spend');
+    const html = readFileSync(out, 'utf8');
+    assert.match(html, /<img alt="Leaf illustration" src="data:image\/webp;base64,/);
+    assert.doesNotMatch(html, /src="\//);
+    assert.match(readFileSync(log, 'utf8'), /"-strip","-resize","1024x1024>","-quality","80"/);
+    assert.equal(readdirSync(dir).filter((p) => p.startsWith(provider + '.assets-')).length, 1);
+  }
+  const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(calls.filter(([name, action]) => name === 'codex' && action === 'exec').length, 1);
+  assert.equal(calls.filter(([name, action, verb]) => name === 'higgsfield' && action === 'generate' && verb === 'create').length, 1);
+  await run('make', 'Shop without generation', '--out', join(dir, 'disabled.html'), '--no-assets');
+  assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, calls.length);
+  await assert.rejects(run('make', 'Shop', '--out', join(dir, 'auto.html'), '--assets', 'auto'), (e) => /2 ready asset providers/.test(e.stdout));
+  await assert.rejects(run('make', 'Shop', '--out', join(dir, 'bad.html'), '--no-assets', '--assets', 'codex'), (e) => /conflicts/.test(e.stdout));
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'make', 'Shop', '--out', join(dir, 'ci.html'), '--assets', 'higgsfield', '--allow-asset-spend'], { env: { ...env, CI: 'true' } }), (e) => /disabled in CI/.test(e.stdout));
 });

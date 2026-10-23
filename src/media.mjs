@@ -63,5 +63,5 @@ export const mediaBrief = (media) => media.length
 // The page with each listed path replaced by the file itself.
 export const embedMedia = (html, media, cwd = process.cwd()) => media.length ? html.replace(/(\b(?:src|poster)\s*=\s*)(["'])([^"']*)\2/gi, (all, attr, q, value) => {
   const hit = media.find((m) => m.path === normalize(value.trim()).split('\\').join('/'));
-  return hit ? `${attr}${q}data:${hit.mime};base64,${readFileSync(resolve(cwd, hit.path)).toString('base64')}${q}` : all;
+  return hit ? `${attr}${q}${hit.dataUrl ?? `data:${hit.mime};base64,${readFileSync(resolve(cwd, hit.path)).toString('base64')}`}${q}` : all;
 }) : html;
