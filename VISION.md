@@ -8,6 +8,10 @@ People who want to see a design and pick one before anyone writes app code: on t
 
 You want to choose a direction before writing app code, not just look at one screenshot. And designs that come out of a model are often mid: no skill, no direction, nothing exciting.
 
+## Top goal
+
+Redesign a real product well, without spoon-feeding. Point first-draft at the live product (a URL or screens), add a few reference images and one line of intent. first-draft finds every screen itself, keeps the flows, applies the reference look at phone and desktop size, and uses the product's real data. It checks its own work before it hands it over: no emoji filler, metrics you read at a glance, the same tokens everywhere. On a strong model the result is really good, not mid. Working first; rough edges are fine.
+
 ## Where we are going
 
 One prompt makes several self-contained HTML mock-up options. A person compares them, plays through them, comments, refines the one they like, and picks.
