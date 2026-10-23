@@ -53,7 +53,7 @@ else {
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
  else if(tools.some(t=>t.name==='define_redesign_plan')){
   if(JSON.parse(args[args.indexOf('--json-schema')+1]).properties.calls.maxItems!==1||process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS!=='8192')throw Error('structural single-response budget missing');
-  calls=[call('define_redesign_plan',{title:'Umer projects',css:${JSON.stringify(REDESIGN_PAGE.match(/<style>([\s\S]*?)<\/style>/)[1])},notes:'Use the same metric and value classes everywhere'})];
+  calls=[call('define_redesign_plan',{title:'Umer projects',css:${JSON.stringify(REDESIGN_PAGE.match(/<style>([\s\S]*?)<\/style>/)[1])}+(process.env.FD_PLAN_BAD?'#screen-1{color:red}':''),notes:'Use the same metric and value classes everywhere'})];
  }
  else if(tools.some(t=>t.name==='write_redesign_screen')){
   const q=JSON.parse(messages.at(-1).content),first=q.attempt===1;
@@ -113,6 +113,7 @@ else {
   assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
   const sourceDir=join(project,'export');mkdirSync(sourceDir);
   writeFileSync(join(sourceDir,'index.html'),'<title>Umer export</title><h1>7 active projects</h1>');
+  env.FD_PLAN_BAD='1';const badPlan=join(project,'bad-plan');await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',badPlan),e=>/Invalid shared redesign plan.*screen-specific/.test(e.stdout));assert.match(JSON.parse(readFileSync(join(badPlan,'writer-option-1/shared-plan.json'))).css,/#screen-1/);assert.equal(existsSync(join(badPlan,'option-1.html')),false);delete env.FD_PLAN_BAD;
   await run('redesign',sourceDir,'Clearer projects','--no-references','--out',join(project,'local-redesign'));
   assert.equal(JSON.parse(readFileSync(join(project,'local-redesign/sources/sources.json'))).pages[0].url,'/index.html');
   await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
