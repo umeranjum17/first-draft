@@ -228,7 +228,7 @@ if (command === 'references') {
       writeFileSync(out, made.html);
       writeOptionReferences(out,refs.metadata);
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
-    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools });
+    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(made.redesign_check && {self_check:made.redesign_check}) });
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
     made.remote.forEach((r) => blocked.add(r));

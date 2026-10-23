@@ -60,7 +60,7 @@ const connect = async (url) => {
 };
 
 // Measure against the actual viewport, not a fixed phone width.
-const measurePage = () => {
+const measurePage = (strict = false) => {
   const vw = innerWidth;
   const clipped = (el) => {
     for (let p = el.parentElement; p; p = p.parentElement) {
@@ -83,7 +83,21 @@ const measurePage = () => {
   const plain = ({ tag, id, cls, right }) => ({ tag, id, cls, right });
   // The sources of the overflow: wide elements with no wide element inside them.
   const causes = inner.filter((o) => !inner.some((p) => p !== o && o.el.contains(p.el))).slice(0, 3).map(plain);
-  return { scrollWidth: Math.max(d.scrollWidth, document.body ? document.body.scrollWidth : 0), count: inner.length || off.length, worst: plain(inner[0] ?? off[0] ?? { tag: '', id: '', cls: '', right: 0 }), causes };
+  const textClipped=[];
+  if(strict) {
+    const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+    while(walker.nextNode() && textClipped.length<3) {
+      const node=walker.currentNode, e=node.parentElement;
+      if(!node.textContent.trim() || !(e instanceof HTMLElement) || !e.getClientRects().length || getComputedStyle(e).visibility==='hidden')continue;
+      const range=document.createRange();range.selectNodeContents(node);
+      for(let p=e;p;p=p.parentElement) {
+        const s=getComputedStyle(p),box=p.getBoundingClientRect(),left=box.left+p.clientLeft,top=box.top+p.clientTop;
+        if(!p.clientWidth || !p.clientHeight)continue; // Inline boxes do not establish overflow clipping.
+        if([...range.getClientRects()].some(r=>(/^(hidden|clip)$/.test(s.overflowX)&&(r.left<left-2||r.right>left+p.clientWidth+2))||(/^(hidden|clip)$/.test(s.overflowY)&&(r.top<top-2||r.bottom>top+p.clientHeight+2)))) {textClipped.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))}`);break;}
+      }
+    }
+  }
+  return { scrollWidth: Math.max(d.scrollWidth, document.body ? document.body.scrollWidth : 0), count: inner.length || off.length, worst: plain(inner[0] ?? off[0] ?? { tag: '', id: '', cls: '', right: 0 }), causes, textClipped };
 };
 
 // How light the page's own background is, 0 (black) to 1 (white): the body's, else the root's, else the browser's white.
@@ -193,7 +207,7 @@ export class Renderer {
   }
 
   async read(c, screen) {
-    const measured = await this.eval(c, `(${measurePage.toString()})()`);
+    const measured = await this.eval(c, `(${measurePage.toString()})(${Boolean(this.redesign)})`);
     const sig = await this.eval(c, `(${paintSignature.toString()})()`);
     const lightness = await this.eval(c, `(${pageLightness.toString()})()`);
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
@@ -259,6 +273,7 @@ export class Renderer {
 
   // The check itself: the errors done must report, so the model can fix the page in the loop.
   async check(html, redesignPages) {
+    this.redesign = Boolean(redesignPages);
     const errors = [];
     let shots;
     try {
@@ -278,7 +293,7 @@ export class Renderer {
           const links=[...document.querySelectorAll('a[href]')].filter(a=>e.contains(a)||!a.closest('[data-oc-screen]')).map(a=>a.getAttribute('href'));
           for(const l of p.links) if(l.target && l.target!==p.id && !links.includes('#'+l.target)) errors.push('Missing navigation '+p.id+' -> '+l.target);
         }
-        if(/\p{Extended_Pictographic}/u.test(document.body.textContent)) errors.push('Remove emoji filler; use SVG icons or plain labels');
+        if(/\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/u.test(document.body.textContent)) errors.push('Remove emoji filler; use SVG icons or plain labels');
         return [...new Set(errors)];
       }).toString()})(${JSON.stringify(redesignPages)})`);
       errors.push(...findings.map(message=>({source:'redesign',message})));
@@ -289,6 +304,7 @@ export class Renderer {
         if (!shot.visible) errors.push({ source: 'render', message: `${context} in ${theme} has no visible layout. Each screen must work independently on phone and desktop. Then call done again.` });
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
+        if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;
         const { measured: m } = shot, worst = m.worst.tag ? m.worst : null;
         errors.push({ source: 'render', message: `${context} in ${theme}: the page is ${m.scrollWidth}px wide on a ${width}px ${width === 390 ? 'phone' : 'desktop'}; it must fit ${width}px. ${m.count} element(s) overflow, the widest is ${worst ? name(worst) : 'an unknown element'} at ${worst ? worst.right : m.scrollWidth}px. The overflow comes from ${m.causes.map(name).join(', ') || 'the elements above'}: wrap a pre or table in a container with overflow-x:auto, write grid columns as minmax(0,1fr), give grid and flex children min-width:0, and let long text wrap. Then call done again.` });

@@ -12,7 +12,9 @@ const CLI=new URL('../src/cli.mjs',import.meta.url).pathname;
 const PERMISSION='Anonymous automated browsers may store screenshots of this entire website privately as visual design references. Do not copy our text or assets into generated designs.';
 const DESIGN=readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md',import.meta.url),'utf8');
 const PAGE='<!doctype html><html><head><style>:root{color-scheme:light dark;background:#fafafa;color:#111}body{margin:24px;font-family:Arial}h1{font-size:32px}@media(prefers-color-scheme:dark){:root{background:#111;color:#fafafa}}</style></head><body><h1>Umer notes</h1><p>A note</p></body></html>';
-const REDESIGN_PAGE=PAGE.replace('<h1>Umer notes</h1><p>A note</p>','<section data-oc-screen id="screen-1"><h1>Umer projects</h1><p>7 active projects</p><a href="#screen-2">Project detail</a></section><section data-oc-screen id="screen-2"><h1>Umer project</h1><p>3 tasks remaining</p><a href="#screen-1">Projects</a></section>');
+const REDESIGN_PAGE='<!doctype html><html><head><style>:root{color-scheme:light dark;--bg:#fafafa;--ink:#111;--gap:24px;--radius:12px;background:var(--bg);color:var(--ink)}body{margin:var(--gap);font-family:Arial}h1{font-size:32px}.metric{border-radius:var(--radius)}.value{display:block;font-size:32px;font-weight:700}@media(prefers-color-scheme:dark){:root{--bg:#111;--ink:#fafafa}}</style></head><body><section data-oc-screen id="screen-1"><h1>Umer projects</h1><div class="metric"><b class="value">7</b><span>active projects</span></div><a href="#screen-2">Project detail</a></section><section data-oc-screen id="screen-2"><h1>Umer project</h1><div class="metric"><b class="value">3</b><span>tasks remaining</span></div><a href="#screen-1">Projects</a><p>© Umer</p></section></body></html>';
+const BAD_SEMANTICS=REDESIGN_PAGE.replace('class="value">7','class="value">Remaining 3 tasks remaining').replace('class="metric"><b class="value">3','class="metric" style="background:magenta;border-radius:37px"><b class="value">3');
+const BAD_STRUCTURE=BAD_SEMANTICS.replace('href="#screen-2"','href="#screen-1"').replace('<h1>Umer projects</h1>','<h1>Umer projects</h1><span style="display:block;width:4px;overflow:hidden;white-space:nowrap">clipped metric label</span><p>✨</p>');
 const BRAND_PAGE=`<!doctype html><html><head><link rel="stylesheet" href="/style.css"></head><body><header>Umer Reference Lab</header><main><h1>Build something clear.</h1><p>A public local reference fixture, not the real Vercel site.</p><a href="/terms">Terms</a><script src="/never.js"></script><iframe src="/never-frame"></iframe></main></body></html>`;
 
 test('public references: actual browser capture, project cache, named-brand make, source-linked viewer and safe refusals',async t=>{
@@ -49,12 +51,17 @@ else {
  let calls=[];
  if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
+ else if(tools.some(t=>t.name==='assess_redesign')) {
+  const bad=raw.includes('Remaining 3 tasks remaining')||process.env.FD_REVIEW_ALWAYS_FAIL;
+  calls=[call('assess_redesign',{checks:process.env.FD_REVIEW_MALFORMED?[{name:'metrics',passed:'yes',detail:'invalid'}]:[{name:'metrics',passed:!bad,detail:bad?'screen-1 metric: use one number and one label, not Remaining 3 tasks remaining':'Each metric has one number and one label'},{name:'tokens',passed:!bad,detail:bad?'screen-2 metric: remove magenta and 37px overrides; use shared tokens':'Both screens share global tokens'}]})];
+ }
  else {
   const results=messages.filter(m=>m.role==='toolResult');
-  const page=raw.includes('SOURCE INVENTORY:')?(raw.includes('Missing navigation')?${JSON.stringify(REDESIGN_PAGE)}:${JSON.stringify(REDESIGN_PAGE.replace('href="#screen-2"','href="#screen-1"'))}):raw.includes('warmer palette')?${JSON.stringify(PAGE.replace('A note','A warm note'))}:${JSON.stringify(PAGE)};
+  let page=raw.includes('SOURCE INVENTORY:')?(raw.includes('Redesign semantic')?${JSON.stringify(REDESIGN_PAGE)}:raw.includes('clipped text')?${JSON.stringify(BAD_SEMANTICS)}:${JSON.stringify(BAD_STRUCTURE)}):raw.includes('warmer palette')?${JSON.stringify(PAGE.replace('A note','A warm note'))}:${JSON.stringify(PAGE)};
+  if(process.env.FD_REVIEW_ALWAYS_FAIL)page=page.replace('© Umer','© Umer revision '+results.length);
   calls=results.length===0?[call('set_todos',{items:[{text:'Write notes',checked:false}]})]
    :results.length===1?[call('str_replace_based_edit_tool',{command:'create',path:'DESIGN.md',file_text:${JSON.stringify(DESIGN)}}),call('str_replace_based_edit_tool',{command:'create',path:'index.html',file_text:page})]
-   :results.length===3?[call('done',{path:'index.html'})]:results.length===4&&raw.includes('Missing navigation')?[call('str_replace_based_edit_tool',{command:'create',path:'index.html',file_text:page}),call('done',{path:'index.html'})]:[];
+   :results.length===3?[call('done',{path:'index.html'})]:[4,6,8].includes(results.length)&&/clipped text|Redesign semantic/.test(raw)?[call('str_replace_based_edit_tool',{command:'create',path:'index.html',file_text:page}),call('done',{path:'index.html'})]:[];
  }
  console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,structured_output:{text:'',calls},usage:{input_tokens:7,output_tokens:8}}));
 }
@@ -74,6 +81,10 @@ else {
   const redesigned=JSON.parse((await run('redesign',origin+'/product.html','Make the projects clearer','--no-references','--out',redesignOut,'--max-pages','2')).stdout);
   assert.equal(redesigned.made.files.length,1);
   assert.equal(redesigned.made.render_check,'checked');
+  assert.equal(redesigned.made.files[0].self_check.reviews,2);
+  assert.ok(redesigned.made.files[0].self_check.semantic.every(c=>c.passed));
+  assert.match(readFileSync(redesigned.made.files[0].file,'utf8'),/© Umer/,'copyright text is not emoji filler');
+  assert.doesNotMatch(readFileSync(redesigned.made.files[0].file,'utf8'),/magenta|✨|clipped metric label/);
   assert.match(readFileSync(redesigned.made.files[0].file,'utf8'),/href="#screen-2"/);
   const inventory=JSON.parse(readFileSync(redesigned.redesign.sources,'utf8'));
   assert.equal(inventory.pages.length,2);assert.deepEqual(inventory.pending,[]);
@@ -92,6 +103,15 @@ else {
   await assert.rejects(run('redesign',origin+'/login','Clearer','--no-references','--out',redesignOut),e=>/Login/.test(e.stdout));
   const generationInputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8');
   assert.match(generationInputs,/7 active projects/);assert.match(generationInputs,/screen-2/);assert.match(generationInputs,/Missing navigation/,'the real done loop rejected and repaired a lost source edge');
+  for(const pattern of [/clipped text/,/Remove emoji filler/,/Redesign semantic metrics/,/Redesign semantic tokens/])assert.match(generationInputs,pattern,'actual done-loop feedback drives structural and semantic repairs');
+  env.FD_REVIEW_MALFORMED='1';
+  const refused=join(project,'invalid-review');
+  await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',refused),e=>/invalid redesign semantic check/.test(e.stdout));
+  assert.equal(existsSync(join(refused,'option-1.html')),false);delete env.FD_REVIEW_MALFORMED;
+  const reviewCount=()=>readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>t.name==='assess_redesign')).length;
+  const beforeReviews=reviewCount();env.FD_REVIEW_ALWAYS_FAIL='1';
+  await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',refused),e=>/failed after 3 versions/.test(e.stdout));
+  assert.equal(reviewCount()-beforeReviews,3,'semantic review is capped at three versions');delete env.FD_REVIEW_ALWAYS_FAIL;
   assert.ok(!requests.some(r=>r.url==='/never.js'));
   const before=requests.length;
   assert.equal(JSON.parse((await run('references','--like',origin+'/','--capture')).stdout).reference_capture.cached,true);
