@@ -82,7 +82,7 @@ else {
   assert.ok(requests.every(r=>!r.cookie&&!r.auth&&r.ua.includes('FirstDraftReference/1.0')),'all site requests are anonymous and polite');
   assert.ok(readdirSync(join(project,'.first-draft/refs')).length>=1);
   const out=join(project,'notes.html'),warm=join(project,'warm.html');
-  const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--out',out)).stdout);
+  const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--options','1','--out',out)).stdout);
   assert.equal(made.references.name,'Vercel');assert.equal(made.made.render_check,'checked');
   const reference=JSON.parse(readFileSync(out+'.refs.json','utf8'));
   assert.equal(reference.shots.length,2);assert.doesNotMatch(readFileSync(out,'utf8'),/data:image|Build something clear/);
@@ -101,7 +101,7 @@ else {
   const changed=await fetch(new URL('/refine',view),{method:'POST',headers:{origin:new URL(view).origin,'content-type':'application/json'},body:JSON.stringify({option:1,change:'warmer palette'})});
   assert.equal(changed.status,200);assert.equal((await changed.json()).option.references.name,'Vercel','viewer refinement preserves references');
   await assert.rejects(run('make','notes','--like','Vercel','--no-references','--out',join(project,'bad.html')),e=>/conflicts/.test(e.stdout));
-  await run('make','notes for Umer','--no-references','--out',out);
+  await run('make','notes for Umer','--options','1','--no-references','--out',out);
   assert.equal(existsSync(out+'.refs.json'),false,'overwriting without references removes stale option provenance');
   writeFileSync(out+'.refs.json',JSON.stringify({...reference,shots:reference.shots.map(s=>({...s,dataUrl:'data:text/html,not an image'}))}));
   assert.equal((await fetch(new URL('/refs/1/0',view))).status,422,'malformed sidecars cannot serve arbitrary content');

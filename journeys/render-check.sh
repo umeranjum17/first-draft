@@ -20,12 +20,12 @@ prompt="Make a landing page for my tool first-draft-axi. Its README is below; us
 
 $(cat "$root/README.md")"
 
-node "$root/src/cli.mjs" make "$prompt" --out "$d/after.html" > "$extra/after-make.json" 2> "$d/after-make.stderr" & after=$!
+node "$root/src/cli.mjs" make "$prompt" --count 1 --out "$d/after.html" > "$extra/after-make.json" 2> "$d/after-make.stderr" & after=$!
 mkdir "$d/base"
 git -C "$root" archive "${FD_BASE:-origin/main}" | tar -x -C "$d/base"
 ln -s "$root/node_modules" "$d/base/node_modules"
 cp -r "$root/dist" "$d/base/dist"
-node "$d/base/src/cli.mjs" make "$prompt" --out "$d/before.html" > "$before/make.json" 2> "$before/make.stderr" & release=$!
+node "$d/base/src/cli.mjs" make "$prompt" --count 1 --out "$d/before.html" > "$before/make.json" 2> "$before/make.stderr" & release=$!
 wait "$after"
 wait "$release"
 cp "$d/after.html" "$extra/after.html"
