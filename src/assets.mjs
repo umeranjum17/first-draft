@@ -28,7 +28,7 @@ export const assetProviders = {
     async generate({ prompt, dir }) {
       const jobs = JSON.parse(await hf(['generate', 'create', ...hfArgs(prompt), '--wait']));
       writeFileSync(join(dir, 'provider-result.json'), JSON.stringify(jobs));
-      const url = jobs[0]?.results?.[0]?.url;
+      const url = jobs[0]?.result_url;
       if (!url || new URL(url).protocol !== 'https:') throw new Error('Higgsfield returned no HTTPS image result');
       const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
       if (!response.ok) throw new Error(`Higgsfield image download: HTTP ${response.status}`);

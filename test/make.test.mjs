@@ -560,7 +560,7 @@ test('asset CLI previews without spending, then embeds one optimized image per p
     else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec')writeFileSync(join(args[args.indexOf('--cd')+1],'asset.png'),Buffer.from('${webp}','base64'));else console.log('codex-cli 0.159.2');}
     else if(args[0]==='account')console.log('{"credits":10}');
     else if(args[1]==='cost')console.log('{"credits":0.15}');
-    else console.log('[{"results":[{"url":"https://fixture.invalid/asset.png"}]}]');`;
+    else console.log('[{"status":"completed","job_type":"z_image","result_url":"https://fixture.invalid/asset.png"}]');`;
   for (const name of ['codex', 'higgsfield', 'magick']) writeFileSync(join(bin, name), script, { mode: 0o755 });
   const hook = join(dir, 'fetch.mjs');
   writeFileSync(hook, `const fetchReal=globalThis.fetch;globalThis.fetch=(url,options)=>url==='https://fixture.invalid/asset.png'?Promise.resolve(new Response(Buffer.from('${webp}','base64'))):fetchReal(url,options);`);
