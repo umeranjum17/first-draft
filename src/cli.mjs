@@ -118,7 +118,7 @@ const refineHtml = async (seed, change, inherited) => {
 
 const HELP = `usage: first-draft-axi <command> [flags]
 commands[10]:
-  redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
+  redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12] [--session <private.json>]   discover linked pages and redesign them (anonymous by default; explicit signed-link session enables direct read-only JS capture)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
   assets                              detect installed asset providers without spending
   make "<prompt>" (--out <file.html> | --out-dir <folder>) [flags]   make self-contained HTML design options (one engine run each)
@@ -165,7 +165,7 @@ if (command === 'references') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
 } else if (command === 'make' || command === 'redesign') {
   const redesign = command === 'redesign';
-  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages'] : [])].map((name) => [name, { type: 'string' }])) });
+  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages', 'session'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file');
   if (redesign && values['max-pages'] !== undefined && !/^(?:[1-9]|1[0-2])$/.test(values['max-pages'])) fail('USAGE', '--max-pages must be 1-12');
@@ -205,7 +205,7 @@ if (command === 'references') {
   let inventory;
   if (redesign) {
     try {
-      const captured = await redesignSource({ source, out: values.out, maxPages: Number(values['max-pages'] ?? 6) });
+      const captured = await redesignSource({ source, out: values.out, maxPages: Number(values['max-pages'] ?? 6), session: values.session });
       inventory = captured.inventory;
       prompt = `${prompt}\n\n${captured.brief}`;
       screens = inventory.pages.map(p => p.id);

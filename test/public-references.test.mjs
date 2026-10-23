@@ -23,6 +23,9 @@ test('public references: actual browser capture, project cache, named-brand make
   const site=createServer((req,res)=>{
     requests.push({url:req.url,cookie:req.headers.cookie,auth:req.headers.authorization,ua:req.headers['user-agent']});
     const send=(type,body,status=200)=>{res.writeHead(status,{'content-type':type,'set-cookie':'private=must-not-be-retained'});res.end(body);};
+    if(req.url.startsWith('/session.html?')){res.writeHead(303,{location:'/session.html','set-cookie':'fd_session=umer; HttpOnly; SameSite=Lax'});return res.end();}
+    if(req.url==='/session-data'){if(!req.headers.cookie?.includes('fd_session=umer'))return send('text/plain','Unauthorized',401);return send('application/json',JSON.stringify({padding:'x'.repeat(2_100_000),home:'Umer projects: 7 active projects',detail:'Umer project: 3 tasks remaining'}));}
+    if(req.url==='/session.html')return send('text/html',`<title>Umer live product</title><nav><a href="#home">Projects</a><a href="#detail">Project detail</a></nav><main id="app" class="skeleton">Loading</main><script>let data;const paint=()=>{if(data){app.className='';app.textContent=location.hash==='#detail'?data.detail:data.home;}};fetch('/session-data').then(r=>r.json()).then(d=>{data=d;paint()});addEventListener('hashchange',paint);fetch('/write-attempt',{method:'POST'}).catch(()=>{});</script>`);
     if(req.url==='/robots.txt') return send('text/plain',robots);
     if(req.url==='/product.html') return send('text/html','<title>Umer projects</title><h1>Umer projects</h1><p>7 active projects</p><a href="/detail.html">Project detail</a><a href="https://outside.invalid/">Outside</a><script>fetch("/never.js")</script>');
     if(req.url==='/detail.html') return send('text/html','<title>Project detail</title><h1>Umer project</h1><p>3 tasks remaining</p><a href="/product.html">Projects</a>');
@@ -93,6 +96,17 @@ else {
   assert.equal(inventory.pages[0].links[0].target,'screen-2');
   assert.equal(inventory.pages[1].links[0].target,'screen-1');
   for(const page of inventory.pages)for(const shot of page.screenshots){const b=readFileSync(join(redesignOut,'sources',shot.file));assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);}
+  const session=join(dir,'session.json'),secret='synthetic-session-secret-umer';
+  writeFileSync(session,JSON.stringify({version:1,url:origin+'/session.html?token='+secret}),{mode:0o600});
+  const sessionStart=requests.length;
+  const live=JSON.parse((await run('redesign',origin+'/session.html','Clearer projects','--session',session,'--no-references','--out',join(project,'live-redesign'),'--max-pages','2')).stdout);
+  const sessionEnd=requests.length,liveInventory=JSON.parse(readFileSync(live.redesign.sources,'utf8'));
+  assert.equal(liveInventory.pages.length,2);assert.ok(liveInventory.bytes>2_000_000,'browser streams a hydrated API response larger than the former proxy cap');
+  assert.match(liveInventory.pages[0].text,/7 active projects/);assert.match(liveInventory.pages[1].text,/3 tasks remaining/);
+  assert.equal(liveInventory.pages[0].links.find(l=>l.label==='Project detail').target,'screen-2');
+  assert.ok(liveInventory.blocked_requests.writes>0);assert.ok(!requests.some(r=>r.url==='/write-attempt'),'browser blocks source background POST before it reaches the server');
+  assert.ok(!JSON.stringify(live).includes(secret)&&!readFileSync(live.redesign.sources,'utf8').includes(secret));
+  for(const p of liveInventory.pages){assert.equal(p.screenshots.length,4);for(const shot of p.screenshots){const png=readFileSync(join(project,'live-redesign/sources',shot.file));assert.equal(png.readUInt32BE(16),shot.width);assert.equal(png.readUInt32BE(20),shot.height);}}
   const capped=JSON.parse((await run('redesign',origin+'/product.html','Clearer','--no-references','--out',join(project,'capped'),'--max-pages','1')).stdout);
   assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
   const sourceDir=join(project,'export');mkdirSync(sourceDir);
@@ -125,7 +139,7 @@ else {
   robots='User-agent: *\nAllow: /\nUser-agent: FirstDraftReference\nDisallow: /specific\n';
   await assert.rejects(run('references','--like',origin+'/specific','--capture'),e=>/robots.txt disallows/.test(e.stdout));
   assert.ok(!requests.some(r=>['/blocked','/specific','/never.js','/never-frame'].includes(r.url)));
-  assert.ok(requests.every(r=>!r.cookie&&!r.auth&&r.ua.includes('FirstDraftReference/1.0')),'all site requests are anonymous and polite');
+  assert.ok(requests.filter((r,i)=>i<sessionStart||i>=sessionEnd).every(r=>!r.cookie&&!r.auth&&r.ua.includes('FirstDraftReference/1.0')),'public-reference requests remain anonymous and polite; explicit session requests are separate');
   assert.ok(readdirSync(join(project,'.first-draft/refs')).length>=1);
   const out=join(project,'notes.html'),warm=join(project,'warm.html');
   const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--options','1','--out',out)).stdout);
