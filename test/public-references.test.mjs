@@ -52,6 +52,7 @@ else {
  if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
  else if(tools.some(t=>t.name==='assess_redesign')) {
+  if(Number(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS)!==8192)throw Error('semantic review reasoning budget missing');
   const bad=raw.includes('Remaining 3 tasks remaining')||process.env.FD_REVIEW_ALWAYS_FAIL;
   calls=[call('assess_redesign',{checks:process.env.FD_REVIEW_MALFORMED?[{name:'metrics',passed:'yes',detail:'invalid'}]:[{name:'metrics',passed:!bad,detail:bad?'screen-1 metric: use one number and one label, not Remaining 3 tasks remaining':'Each metric has one number and one label'},{name:'tokens',passed:!bad,detail:bad?'screen-2 metric: remove magenta and 37px overrides; use shared tokens':'Both screens share global tokens'}]})];
  }
@@ -79,6 +80,7 @@ else {
   for(const shot of manifest.screenshots){const b=readFileSync(join(captured.cache,'..',shot.file));assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);}
   const redesignOut=join(project,'redesigned');
   const redesigned=JSON.parse((await run('redesign',origin+'/product.html','Make the projects clearer','--no-references','--out',redesignOut,'--max-pages','2')).stdout);
+  await promisify(execFile)(process.execPath,['--input-type=module','-e',`import assert from 'node:assert/strict';import {checkRedesign} from ${JSON.stringify(new URL('../src/redesign-check.mjs',import.meta.url).href)};await assert.rejects(checkRedesign({html:'<h1>Umer</h1>',agent:'byokit:claude',model:'claude-opus-5-5',timeoutMs:1}),/semantic review timed out after 1 ms/);`],{env,cwd:project,timeout:30000,maxBuffer:100000});
   assert.equal(redesigned.made.files.length,1);
   assert.equal(redesigned.made.render_check,'checked');
   assert.equal(redesigned.made.files[0].self_check.reviews,2);
