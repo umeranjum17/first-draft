@@ -2,6 +2,9 @@
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
 journeys:
+  cli-controls-recapture:
+    command: node journeys/cli-controls-capture.mjs
+    timeout: 5m
   cli-controls:
     command: node journeys/cli-controls.mjs
     core: true

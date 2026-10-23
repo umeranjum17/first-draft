@@ -66,7 +66,7 @@ try {
   run('chrome-devtools-axi', ['resize', '1280', '900']);
   run('chrome-devtools-axi', ['screenshot', join(out, 'five-options.png')]);
   run('chrome-devtools-axi', ['open', `${viewing.url}#/o/1/play`]);
-  run('chrome-devtools-axi', ['wait', '1500']);
+  run('sleep', ['1.5']);
   run('chrome-devtools-axi', ['screenshot', join(out, 'option-play.png')]);
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version }, start: 'empty folder; npm tarball installed outside the repository; task-private First Draft config', steps: ['pack and install the committed candidate', 'init BYOKit MiniMax route and doctor', 'make --options 1, 3 and 5 with brief-file, screens, style, model and out-dir', 'check generated HTML inventory and unchanged saved config', 'view all five options and open Play'], result: 'The installed CLI generated 1, 3 and 5 self-contained options; five options are visible in the grid and one opens in Play.' }, null, 2));
 } finally {
