@@ -258,7 +258,7 @@ export class Renderer {
   }
 
   // The check itself: the errors done must report, so the model can fix the page in the loop.
-  async check(html) {
+  async check(html, redesignPages) {
     const errors = [];
     let shots;
     try {
@@ -268,6 +268,20 @@ export class Renderer {
       if (this.state === 'skipped') return errors;
       try { await this.start(); shots = await this.render(html); }
       catch (e2) { this.skip(e2.message); return errors; }
+    }
+    if (redesignPages) {
+      const findings = await this.eval(this.client, `(${((pages) => {
+        const errors=[];
+        for(const p of pages) {
+          const e=document.getElementById(p.id);
+          if(!e?.hasAttribute('data-oc-screen')) { errors.push('Missing required screen '+p.id); continue; }
+          const links=[...document.querySelectorAll('a[href]')].filter(a=>e.contains(a)||!a.closest('[data-oc-screen]')).map(a=>a.getAttribute('href'));
+          for(const l of p.links) if(l.target && l.target!==p.id && !links.includes('#'+l.target)) errors.push('Missing navigation '+p.id+' -> '+l.target);
+        }
+        if(/\p{Extended_Pictographic}/u.test(document.body.textContent)) errors.push('Remove emoji filler; use SVG icons or plain labels');
+        return [...new Set(errors)];
+      }).toString()})(${JSON.stringify(redesignPages)})`);
+      errors.push(...findings.map(message=>({source:'redesign',message})));
     }
     for (const { width, height, screen, light, dark } of shots) {
       const context = `${screen === null ? 'the page' : `screen ${JSON.stringify(screen)}`} at ${width}x${height}`;
@@ -293,7 +307,7 @@ export class Renderer {
 
 // The render check for one run: the browser starts with the first done and stops with the run.
 // dark: the named style is dark-first, so the page must be dark in both renders instead of different in each.
-export const renderCheck = (onWarn = () => {}, { dark = false } = {}) => {
+export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages } = {}) => {
   const bin = findBrowser();
   if (!bin) {
     const warning = 'no Chrome or Chromium was found on this machine, so the 390px/1280px light/dark render checks were skipped';
@@ -311,7 +325,7 @@ export const renderCheck = (onWarn = () => {}, { dark = false } = {}) => {
         try { await render.start(); }
         catch (e) { render.skip(e.message); return []; }
       }
-      return render.check(html);
+      return render.check(html, redesignPages);
     },
     // The source's standalone document drawn into static HTML. A browser that cannot start is the real failure here: the source cannot become a page without it.
     snapshot: async (doc) => {

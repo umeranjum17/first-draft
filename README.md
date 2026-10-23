@@ -102,6 +102,23 @@ References are cached for 24 hours in the current project's `.first-draft/refs/<
 
 The viewer shows the captures, Source/Permission links and visual-language notes **beside each option**. A portable `<option>.html.refs.json` sidecar keeps references available offline and through refinement/posting; keep it beside its HTML file. `--no-references` disables automatic online gathering without disabling local `--ref <local.png|jpg|webp>`. Generic follow-up changes keep the option's captured references. A failure is reported, never silently replaced with an invented brand style.
 
+## Redesign an existing product (first slice)
+
+```sh
+first-draft-axi redesign https://example.com/ "Make the workflow clearer" \
+  --ref inspiration.png --out redesigned --max-pages 6
+first-draft-axi redesign ./html-export "Make the workflow clearer" --out redesigned
+first-draft-axi view redesigned
+```
+
+Starts at the URL (or a folder's `index.html`), follows same-origin anchor links, and records visible text, mapped navigation, pending URLs and phone/desktop source captures under `redesigned/sources/`. One coherent option contains all discovered screens at 390 and 1280; `--options 1-5`, `--model`, `--ref` and `--like` reuse make's controls. `--screens` is not accepted: screens come from discovery. Output must be outside a source folder.
+
+**Boundaries:** anonymous, script-disabled HTML only. Public URLs use the same DNS/robots/request/byte safety limits as reference capture, but no reference-licence model call is needed for the product itself. Default 6 pages, maximum 12; unvisited URLs are reported. Folder exports must use same-folder HTML links and supported CSS/image/font files. No credentials, query routes, signed-in session import, SPA navigation, clicks or form submissions in this slice. Source screenshots are light first-viewports, not full-page or dark captures. Source copy is deliberately supplied to the model as untrusted content; reference copy is not.
+
+Before acceptance, the existing model repair loop checks each screen at both sizes and themes, plus required screen ids, mapped navigation edges and emoji. Semantic metric clarity, cross-screen token consistency, clipped text inside overflow containers and visual similarity are **not yet certified**. The sign-off/fleet authenticated benchmark and its reference-quality gap closure remain a subsequent slice; the rejected hand-built prototypes are not quality targets.
+
+Deterministic coverage: `node --test test/public-references.test.mjs` (native provider stand-in, real CLI/engine/browser). Nonpaid whole-output recapture: `FD_REDESIGN_SOURCE=<output-folder> DONE_DONE_EVIDENCE_ROOT=<captures> node journeys/redesign.mjs`; compare those untouched generated viewports with `sources/*.png`. This does not repeat generation or claim visual acceptance.
+
 ## Reference
 
 Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pinned engine and model boundary.
