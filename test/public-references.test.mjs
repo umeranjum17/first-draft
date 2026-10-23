@@ -12,6 +12,7 @@ const CLI=new URL('../src/cli.mjs',import.meta.url).pathname;
 const PERMISSION='Anonymous automated browsers may store screenshots of this entire website privately as visual design references. Do not copy our text or assets into generated designs.';
 const DESIGN=readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md',import.meta.url),'utf8');
 const PAGE='<!doctype html><html><head><style>:root{color-scheme:light dark;background:#fafafa;color:#111}body{margin:24px;font-family:Arial}h1{font-size:32px}@media(prefers-color-scheme:dark){:root{background:#111;color:#fafafa}}</style></head><body><h1>Umer notes</h1><p>A note</p></body></html>';
+const REDESIGN_PAGE=PAGE.replace('<h1>Umer notes</h1><p>A note</p>','<section data-oc-screen id="screen-1"><h1>Umer projects</h1><p>7 active projects</p><a href="#screen-2">Project detail</a></section><section data-oc-screen id="screen-2"><h1>Umer project</h1><p>3 tasks remaining</p><a href="#screen-1">Projects</a></section>');
 const BRAND_PAGE=`<!doctype html><html><head><link rel="stylesheet" href="/style.css"></head><body><header>Umer Reference Lab</header><main><h1>Build something clear.</h1><p>A public local reference fixture, not the real Vercel site.</p><a href="/terms">Terms</a><script src="/never.js"></script><iframe src="/never-frame"></iframe></main></body></html>`;
 
 test('public references: actual browser capture, project cache, named-brand make, source-linked viewer and safe refusals',async t=>{
@@ -21,6 +22,8 @@ test('public references: actual browser capture, project cache, named-brand make
     requests.push({url:req.url,cookie:req.headers.cookie,auth:req.headers.authorization,ua:req.headers['user-agent']});
     const send=(type,body,status=200)=>{res.writeHead(status,{'content-type':type,'set-cookie':'private=must-not-be-retained'});res.end(body);};
     if(req.url==='/robots.txt') return send('text/plain',robots);
+    if(req.url==='/product.html') return send('text/html','<title>Umer projects</title><h1>Umer projects</h1><p>7 active projects</p><a href="/detail.html">Project detail</a><a href="https://outside.invalid/">Outside</a><script>fetch("/never.js")</script>');
+    if(req.url==='/detail.html') return send('text/html','<title>Project detail</title><h1>Umer project</h1><p>3 tasks remaining</p><a href="/product.html">Projects</a>');
     if(req.url==='/terms') return send('text/html',`<h1>Reference permission</h1><p>${PERMISSION}</p>`);
     if(req.url==='/style.css') return send('text/css','body{font-family:Arial,sans-serif;margin:0;background:#080808;color:#fafafa}header{padding:24px;border-bottom:1px solid #333}main{max-width:1000px;margin:auto;padding:48px 24px}h1{font-size:clamp(32px,6vw,72px);letter-spacing:-.04em}a{color:#aaa}');
     if(req.url==='/redirect') {res.writeHead(302,{location:'http://127.0.0.1:1/private'});return res.end();}
@@ -48,10 +51,10 @@ else {
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
  else {
   const results=messages.filter(m=>m.role==='toolResult');
-  const page=raw.includes('warmer palette')?${JSON.stringify(PAGE.replace('A note','A warm note'))}:${JSON.stringify(PAGE)};
+  const page=raw.includes('SOURCE INVENTORY:')?(raw.includes('Missing navigation')?${JSON.stringify(REDESIGN_PAGE)}:${JSON.stringify(REDESIGN_PAGE.replace('href="#screen-2"','href="#screen-1"'))}):raw.includes('warmer palette')?${JSON.stringify(PAGE.replace('A note','A warm note'))}:${JSON.stringify(PAGE)};
   calls=results.length===0?[call('set_todos',{items:[{text:'Write notes',checked:false}]})]
    :results.length===1?[call('str_replace_based_edit_tool',{command:'create',path:'DESIGN.md',file_text:${JSON.stringify(DESIGN)}}),call('str_replace_based_edit_tool',{command:'create',path:'index.html',file_text:page})]
-   :results.length===3?[call('done',{path:'index.html'})]:[];
+   :results.length===3?[call('done',{path:'index.html'})]:results.length===4&&raw.includes('Missing navigation')?[call('str_replace_based_edit_tool',{command:'create',path:'index.html',file_text:page}),call('done',{path:'index.html'})]:[];
  }
  console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,structured_output:{text:'',calls},usage:{input_tokens:7,output_tokens:8}}));
 }
@@ -67,6 +70,29 @@ else {
   assert.equal(manifest.url,origin+'/');assert.match(manifest.licence_note,/Anonymous automated browsers/);
   assert.equal(manifest.screenshots.length,2);
   for(const shot of manifest.screenshots){const b=readFileSync(join(captured.cache,'..',shot.file));assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);}
+  const redesignOut=join(project,'redesigned');
+  const redesigned=JSON.parse((await run('redesign',origin+'/product.html','Make the projects clearer','--no-references','--out',redesignOut,'--max-pages','2')).stdout);
+  assert.equal(redesigned.made.files.length,1);
+  assert.equal(redesigned.made.render_check,'checked');
+  assert.match(readFileSync(redesigned.made.files[0].file,'utf8'),/href="#screen-2"/);
+  const inventory=JSON.parse(readFileSync(redesigned.redesign.sources,'utf8'));
+  assert.equal(inventory.pages.length,2);assert.deepEqual(inventory.pending,[]);
+  assert.match(inventory.pages[0].text,/7 active projects/);
+  assert.match(inventory.pages[1].text,/3 tasks remaining/);
+  assert.equal(inventory.pages[0].links[0].target,'screen-2');
+  assert.equal(inventory.pages[1].links[0].target,'screen-1');
+  for(const page of inventory.pages)for(const shot of page.screenshots){const b=readFileSync(join(redesignOut,'sources',shot.file));assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);}
+  const capped=JSON.parse((await run('redesign',origin+'/product.html','Clearer','--no-references','--out',join(project,'capped'),'--max-pages','1')).stdout);
+  assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
+  const sourceDir=join(project,'export');mkdirSync(sourceDir);
+  writeFileSync(join(sourceDir,'index.html'),'<title>Umer export</title><h1>7 active projects</h1>');
+  await run('redesign',sourceDir,'Clearer projects','--no-references','--out',join(project,'local-redesign'));
+  assert.equal(JSON.parse(readFileSync(join(project,'local-redesign/sources/sources.json'))).pages[0].url,'/index.html');
+  await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
+  await assert.rejects(run('redesign',origin+'/login','Clearer','--no-references','--out',redesignOut),e=>/Login/.test(e.stdout));
+  const generationInputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8');
+  assert.match(generationInputs,/7 active projects/);assert.match(generationInputs,/screen-2/);assert.match(generationInputs,/Missing navigation/,'the real done loop rejected and repaired a lost source edge');
+  assert.ok(!requests.some(r=>r.url==='/never.js'));
   const before=requests.length;
   assert.equal(JSON.parse((await run('references','--like',origin+'/','--capture')).stdout).reference_capture.cached,true);
   assert.equal(requests.length,before,'fresh project cache makes no site calls');
@@ -88,7 +114,7 @@ else {
   assert.equal(reference.shots.length,2);assert.doesNotMatch(readFileSync(out,'utf8'),/data:image|Build something clear/);
   await run('refine',out,'warmer palette','--out',warm);
   assert.match(readFileSync(warm,'utf8'),/A warm note/);assert.deepEqual(JSON.parse(readFileSync(warm+'.refs.json','utf8')),reference);
-  const inputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>t.name==='done'));
+  const inputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>t.name==='done')&&!JSON.stringify(r.messages).includes('SOURCE INVENTORY:'));
   assert.ok(inputs.length>=8&&inputs.every(r=>r.images===2&&r.system.includes('Observed reference visual language')),'capture pixels and observed brief reach every generation turn');
   const port=await new Promise(ok=>{const s=portServer().listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>ok(p));});});
   const child=spawn(process.execPath,[CLI,'view',out,warm,'--host','127.0.0.1','--port',String(port)],{env,cwd:project,stdio:['ignore','pipe','pipe']});

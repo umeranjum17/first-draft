@@ -35,7 +35,7 @@ const LANDING_BRIEF = 'Landing page brief (the prompt asks for a landing page): 
 // Every screen's phone and desktop layouts, in both themes, are checked before acceptance.
 const outputRules = (dark) => `Output rules: deliver every screen in ONE file with a phone layout at 390x844 and a desktop layout at 1280x800. The whole file AND each data-oc-screen section in isolation are rendered at both sizes in light and dark before acceptance. Keep screen sections as full-width siblings, never use different screens as desktop grid columns: put responsive columns INSIDE each screen. Every screen must remain visible and usable when all other screens are hidden. Use CSS media queries for real desktop/phone layouts, not a fixed-width phone canvas stretched into desktop space. (1) Both sizes and themes must fit without sideways scroll: wrap every pre and table in a container with overflow-x:auto, write grid columns as minmax(0,1fr) instead of 1fr, give every grid and flex child min-width:0, and let long text wrap. ${dark ? '(2) The style you were given is dark-first, so the page is dark by default, in light and in dark: a near-black page background with light text on :root, no light palette, and color-scheme: dark; never a light page background.' : '(2) It must have a real light theme and a real dark theme, both chosen by prefers-color-scheme: :root holds the light palette (a light page background, dark text) and a @media (prefers-color-scheme: dark) block overrides every colour custom property with a dark palette (a dark background, light text); also set color-scheme: light dark. Never write one dark palette for both: in light the page background is light.'}`;
 
-export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets = [], references = [], referenceBrief }) {
+export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets = [], references = [], referenceBrief, redesignPages }) {
   if (screens?.length) prompt += `\nRequired screens/pages: ${screens.join(', ')}. Include every named screen, with distinct ids and links between them.`;
   const { generateViaAgent, composeSystemPrompt, collectResourceManifest, loadDesignSkills, loadFrameTemplates, makeDoneTool, buildStandaloneDocument } = await engine();
   const key = (path) => path.trim().replace(/\\/g, '/').split('/').filter((p) => p && p !== '.').join('/') || '.';
@@ -60,7 +60,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   const warn = (warning) => process.stderr.write(`first-draft-axi: ${warning}\n`);
   const media = [...assets, ...(LANDING.test(prompt) && !assets.length && !references.length ? projectMedia(prompt) : [])]; // a landing page gets the project's own screenshots; done and the output see them embedded
   const style = styleOf(direction); // a dark-first style is checked to be dark, not to differ between light and dark
-  const render = renderCheck(warn, { dark: style?.dark });
+  const render = renderCheck(warn, { dark: style?.dark, redesignPages });
   const failed = new AbortController(), signal = failed.signal;
   // The page a source becomes, drawn once per version: the board's static HTML with the policy, its fonts and media inside, and the errors done reports for it.
   const pages = new Map();
@@ -73,6 +73,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
       const plain = /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(html) ? html.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : html.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
       const page = embedMedia(await embedFonts(plain, warn), media);
       if (!errors.length) errors.push(...await render.verify(page, { signal }));
+      if (redesignPages && render.status === 'skipped') throw new Error('Redesign checks require a working browser; render verification was skipped');
       return { html: page, errors };
     })());
     return pages.get(source);

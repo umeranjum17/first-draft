@@ -13,6 +13,7 @@ import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 import { STYLES } from './styles.mjs';
+import { redesignSource } from './redesign.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -116,7 +117,8 @@ const refineHtml = async (seed, change, inherited) => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[9]:
+commands[10]:
+  redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
   assets                              detect installed asset providers without spending
   make "<prompt>" (--out <file.html> | --out-dir <folder>) [flags]   make self-contained HTML design options (one engine run each)
@@ -161,13 +163,17 @@ if (command === 'references') {
   console.log(JSON.stringify({ providers: await detectAssets(), help: [assetHelp] }));
 } else if (command === 'styles') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
-} else if (command === 'make') {
-  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model'].map((name) => [name, { type: 'string' }])) });
+} else if (command === 'make' || command === 'redesign') {
+  const redesign = command === 'redesign';
+  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages'] : [])].map((name) => [name, { type: 'string' }])) });
+  const source = redesign ? positionals.shift() : null;
+  if (redesign && (!source || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file');
+  if (redesign && values['max-pages'] !== undefined && !/^(?:[1-9]|1[0-2])$/.test(values['max-pages'])) fail('USAGE', '--max-pages must be 1-12');
   for (const [name, value] of Object.entries(values)) if (typeof value === 'string' && !value.trim()) fail('USAGE', `--${name} must not be empty`);
   for (const [a, b] of [['options', 'count'], ['direction', 'style'], ['out', 'out-dir']]) {
     if (values[a] !== undefined && values[b] !== undefined) fail('USAGE', `use --${a} or --${b}, not both`);
   }
-  const amount = values.options ?? values.count ?? '3', count = Number(amount);
+  const amount = values.options ?? values.count ?? (redesign ? '1' : '3'), count = Number(amount);
   if (!/^[1-5]$/.test(amount)) fail('USAGE', '--options / --count must be an integer from 1 to 5 (default 3)');
   let prompt = positionals.join(' ').trim();
   if (values['brief-file']) {
@@ -181,10 +187,10 @@ if (command === 'references') {
     prompt = [prompt, brief.toString('utf8')].filter(Boolean).join('\n\n');
   }
   if (!prompt || !(values.out || values['out-dir'])) fail('USAGE', 'make needs a prompt or --brief-file, and --out <file.html> or --out-dir <folder>');
-  const screens = values.screens?.split(',').map((s) => s.trim());
+  let screens = values.screens?.split(',').map((s) => s.trim());
   if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
   if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
-  const outPath = values.out ?? join(values['out-dir'], 'option-{i}.html');
+  const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
   const images = await readReferences(values.ref, values.model);
   let assetSession;
   try { assetSession = await prepareAssets(values, prompt, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
@@ -196,6 +202,15 @@ if (command === 'references') {
   const started = Date.now();
   let refs;
   try { refs = await prepareReferences(values,prompt,c,images); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
+  let inventory;
+  if (redesign) {
+    try {
+      const captured = await redesignSource({ source, out: values.out, maxPages: Number(values['max-pages'] ?? 6) });
+      inventory = captured.inventory;
+      prompt = `${prompt}\n\n${captured.brief}`;
+      screens = inventory.pages.map(p => p.id);
+    } catch (e) { fail('REDESIGN_SOURCE_FAILED', e.message); }
+  }
   const files = [];
   let tokens_in = refs.tokens_in, tokens_out = refs.tokens_out;
   const blocked = new Set(), cut = [];
@@ -205,7 +220,7 @@ if (command === 'references') {
     let made;
     try {
       const assets = assetSession ? await assetSession.generate(numbered) : [];
-      made = await make({ prompt, ...c, screens, assets, references:refs.images, referenceBrief:refs.metadata?.brief, direction:values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
+      made = await make({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, references:refs.images, referenceBrief:refs.metadata?.brief, direction:values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
     try {
@@ -221,6 +236,7 @@ if (command === 'references') {
     if (made.truncated) cut.push(numbered);
   }
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check },
+    ...(inventory && { redesign: { sources: resolve(values.out, 'sources', 'sources.json'), screens: inventory.pages.map(p=>({id:p.id,title:p.title})), pending: inventory.pending, limitations: inventory.limitations } }),
     ...(refs.metadata && { references:{name:refs.metadata.name,url:refs.metadata.url,fetched_at:refs.metadata.fetched_at} }),
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
