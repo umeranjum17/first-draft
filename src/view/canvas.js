@@ -15,15 +15,43 @@ export function pageFor(option, mode) {
   return mode;
 }
 
-// The canvas and Play show one device at a time, the one the route names or else the one that fits the viewport,
-// as large as the stage allows without upscaling (PreviewPane.tsx computeFitPreviewZoom).
-export const deviceFor = (device, viewportWidth) => device ?? (viewportWidth < 760 ? 'phone' : 'desktop');
+// The canvas shows the device the route names, else the one that fits the viewport: on a wide screen (860px and up, where the
+// Studio has its column) 'both', the desktop and the phone side by side; under that one device, and 'both' falls back to it.
+// Each is as large as the stage allows without upscaling (PreviewPane.tsx computeFitPreviewZoom).
+export const WIDE = 860;
+export const deviceFor = (device, viewportWidth) => (device === 'both' && viewportWidth < WIDE ? undefined : device)
+  ?? (viewportWidth < 760 ? 'phone' : viewportWidth < WIDE ? 'desktop' : 'both');
 const PADDING = 48;
 // Comment pins sit in the margin beside the frame: a design with pins keeps this much more room on each side.
 export const PIN_GUTTER = 16;
+// Side by side: the two frames share one scale, so the phone keeps its true size beside the desktop, with this much room
+// between them on screen (wider with pins, whose margins meet there) and a caption above each.
+export const pairGap = (pins) => (pins ? 88 : 48);
+export const CAPTION = 32;
+const outer = (d) => ({ w: FRAMES[d].width + (FRAMES[d].bezel ?? 0) * 2, h: FRAMES[d].height + (FRAMES[d].bezel ?? 0) * 2 });
 export function fitDevice(device, width, height, gutter = 0) {
-  const f = FRAMES[device], w = f.width + (f.bezel ?? 0) * 2, h = f.height + (f.bezel ?? 0) * 2;
+  if (device === 'both') {
+    const d = outer('desktop'), p = outer('phone');
+    return Math.min(1, Math.max(1, width - PADDING - gutter * 2 - pairGap(gutter > 0)) / (d.w + p.w), Math.max(1, height - PADDING - CAPTION) / Math.max(d.h, p.h));
+  }
+  const { w, h } = outer(device);
   return Math.min(1, Math.max(1, width - PADDING - gutter * 2) / w, Math.max(1, height - PADDING) / h);
+}
+
+// comment/CommentBubble.tsx commentKeyAction and commentBubblePosition, unchanged: the add-a-comment box opens below the
+// point it is about, or above it when there is no room below, so it never covers that point.
+export function commentKeyAction(event) {
+  if (event.isComposing || event.keyCode === 229) return null;
+  if (event.key === 'Escape') return 'dismiss';
+  return event.key === 'Enter' && (event.ctrlKey || event.metaKey) ? 'send' : null;
+}
+export function commentBubblePosition(anchor, bubble, viewport) {
+  const below = anchor.top + anchor.height + 8;
+  const above = anchor.top - bubble.height - 8;
+  return {
+    top: Math.max(12, Math.min(below + bubble.height <= viewport.height - 12 || above < 12 ? below : above, viewport.height - bubble.height - 12)),
+    left: Math.max(12, Math.min(anchor.left, viewport.width - bubble.width - 12)),
+  };
 }
 
 // preview/helpers.ts formatIframeError and isTrustedPreviewMessageSource, unchanged.

@@ -21,7 +21,8 @@ Replace `YOUR_MODEL` with a model your installed, signed-in Codex CLI supports. 
 ## Choose a direction, not just a screenshot
 
 - **Make options.** Add `--count 3` to the `make` command to get three directions. Each is a self-contained HTML file, not app code, and with no `--direction` each takes a different named style (`first-draft-axi styles` lists them).
-- **Open one on the canvas.** Studio shows one option at a time at phone (390px) or desktop (1280px), switched with Phone and Desktop, beside its options, comments and a brief for your next change.
+- **Open one on the canvas.** Studio shows one option at desktop (1280px) and phone (390px) side by side, each with its own Play, beside its options, comments and a brief for your next change. Desktop or Phone shows one device; a phone-width window shows the phone.
+- **Comment on it.** Press Comment (in the ⋯ menu on a phone) and tap the spot you mean: your comment is saved next to the design and shows as a numbered pin beside the frame.
 - **Look closer.** Fullscreen gives the option the whole window; Play is one tap away.
 - **Refine the one you like.** A follow-up prompt writes a new option; your original stays untouched.
 
@@ -67,7 +68,7 @@ first-draft-axi view \
 
 With Chrome or Chromium installed, `make` also renders each page at 390px, in light and in dark, and does not accept it until it fits with no sideways scroll and paints differently in dark (a dark-first style such as `oled-neon` must instead paint a dark page in both). `render_check` in the output says `checked` or `skipped`.
 
-The viewer's grid links to each canvas at `#/o/<n>`; add `/phone` or `/desktop` to pick the device, `/full` for Fullscreen or `/play` for Play.
+The viewer's grid links to each canvas at `#/o/<n>`; add `/both`, `/phone` or `/desktop` to pick the device, `/full` for Fullscreen or `/play` for Play.
 
 </details>
 
@@ -78,7 +79,7 @@ The viewer's grid links to each canvas at `#/o/<n>`; add `/phone` or `/desktop` 
 
 Generated files carry no scripts and their own content security policy. The viewer adds a sandboxed runtime for screen navigation, but options load and send nothing over the network. Remote assets named by a design are listed as `blocked_remote` and show empty.
 
-Comment pins are read-only. Put `notes.comments.json` next to `notes.html`, with an array such as `[{"option":1,"x":0.4,"y":0.2,"text":"More space here"}]`. Coordinates are fractions of the frame. Tap a numbered pin to read it. No file means no pins; an invalid file produces a notice.
+Comments live in `notes.comments.json` next to `notes.html`, an array such as `[{"option":1,"device":"phone","x":0.4,"y":0.2,"text":"More space here"}]`. Coordinates are fractions of the frame; `device` (`phone` or `desktop`) is optional, and a comment without it shows on both frames. Comments added in the viewer are appended to this file, which is created if missing; the viewer never rewrites an invalid file, it shows a notice instead. Tap a numbered pin to read it.
 
 </details>
 

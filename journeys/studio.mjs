@@ -1,11 +1,14 @@
 // Journey: the Studio in headless Chromium over CDP (no packages, no model call, no installed browser state), at 1280 and 390, light and dark.
 // A two-option design with comments is served from a temporary folder with its own FIRST_DRAFT_HOME (no agent set). Each width and theme
-// is captured; then the journey runs at both widths: every kind of button shows a press state, Brief collapses and reopens the column
-// (desktop), the composer is docked at the bottom one line high with the whole phone above it and the control row is one line with
+// is captured; then the journey runs at both widths: every kind of button shows a press state, the desktop and the phone show side by
+// side at one scale (desktop), a comment added by tapping a point on the phone is saved to the comments file and shows as a pin clear of
+// the frames, Brief collapses and reopens the column (desktop), the composer is docked at the bottom one line high with the whole phone above it and the control row is one line with
 // Fullscreen in a More menu (phone), Phone/Desktop switch, a comment opens its pin, another option opens, Send without an agent shows the
 // set-up hint, Fullscreen (phone, from More), Play and back.
-// The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets one capture per claim and theme: hide-brief-1280-<theme>.png
-// (the 1280 Studio before and after Hide brief, side by side); at 390, light and dark side by side in each: phone-row-390.png (the control
+// The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets one capture per claim and theme: canvas-both-1280.png (the
+// desktop and the phone side by side, light and dark), add-comment-1280-<theme>.png (the comment box at the tapped point, then the saved
+// pin), hide-brief-1280-<theme>.png (the 1280 Studio before and after Hide brief, side by side); at 390, add-comment-390.png (the same, light
+// and dark), light and dark side by side in each: phone-row-390.png (the control
 // row and the whole phone above the one-line brief), more-menu-390.png (More open), press-play-390.png (Play at rest and held) and
 // composer-390.png (the brief at rest and tapped); and studio-states.json (each state's measured width, theme and column). The single
 // captures (each width and theme, Send, Play, More, the tapped brief) go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
@@ -24,7 +27,8 @@ mkdirSync(out, { recursive: true });
 if (extra) mkdirSync(extra, { recursive: true });
 const dir = mkdtempSync(join(tmpdir(), 'first-draft-studio-'));
 for (const n of [1, 2]) copyFileSync(join(root, 'journeys/fixtures/notes.html'), join(dir, `notes-${n}.html`));
-writeFileSync(join(dir, 'notes.comments.json'), JSON.stringify([{ option: 1, x: 0.2, y: 0.3, text: 'Umer: make the headline a little smaller' }, { option: 1, x: 0.8, y: 0.6, text: 'Umer: a warmer button colour' }]));
+const commentsFile = join(dir, 'notes.comments.json'), seed = JSON.stringify([{ option: 1, x: 0.2, y: 0.3, text: 'Umer: make the headline a little smaller' }, { option: 1, x: 0.8, y: 0.6, text: 'Umer: a warmer button colour' }]);
+writeFileSync(commentsFile, seed);
 
 const processes = [];
 const launch = (cmd, args, match, env = process.env) => new Promise((ok, fail) => {
@@ -94,7 +98,9 @@ try {
     assert.notEqual(held, rest, `${selector} shows no press state`);
     return capture; // the page while it was held, when `keep` names it
   };
-  const box = (selector) => evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height}})()`);
+  const box = (selector) => evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height,left:b.left,right:b.right,width:b.width}})()`);
+  // No pin covers a frame's screen: each sits in the margin beside it, level with its point.
+  const pinsClear = () => evaluate("(()=>{const hit=(a,b)=>a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1;const screens=[...document.querySelectorAll('.artboard,.phone-screen')].map(e=>e.getBoundingClientRect());return [...document.querySelectorAll('.pin')].filter(p=>p.getClientRects().length).every(p=>screens.every(s=>!hit(p.getBoundingClientRect(),s)))})()");
   const width = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().width`);
   // A capture waits until every visible option frame has painted its page.
   const states = [];
@@ -139,8 +145,42 @@ try {
     await c('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
   };
 
+  // Comment mode (Comment at 1280, More > Add comment at 390), a tap on the phone's screen, a few words and Save: the comment is added
+  // to the comments file with its device and point, and shows as an open pin in the margin and in the column. Returns the captures
+  // with the box open and after Save.
+  const addComment = async (w, theme, words) => {
+    const count = await evaluate("document.querySelectorAll('.pin').length");
+    if (w > 700) await click('.tools .comment-tool'); else { await click('.tools .more'); await click('#more-menu button'); }
+    assert.equal(await shown('.comment-hint'), true, 'comment mode says to tap a spot');
+    const screen = await box(w > 700 ? '.pair figure:nth-child(2) .catch' : '.catch'); // the phone's screen
+    const hint = await box('.comment-hint'), phone = await box(w > 700 ? '.pair .phone' : '.phone');
+    assert.ok(hint.bottom <= phone.top, `the hint sits above the phone, not over it: ${JSON.stringify({ hint, phone })}`);
+    const at = { x: screen.left + screen.width * 0.5, y: screen.top + screen.height * 0.3 };
+    await c('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...at });
+    await c('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...at });
+    await settle();
+    const form = await box('.comment-box');
+    assert.ok(form.top > at.y || form.bottom < at.y, `the comment box opens beside the tapped point, not over it: ${JSON.stringify({ at, form })}`);
+    await c('Input.insertText', { text: words });
+    const open = await shot(`add-comment-open-${w}-${theme}`, extra);
+    await state(`add-comment-${w}${w > 700 ? `-${theme}` : ''}.png (${theme}, box open)`, { after: 'Comment on, the phone tapped, words typed' });
+    await click('.comment-box [type=submit]');
+    await until(`!document.querySelector('.comment-box') && document.querySelectorAll('.pin').length > ${count} && !!document.querySelector('.pin[aria-expanded="true"]')`, 'the saved comment as an open pin');
+    const saved = JSON.parse(readFileSync(commentsFile, 'utf8')).at(-1);
+    assert.deepEqual({ option: saved.option, device: saved.device, text: saved.text }, { option: 1, device: 'phone', text: words }, 'the comment is in the comments file');
+    assert.ok(Math.abs(saved.x - 0.5) < 0.01 && Math.abs(saved.y - 0.3) < 0.01, `the comment keeps its point: ${JSON.stringify(saved)}`);
+    assert.equal(await evaluate(`document.querySelector('.side').textContent.includes(${JSON.stringify(words)})`), true, 'the column lists the new comment');
+    assert.equal(await shown('.comment-hint'), false, 'Save leaves comment mode');
+    assert.equal(await pinsClear(), true, 'no pin covers a frame');
+    const after = await shot(`add-comment-saved-${w}-${theme}`, extra);
+    await state(`add-comment-${w}${w > 700 ? `-${theme}` : ''}.png (${theme}, saved)`, { after: 'Save pressed' });
+    return { open, after };
+  };
+
   const phones = { light: {}, dark: {} }; // the 390 captures of each theme, framed side by side after the loop
+  const wides = { light: {}, dark: {} }; // and the 1280 ones
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
+    writeFileSync(commentsFile, seed); // each run starts from the same two comments
     await viewport(w, theme);
     await open('#/o/1');
     const before = await shot(`studio-${w}-${theme}`, extra);
@@ -148,8 +188,16 @@ try {
     // Every kind of button in the Studio shows a press state.
     const held = await press('.tools a.primary', w < 700 ? `press-play-390-${theme}` : undefined);
     if (w < 700) Object.assign(phones[theme], { rest: before, held });
-    for (const selector of ['.devices a:not([aria-current])', '.bar a.button', '.side .list a', '.side .list button', 'form.brief [type=submit]', w > 700 ? '.tools .full-link' : '.tools .more', ...(w > 700 ? ['.bar .fold', 'form.brief .link'] : [])]) await press(selector);
+    for (const selector of ['.devices a:not([aria-current]):not([href$="/both"])', '.bar a.button', '.side .list a', '.side .list button', 'form.brief [type=submit]', w > 700 ? '.tools .full-link' : '.tools .more', ...(w > 700 ? ['.bar .fold', 'form.brief .link', '.tools .comment-tool', '.pair .play-one'] : [])]) await press(selector);
     if (w > 700) {
+      // Both, the default on a wide screen: the desktop and the phone side by side at one scale, each with its own Play, pins clear of both.
+      const [desk, phone] = [await box('.pair .artboard'), await box('.pair .phone')];
+      assert.ok(phone.left >= desk.right + 40, `the phone is beside the desktop: ${JSON.stringify({ desk, phone })}`);
+      assert.ok(Math.abs(desk.width / 1280 - phone.width / 396) < 0.005, `one scale for both: ${desk.width / 1280} and ${phone.width / 396}`);
+      assert.deepEqual(await evaluate("[...document.querySelectorAll('.pair .play-one')].map(a=>a.getAttribute('href'))"), ['#/o/1/play/desktop', '#/o/1/play/phone'], 'each device has its own Play');
+      assert.equal(await evaluate("document.querySelector('.devices [aria-current]').textContent"), 'Both');
+      assert.equal(await pinsClear(), true, 'no pin covers a frame');
+      wides[theme].rest = before;
       // Brief collapses the column (design, options, comments and the composer), the canvas takes its room, and Brief brings it back.
       const stage = await width('.stage');
       await click('.bar [aria-controls="studio-side"]');
@@ -164,10 +212,15 @@ try {
       assert.equal(await shown('form.brief'), true, 'Brief shows the composer again');
       await state(null, { after: 'Show brief pressed: no capture, the page is as before' });
       await sideBySide(`hide-brief-${w}-${theme}`, theme, [['Before: Hide brief not pressed', before], ['After pressing Hide brief', after]]);
+      await viewport(w, theme); // the side-by-side capture left the page: open the Studio again
+      await open('#/o/1');
+      Object.assign(wides[theme], await addComment(w, theme, `Umer (${theme}): more room above the headline`));
     } else {
       // Phone width: the phone mock alone, the composer docked at the bottom of the first screen, no Brief button (the column follows below).
       assert.equal(await shown('.phone'), true, 'the phone mock shows');
       assert.equal(await shown('.artboard'), false, 'no desktop pane under the phone');
+      assert.equal(await shown('.devices a[href$="/both"]'), false, 'no Both at phone width');
+      assert.equal(await pinsClear(), true, 'no pin covers the phone');
       assert.equal(await shown('.bar [aria-controls="studio-side"]'), false, 'no Brief button at phone width');
       const dock = await evaluate("(()=>{scrollTo(0,0);const b=document.querySelector('form.brief textarea').getBoundingClientRect();return{top:b.top,bottom:b.bottom,h:innerHeight}})()");
       assert.ok(dock.bottom <= dock.h && dock.top > dock.h / 2, `the composer is docked at the bottom of the screen: ${JSON.stringify(dock)}`);
@@ -194,11 +247,16 @@ try {
       phones[theme].focused = await shot(`studio-composer-focused-390-${theme}`, extra);
       await state(`composer-390.png (${theme}, tapped)`, { after: 'the brief box tapped' });
       await press('form.brief .link');
+      await evaluate('document.activeElement?.blur()');
+      Object.assign(phones[theme], await addComment(w, theme, `Umer (${theme}): a bigger sign-in button`));
     }
   }
 
-  // One capture per 390 claim, light and dark side by side, each panel labelled with what it shows.
+  // One capture per claim, light and dark side by side (one capture per theme at 1280), each panel labelled with what it shows.
+  await sideBySide('canvas-both-1280', 'light', [['1280 px, light: the desktop and the phone side by side on the canvas, each with its own Play', wides.light.rest], ['1280 px, dark: the desktop and the phone side by side on the canvas, each with its own Play', wides.dark.rest]]);
+  for (const theme of ['light', 'dark']) await sideBySide(`add-comment-1280-${theme}`, theme, [[`1280 px, ${theme}: Comment on, the phone tapped: the box opens below the yellow mark`, wides[theme].open], [`1280 px, ${theme}: after Save the comment is pin 3, in the margin beside the phone and in the column`, wides[theme].after]]);
   const { light: l, dark: d } = phones;
+  await sideBySide('add-comment-390', 'light', [['390 px, light: More > Add comment, the phone tapped: the box opens below the mark', l.open], ['390 px, light: after Save the comment is pin 3, beside the phone', l.after], ['390 px, dark: More > Add comment, the phone tapped', d.open], ['390 px, dark: after Save the comment is pin 3, beside the phone', d.after]], 390, 844);
   await sideBySide('phone-row-390', 'light', [['390 px, light: Play is the one filled button, next to More (⋯). The whole phone shows above the one-line brief box', l.rest], ['390 px, dark: Play is the one filled button, next to More (⋯). The whole phone shows above the one-line brief box', d.rest]], 390, 844);
   await sideBySide('more-menu-390', 'light', [['390 px, light: More (⋯) pressed. Its menu holds Fullscreen', l.more], ['390 px, dark: More (⋯) pressed. Its menu holds Fullscreen', d.more]], 390, 844);
   await sideBySide('press-play-390', 'light', [['390 px, light: Play at rest', l.rest], ['390 px, light: Play held down turns orange', l.held], ['390 px, dark: Play at rest', d.rest], ['390 px, dark: Play held down turns orange', d.held]], 390, 844);
@@ -243,26 +301,29 @@ try {
     await shot(`play-${w}`, extra);
     await press('.bar a');
     await click('.bar a');
-    assert.match(await evaluate('location.hash'), /^#\/o\/2\/(phone|desktop)$/);
+    assert.match(await evaluate('location.hash'), /^#\/o\/2(\/(phone|desktop))?$/); // Exit goes back to the Studio route Play was opened from
   }
   writeFileSync(join(out, 'studio-states.json'), JSON.stringify(states, null, 2));
   // done-done's step record: what was driven, from where, and what a user sees at the end.
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
     start: "The Studio in first-draft view, the app frame around a user's design: a two-option 'notes.' sign-in page shown as a design preview inside a dotted canvas, with two comments and no agent set, in headless Chromium",
-    steps: ["At 1280 px wide, in light and in dark: the left column with the Next brief box is shown and the button reads 'Hide brief'",
+    steps: ["At 1280 px wide, in light and in dark: the canvas shows the desktop and the phone side by side at one scale, each captioned with its own Play; canvas-both-1280.png shows light and dark",
+      "At 1280 px, press Comment, tap the phone's screen, type a comment and press Save: the box opens below the tapped point; after Save the comment is a numbered pin in the margin beside the phone (never over a frame), it is listed in the column and it is the last entry of notes.comments.json with device 'phone'; add-comment-1280-light.png and add-comment-1280-dark.png show the box and the saved pin",
+      "At 1280 px wide, in light and in dark: the left column with the Next brief box is shown and the button reads 'Hide brief'",
       "Pressing 'Hide brief' removes the left column: it is gone, the button reads 'Show brief' and the design fills the canvas (zoom 66% to 77%)",
       "The capture hide-brief-1280-light.png (and hide-brief-1280-dark.png) shows before and after side by side",
       "Press 'Show brief': the left column is shown again",
       "At 390 px wide, in light and in dark: the whole design preview in a phone frame shows above a one-line Next brief box with its Send button; the row above the preview is Desktop/Phone, a More button (three dots) and Play, the one filled button; phone-row-390.png shows light and dark side by side",
       "At 390 px, holding Play down turns it orange; press-play-390.png shows Play at rest and held, light and dark. Every other kind of button also changes while held",
       "At 390 px, pressing More opens a small menu with Fullscreen; more-menu-390.png shows it in light and dark; Escape closes it",
+      "At 390 px, More > Add comment, tap the phone, type and Save: the comment is saved to the file and shows as a pin beside the phone; add-comment-390.png shows the box and the pin, light and dark",
       "At 390 px, tapping the Next brief box opens it up (a taller box and a 'Copy terminal command' link); composer-390.png shows it at rest and tapped, light and dark",
       'Switch Phone/Desktop and back; click a comment in the left column and its pin opens on the canvas',
       "At 1280 px hide the column and switch device: it stays hidden until 'Show brief'",
       'Open Option 2; type a change in the Next brief box and press Send with no agent set: the set-up hint shows; at 390 open Fullscreen from More and Exit; press Play, then Exit'],
-    result: "In the Studio at 1280 px wide, pressing 'Hide brief' removes the left column and the design fills the canvas; each hide-brief capture shows before (left column with the Next brief box shown, button 'Hide brief') and after (left column gone, button 'Show brief') side by side. In the Studio at 390 px wide, the whole design preview in a phone frame shows above a one-line Next brief box with Send, the row above it is Desktop/Phone, More and Play (the one filled button), More opens a menu with Fullscreen, Play turns orange while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
-  console.log('PASS: Studio at 1280 and 390, light and dark: Brief collapse, docked one-line composer clear of the phone, the phone control row and its More menu, press states, device switch, pins, option switch, Send hint, Fullscreen, Play and back');
+    result: "In the Studio at 1280 px wide the canvas shows the desktop and the phone side by side, each with its own Play (canvas-both-1280.png); at 1280 and 390 a person adds a comment by tapping a point on the phone and it is saved to notes.comments.json and shows as a pin beside the frame (add-comment-*.png). In the Studio at 1280 px wide, pressing 'Hide brief' removes the left column and the design fills the canvas; each hide-brief capture shows before (left column with the Next brief box shown, button 'Hide brief') and after (left column gone, button 'Show brief') side by side. In the Studio at 390 px wide, the whole design preview in a phone frame shows above a one-line Next brief box with Send, the row above it is Desktop/Phone, More and Play (the one filled button), More opens a menu with Fullscreen, Play turns orange while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, column, composer position, canvas width, zoom label and button" }, null, 2));
+  console.log('PASS: Studio at 1280 and 390, light and dark: desktop and phone side by side, add a comment on the canvas, pins clear of the frames, Brief collapse, docked one-line composer clear of the phone, the phone control row and its More menu, press states, device switch, pins, option switch, Send hint, Fullscreen, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();
   for (const child of processes.reverse()) {
