@@ -53,7 +53,9 @@ else {
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
  else if(tools.some(t=>t.name==='define_redesign_plan')){
   if(JSON.parse(args[args.indexOf('--json-schema')+1]).properties.calls.maxItems!==1||process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS!=='8192')throw Error('structural single-response budget missing');
-  calls=[call('define_redesign_plan',{title:'Umer projects',css:${JSON.stringify(REDESIGN_PAGE.match(/<style>([\s\S]*?)<\/style>/)[1])}+(process.env.FD_PLAN_BAD?'#screen-1{color:red}':''),notes:'Use the same metric and value classes everywhere'})];
+  const q=JSON.parse(messages.at(-1).content),bad=process.env.FD_PLAN_BAD||(process.env.FD_PLAN_REPAIR&&q.attempt===1?'uri':'');
+  const css=${JSON.stringify(REDESIGN_PAGE.match(/<style>([\s\S]*?)<\/style>/)[1])}+(process.env.FD_PLAN_LARGE?'/*'+'x'.repeat(13000)+'*/':'')+(bad==='uri'?'.icon{background:url("data:image/svg+xml,%3Csvg/%3E")}':bad==='size'?'/*'+'x'.repeat(21000)+'*/':bad?'#screen-1{color:red}':'');
+  calls=[call('define_redesign_plan',{title:'Umer projects',css,notes:'Use the same metric and value classes everywhere'})];
  }
  else if(tools.some(t=>t.name==='write_redesign_screen')){
   const q=JSON.parse(messages.at(-1).content),first=q.attempt===1;
@@ -113,7 +115,8 @@ else {
   assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
   const sourceDir=join(project,'export');mkdirSync(sourceDir);
   writeFileSync(join(sourceDir,'index.html'),'<title>Umer export</title><h1>7 active projects</h1>');
-  env.FD_PLAN_BAD='1';const badPlan=join(project,'bad-plan');await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',badPlan),e=>/Invalid shared redesign plan.*screen-specific/.test(e.stdout));assert.match(JSON.parse(readFileSync(join(badPlan,'writer-option-1/shared-plan.json'))).css,/#screen-1/);assert.equal(existsSync(join(badPlan,'option-1.html')),false);delete env.FD_PLAN_BAD;
+  for(const [bad,pattern] of [['1',/screen-specific/],['uri',/including data: URLs/],['size',/1-20000 characters/]]){env.FD_PLAN_BAD=bad;const badPlan=join(project,'bad-plan-'+bad);await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',badPlan),e=>/after 2 attempts/.test(e.stdout)&&pattern.test(e.stdout));const planDir=join(badPlan,'writer-option-1');assert.equal(JSON.parse(readFileSync(join(planDir,'shared-plan-attempt-2.json'))).passed,false);assert.equal(existsSync(join(planDir,'shared-plan-attempt-3.json')),false);assert.equal(existsSync(join(badPlan,'option-1.html')),false);}delete env.FD_PLAN_BAD;
+  env.FD_PLAN_LARGE='1';env.FD_PLAN_REPAIR='1';const largeOut=join(project,'large-shared-plan'),large=JSON.parse((await run('redesign',sourceDir,'Clearer','--no-references','--out',largeOut)).stdout);assert.equal(large.made.files[0].self_check.plan_responses,2);const acceptedPlan=JSON.parse(readFileSync(join(largeOut,'writer-option-1/shared-plan.json')));assert.ok(acceptedPlan.css.length>12000&&acceptedPlan.css.length<20000);assert.doesNotMatch(acceptedPlan.css,/url\s*\(/i);delete env.FD_PLAN_LARGE;delete env.FD_PLAN_REPAIR;
   await run('redesign',sourceDir,'Clearer projects','--no-references','--out',join(project,'local-redesign'));
   assert.equal(JSON.parse(readFileSync(join(project,'local-redesign/sources/sources.json'))).pages[0].url,'/index.html');
   await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
