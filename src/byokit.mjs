@@ -2,7 +2,7 @@
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
-const CLI_ROUTES = ['codex', 'claude'];
+const CLI_ROUTES = ['claude', 'codex'];
 const cliBin = (route) => process.env.PATH?.split(delimiter).map((p) => resolve(p, route)).find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
 const cli = new Map(), launched = new Map();
 async function installed(route) {
@@ -36,16 +36,34 @@ const KEY_VIA = ['plan_key', 'key'];
 // The route an agent names as byokit:<route>, or undefined.
 export const routeOf = (agent) => agent?.match(/^byokit:(.+)/)?.[1];
 
-// Ready plan-key and api-key aliases plus the installed CLI, when present.
+export async function readySubscriptions() {
+  const rows = await Promise.all(CLI_ROUTES.map(async (route) => {
+    if (!cliBin(route)) return [];
+    try {
+      const { accounts } = await installed(route);
+      const row = await accounts.status(`installed-${route}`);
+      if (row.state !== 'ready' || (route === 'claude' && row.method !== 'subscription')) return [];
+      return [{ route: `byokit:${route}`, label: route === 'claude' ? 'Claude subscription' : 'ChatGPT subscription', init: `first-draft-axi init --agent byokit:${route} --model <model>` }];
+    } catch { return []; } // Discovery is optional; doctor on a configured route reports its exact failure.
+  }));
+  return rows.flat();
+}
+
+// Ready subscriptions first, then the other BYOKit routes.
 export async function readyRoutes() {
   const keys = (await import('@byokit/accounts')).routes().filter((r) => KEY_VIA.includes(r.via) && r.readiness === 'ready').flatMap((r) => (r.aliases?.length ? r.aliases : [r.id]));
-  return [...new Set([...keys, ...CLI_ROUTES.filter(cliBin)])];
+  return [...new Set([...(await readySubscriptions()).map((r) => routeOf(r.route)), ...keys])];
 }
+
+export const modelRouteProblem = (route, model) => route !== 'claude' && (/anthropic|claude|opus|sonnet|haiku/i.test(model ?? '') || /anthropic/i.test(route ?? ''))
+  ? 'Claude models use your Claude subscription only. Run: first-draft-axi init --agent byokit:claude --model <model>' : undefined;
 
 const planKey = async (route) => (await import('@byokit/accounts')).routes().find((r) => KEY_VIA.includes(r.via) && (r.id === route || r.aliases?.includes(route)));
 const signIn = async (key) => `set ${key.upstream.method} to your ${key.name} key, then: first-draft-axi doctor`;
 
-async function check(route) {
+async function check(route, model) {
+  const refusal = modelRouteProblem(route, model);
+  if (refusal) return refusal;
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 18)) return `BYOKit needs Node 22.18 or later; this is ${process.version}: install Node 22.18 or later`;
   if (CLI_ROUTES.includes(route)) return;
@@ -64,6 +82,8 @@ async function modelFor(provider, id) {
 
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
 export async function respond({ route, model, context, maxTokens, signal, timeoutMs }) {
+  const problem = await check(route, model);
+  if (problem) throw new Error(problem);
   if (CLI_ROUTES.includes(route)) {
     const { bin, account } = await launch(route);
     const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
@@ -78,8 +98,6 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
       content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: JSON.parse(c.arguments) }))],
       stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
   }
-  const problem = await check(route);
-  if (problem) throw new Error(problem);
   const key = await planKey(route);
   const secret = process.env[key.upstream.method];
   if (!secret) throw new Error(`${key.upstream.method} is not set: ${await signIn(key)}`);
@@ -104,7 +122,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
 // Local route readiness only: no paid model availability probe.
 export async function doctor(route, model) {
   const label = `byokit:${route}`;
-  const problem = await check(route).catch((e) => e.message);
+  const problem = await check(route, model).catch((e) => e.message);
   if (problem) return { status: 'fail', label, detail: problem };
   if (CLI_ROUTES.includes(route)) {
     try {

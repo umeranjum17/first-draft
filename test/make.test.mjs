@@ -510,7 +510,7 @@ test('the view sends the Next brief to the person\'s agent and the refined optio
   const none = await send({ option: 1, change: 'warmer palette' });
   assert.equal(none.status, 500);
   const { error, help } = await none.json();
-  assert.equal(error, 'No agent is set up yet.');
+  assert.equal(error, 'No model source is set.');
   assert.match(help[0], /^Choose which BYOKit route and model.*first-draft-axi init --agent byokit:/); // the set-up hint, and no model is called
   assert.equal(seen.length, 0);
 

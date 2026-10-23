@@ -38,12 +38,21 @@ if (args.includes('auth')) {
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: calls.length ? '' : 'Ready', calls }, usage: { input_tokens: 7, output_tokens: 8 } }));
 }
 `, { mode: 0o700 });
+  writeFileSync(join(dir, 'codex'), `#!${process.execPath}
+import { createInterface } from 'node:readline';
+createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(line); if(q.id) console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}})); });
+`, { mode: 0o700 });
   const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, FIRST_DRAFT_CHROME: '/nonexistent', ANTHROPIC_API_KEY: 'synthetic-never-deliver', ANTHROPIC_AUTH_TOKEN: 'synthetic-never-deliver' };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await promisify(execFile)(join(dir, 'claude'), ['auth', 'status'], { env });
-  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
+  const expected = ['Claude subscription: first-draft-axi init --agent byokit:claude --model <model>', 'ChatGPT subscription: first-draft-axi init --agent byokit:codex --model <model>'];
+  await assert.rejects(run('init'), e => { assert.deepEqual(JSON.parse(e.stdout).help, expected); return true; });
+  await assert.rejects(run('make', 'Notes', '--out', join(dir, 'no-agent.html')), e => { assert.deepEqual(JSON.parse(e.stdout).help, expected); return true; });
+  const init = JSON.parse((await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5')).stdout);
+  assert.deepEqual(init.subscriptions.map(s => `${s.label}: ${s.init}`), expected);
   const doctor = JSON.parse((await run('doctor')).stdout);
   assert.equal(doctor.ready, true);
+  assert.deepEqual(doctor.subscriptions.map(s => `${s.label}: ${s.init}`), expected);
   assert.match(doctor.checks.at(-1).detail, /availability not probed/);
   const calls = () => readFileSync(join(dir, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(calls().every(args => args.includes('auth')), 'doctor makes no generation call');
@@ -59,12 +68,29 @@ if (args.includes('auth')) {
   assert.doesNotMatch(readFileSync(out, 'utf8'), /A warm note/);
   const generated = () => calls().filter(args => args.includes('-p')).length;
   assert.equal(generated(), 10);
-  for (const auth of ['out', 'api_key', 'other']) {
+  for (const auth of ['out', 'api_key', 'bedrock', 'vertex', 'other']) {
     env.FD_AUTH = auth;
     await assert.rejects(run('doctor'), e => /"ready":false/.test(e.stdout));
     await assert.rejects(run('make', 'Notes', '--out', join(dir, 'refused.html')));
     assert.equal(generated(), 10, `${auth} never spends`);
   }
+  delete env.FD_AUTH;
+  const config = join(dir, 'config.json'), original = readFileSync(config, 'utf8');
+  for (const [agent, model] of [
+    ['byokit:openrouter:key', 'anthropic/claude-opus-5-5'], ['byokit:minimax:key', 'CLAUDE-OPUS-5-5'],
+    ['byokit:anthropic:key', 'sonnet'], ['byokit:opencode-go', 'vendor/haiku'],
+    ['byokit:codex', 'opus'], ['byokit:openrouter:key', 'anthropic/unknown'], ['byokit:anthropic:key', 'default'],
+  ]) {
+    const before = readFileSync(config, 'utf8');
+    await assert.rejects(run('init', '--agent', agent, '--model', model), e => /Claude models use your Claude subscription only.*byokit:claude/.test(e.stdout));
+    assert.equal(readFileSync(config, 'utf8'), before, 'refused init never changes the chosen source');
+    writeFileSync(config, JSON.stringify({ agent, agent_config: { [agent]: { model } } })); // A stale/hand-edited config cannot bypass the boundary.
+    await assert.rejects(run('doctor'), e => /Claude models use your Claude subscription only.*byokit:claude/.test(e.stdout));
+    await assert.rejects(run('make', 'Notes', '--out', join(dir, 'refused.html')), e => /SUBSCRIPTION_ONLY/.test(e.stdout));
+    await assert.rejects(run('refine', out, 'warmer', '--out', join(dir, 'refused.html')), e => /SUBSCRIPTION_ONLY/.test(e.stdout));
+    assert.equal(generated(), 10, 'no forbidden model can reach generation');
+  }
+  writeFileSync(config, original);
   env.PATH = dir + '/missing';
   await assert.rejects(run('doctor'), e => /claude is not installed/.test(e.stdout));
 });
