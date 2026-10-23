@@ -81,7 +81,7 @@ export async function prepareAssets(values, prompt, count) {
   if (!adapter) throw new Error(`Unknown asset provider: ${provider}; choose codex or higgsfield`);
   await adapter.detect();
   await run('magick', ['-version']); // Refuse before spending if optimization is unavailable.
-  const imagePrompt = `Create one visual asset to place inside this design, not a screenshot or sheet of UI. No labels or embedded text. Follow the requested image style and subject: ${prompt}`;
+  const imagePrompt = `Design context only: ${prompt}\nGenerate ONLY the requested visual subject (picture, illustration, icon, texture or background). The design context is NOT the image to draw: omit all screens, phones, device mockups, interfaces, buttons, headings, labels and text. One standalone visual asset, not a screenshot or asset sheet.`;
   const quote = await adapter.estimate({ prompt: imagePrompt });
   const preview = { provider, images: count, ...quote, amount: quote.amount === null ? null : quote.amount * count, approved: Boolean(values['allow-asset-spend']) };
   let calls = 0;
