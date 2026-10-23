@@ -8,13 +8,15 @@ For developers and coding agents: pick a design **before writing app code**.
 
 ### Start in three steps
 
-Node **22.18+** and your own model subscription or API key. Three steps:
+Node **22.18+** and your own AI subscription. A subscription needs no API key. Three steps:
 
 1. `npm install -g first-draft-axi`
-2. `first-draft-axi init --agent byokit:codex --model YOUR_MODEL`
+2. `first-draft-axi init --agent byokit:claude --model <model>`
 3. `first-draft-axi make "A notes app" --out notes.html && first-draft-axi view notes.html`
 
-Replace `YOUR_MODEL` with a model your installed, signed-in Codex CLI supports. [Other routes ↓](#models) · Open the URL that `view` prints. Stop it with Ctrl+C.
+Step 2 uses your Claude subscription (Pro or Max) through your installed, signed-in Claude CLI. Replace `<model>` with a Claude model it supports. Open the URL that `view` prints. Stop it with Ctrl+C.
+
+On a ChatGPT subscription, use your installed, signed-in Codex CLI instead: `first-draft-axi init --agent byokit:codex --model <model>`. Not sure which is ready? Run `first-draft-axi doctor`: it lists each ready subscription with its exact `init` line, with no paid call. [Other routes ↓](#models)
 
 [Landing page](https://umeranjum17.github.io/first-draft/) · [Vision](VISION.md) · [Agent skill](skills/first-draft-axi/SKILL.md), to hand the CLI to your coding agent · [CLI reference ↓](#reference)
 
@@ -52,13 +54,16 @@ Every generation goes through [BYOKit](https://www.npmjs.com/package/@byokit/acc
 
 | Use what you have | Route for `init --agent` |
 | --- | --- |
-| Installed, signed-in Codex CLI | `byokit:codex` |
+| Claude subscription (Pro or Max), in the installed, signed-in Claude CLI | `byokit:claude` |
+| ChatGPT subscription, in the installed, signed-in Codex CLI | `byokit:codex` |
 | A plan key, such as Z.ai | `byokit:zai:plan_key` |
 | An API key, such as MiniMax | `byokit:minimax:key` |
 
-Run `first-draft-axi init` with no flags to list ready routes. Set your route with `init --agent … --model …`, then run `first-draft-axi doctor` to check readiness **without a paid call**. MiniMax defaults to `MiniMax-M3.1-Flash-Preview` if `init` gets no `--model`.
+Subscriptions come first. They need no key: calls use your CLI's normal login without copying it. Claude models run only through the Claude subscription; any other route refuses them and points you to `byokit:claude`. Plan key and API key routes are still there for other providers.
 
-Subscription calls use your CLI's normal login without copying it. Key routes read the environment variable named by `doctor`; keys are never saved in First Draft's config. Config lives at `$FIRST_DRAFT_HOME/config.json`, default `~/.first-draft/config.json`.
+Run `first-draft-axi doctor` or `first-draft-axi init` with no flags to see your ready subscriptions, each with its exact `init` line. Set your route with `init --agent … --model …`, then run `first-draft-axi doctor` to check readiness **without a paid call**. MiniMax defaults to `MiniMax-M3.1-Flash-Preview` if `init` gets no `--model`.
+
+Key routes read the environment variable named by `doctor`; keys are never saved in First Draft's config. Config lives at `$FIRST_DRAFT_HOME/config.json`, default `~/.first-draft/config.json`.
 
 ## Generated assets
 

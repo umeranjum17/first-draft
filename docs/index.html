@@ -93,13 +93,13 @@
       </figure>
     </section>
     <section class="quickstart" id="start" aria-labelledby="start-title">
-      <div class="section-head"><h2 id="start-title">Your first draft, in three steps.</h2><p>Node 22.18+ · Your model, your plan or API key</p></div>
+      <div class="section-head"><h2 id="start-title">Your first draft, in three steps.</h2><p>Node 22.18+ · Your own AI subscription, no API key</p></div>
       <ol class="commands">
         <li><code>npm install -g first-draft-axi</code></li>
-        <li><code>first-draft-axi init --agent byokit:codex --model YOUR_MODEL</code></li>
+        <li><code>first-draft-axi init --agent byokit:claude --model &lt;model&gt;</code></li>
         <li><code>first-draft-axi make "A notes app" --out notes.html &amp;&amp; first-draft-axi view notes.html</code></li>
       </ol>
-      <p class="setup-note">Replace <code>YOUR_MODEL</code> with a model your signed-in Codex CLI supports. <a href="https://github.com/umeranjum17/first-draft#models">Other model routes</a> · Open the URL that <code>view</code> prints.</p>
+      <p class="setup-note">Step 2 uses your Claude subscription (Pro or Max) through your signed-in Claude CLI; replace <code>&lt;model&gt;</code> with a Claude model it supports. On ChatGPT, use <code>byokit:codex</code> with your signed-in Codex CLI. <a href="https://github.com/umeranjum17/first-draft#models">Other model routes</a> · Open the URL that <code>view</code> prints.</p>
     </section>
     <section class="workflow" aria-label="How it works">
       <article><span class="number">01 / MAKE</span><h3>Start with a prompt.</h3><p>Ask for a screen or a flow. Add <code>--count 3</code> to get three directions instead of committing to the first one.</p></article>
