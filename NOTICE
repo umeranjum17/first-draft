@@ -1,0 +1,9 @@
+first-draft
+Copyright 2026 first-draft contributors
+
+This product includes the Open CoDesign design engine
+(https://github.com/OpenCoworkAI/open-codesign), MIT License,
+Copyright 2026 OpenCoworkAI Contributors. Its core, providers, shared and
+runtime packages are vendored unmodified in vendor/open-codesign at the commit
+named in ENGINE.md, with their own LICENSE and NOTICE in that folder. The
+published package carries them as dist/LICENSE and dist/NOTICE.

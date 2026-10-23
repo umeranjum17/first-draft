@@ -45,8 +45,10 @@
     .details { padding-bottom: 64px; }
     .details > p { color: var(--muted); max-width: 630px; margin: 14px 0 28px; }
     .screens { display: grid; grid-template-columns: 2.6fr 1fr; align-items: start; gap: 24px; }
-    .agents { padding: 36px 0 64px; border-top: 1px solid var(--line); }
-    .agents p { color: var(--muted); max-width: 630px; margin: 12px 0 0; }
+    .together, .agents { padding: 36px 0 64px; border-top: 1px solid var(--line); }
+    .together p, .agents p { color: var(--muted); max-width: 630px; margin: 12px 0 0; }
+    .together a, footer a { white-space: nowrap; }
+    .together pre { max-width: 630px; margin: 16px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 13px; white-space: pre-wrap; }
     footer { display: flex; justify-content: space-between; gap: 20px; padding: 22px 0 32px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
     @media (prefers-color-scheme: dark) { :root { --bg: #191917; --ink: #f1efe8; --muted: #aaa89e; --line: #393932; --panel: #20201d; --accent: #f09b7e; } }
     @media (max-width: 760px) {
@@ -67,7 +69,8 @@
       .workflow { grid-template-columns: 1fr; gap: 28px; padding: 48px 0; }
       .screens { grid-template-columns: 1fr; }
       .screens figure:last-child { max-width: 260px; }
-      .agents { padding-bottom: 40px; }
+      .together, .agents { padding-bottom: 40px; }
+      .together pre { font-size: 12px; }
     }
   </style>
 </head>
@@ -111,11 +114,17 @@
         <figure><img class="shot" src="media/canvas-390.webp" width="390" height="844" loading="lazy" alt="The viewer in a 390px-wide window, with the option on a phone canvas"><figcaption>The same viewer in a 390px-wide window.</figcaption></figure>
       </div>
     </section>
+    <section class="together" aria-labelledby="together-title">
+      <h2 id="together-title">Works alone, or with sign-off.</h2>
+      <p>First Draft needs nothing else: make, view and refine work on their own, and comments from people show as read-only pins on the canvas.</p>
+      <p>To get someone's pick, hand the options to <a href="https://github.com/umeranjum17/sign-off">sign-off</a>, a sibling review board. It shows the options side by side, with an Open link under each one that opens it in Play in first-draft for the detail.</p>
+      <pre><code>first-draft-axi post notes.html --title "Which notes app?" --recommend a</code></pre>
+    </section>
     <section class="agents" aria-labelledby="agents-title">
       <h2 id="agents-title">Hand it to your coding agent.</h2>
       <p>The CLI prints JSON, so an agent can run <code>make</code> and <code>view</code> on its own. Give it the <a href="https://github.com/umeranjum17/first-draft/blob/main/skills/first-draft-axi/SKILL.md">agent skill</a> and it knows the commands.</p>
     </section>
   </main>
-  <footer class="wrap"><span>first-draft · Open source · MIT</span><a href="https://github.com/umeranjum17/first-draft#reference">CLI reference ↗</a></footer>
+  <footer class="wrap"><span>first-draft · Open source · MIT · Design engine: <a href="https://github.com/OpenCoworkAI/open-codesign">Open CoDesign</a></span><a href="https://github.com/umeranjum17/first-draft#reference">CLI reference ↗</a></footer>
 </body>
 </html>
