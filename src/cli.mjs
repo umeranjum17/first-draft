@@ -81,7 +81,7 @@ commands[8]:
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
   doctor                              show whether the configured agent is ready, with no paid call
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
-The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key or api key route, or byokit:codex for the installed subscription CLI.
+The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key or api key route, or byokit:codex / byokit:claude for the installed subscription CLI (Claude example: init --agent byokit:claude --model claude-opus-5-5).
 Journeys, tests and demos post with --evidence --media <shot>... (an Evidence card: options and Play links, no pick asked), never --recommend: that files a Decide card for the owner.
 A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
 view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.

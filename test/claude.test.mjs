@@ -1,0 +1,70 @@
+// Installed Claude journey through the real CLI, engine and published BYOKit adapters; no model calls.
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { promisify } from 'node:util';
+
+const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
+const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const PAGE = '<!doctype html><html><body><h1>Umer’s notes</h1><a href="#detail">Open note</a><section id="detail" data-oc-screen="detail">A note</section></body></html>';
+
+test('installed Claude: no-paid doctor, account launch, engine make/refine and subscription refusals', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-claude-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  writeFileSync(join(dir, 'claude'), `#!${process.execPath}
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2), root = process.env.FIRST_DRAFT_HOME;
+appendFileSync(root + '/calls', JSON.stringify(args) + '\\n');
+if (args.includes('auth')) {
+  console.log(JSON.stringify({ loggedIn: process.env.FD_AUTH !== 'out', authMethod: process.env.FD_AUTH || 'claude.ai', apiProvider: 'firstParty' }));
+} else {
+  let input = ''; for await (const c of process.stdin) input += c;
+  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) throw Error('API credential reached child');
+  if (!args.includes('--safe-mode') || !args.includes('--strict-mcp-config')) throw Error('unsafe execution');
+  if (args[args.indexOf('--model') + 1] !== 'claude-opus-5-5') throw Error('model changed');
+  const envelope = JSON.parse(input), { messages, tools } = JSON.parse(envelope.message.content.at(-1).text);
+  if (!tools.length) throw Error('missing engine tools');
+  const results = messages.filter(m => m.role === 'toolResult');
+  const call = (name, a) => ({ name, arguments: JSON.stringify(a) });
+  const page = input.includes('warmer palette') ? ${JSON.stringify(PAGE.replace('A note', 'A warm note'))} : ${JSON.stringify(PAGE)};
+  // Real Opus may try done before the engine's mandatory plan: its blocked event has no path.
+  const calls = !results.length ? [call('done', { path: 'index.html' })]
+    : results.length === 1 ? [call('set_todos', { items: [{ text: 'Write notes', checked: false }] })]
+    : results.length === 2 ? [call('str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: ${JSON.stringify(DESIGN)} }), call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: page })]
+    : results.length === 4 ? [call('done', { path: 'index.html' })] : [];
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: calls.length ? '' : 'Ready', calls }, usage: { input_tokens: 7, output_tokens: 8 } }));
+}
+`, { mode: 0o700 });
+  const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, FIRST_DRAFT_CHROME: '/nonexistent', ANTHROPIC_API_KEY: 'synthetic-never-deliver', ANTHROPIC_AUTH_TOKEN: 'synthetic-never-deliver' };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  await promisify(execFile)(join(dir, 'claude'), ['auth', 'status'], { env });
+  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
+  const doctor = JSON.parse((await run('doctor')).stdout);
+  assert.equal(doctor.ready, true);
+  assert.match(doctor.checks.at(-1).detail, /availability not probed/);
+  const calls = () => readFileSync(join(dir, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(calls().every(args => args.includes('auth')), 'doctor makes no generation call');
+  const out = join(dir, 'notes.html');
+  const made = JSON.parse((await run('make', 'Notes for Umer', '--out', out)).stdout).made;
+  assert.equal(made.model, 'claude-opus-5-5');
+  assert.equal(made.files[0].turns, 5);
+  assert.equal(made.tokens_in, 35);
+  assert.equal(made.tokens_out, 40);
+  assert.match(readFileSync(out, 'utf8'), /Content-Security-Policy/);
+  await run('refine', out, 'warmer palette', '--out', join(dir, 'warm.html'));
+  assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /A warm note/);
+  assert.doesNotMatch(readFileSync(out, 'utf8'), /A warm note/);
+  const generated = () => calls().filter(args => args.includes('-p')).length;
+  assert.equal(generated(), 10);
+  for (const auth of ['out', 'api_key', 'other']) {
+    env.FD_AUTH = auth;
+    await assert.rejects(run('doctor'), e => /"ready":false/.test(e.stdout));
+    await assert.rejects(run('make', 'Notes', '--out', join(dir, 'refused.html')));
+    assert.equal(generated(), 10, `${auth} never spends`);
+  }
+  env.PATH = dir + '/missing';
+  await assert.rejects(run('doctor'), e => /claude is not installed/.test(e.stdout));
+});

@@ -2,25 +2,33 @@
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
-const codexBin = () => process.env.PATH?.split(delimiter).map((p) => resolve(p, 'codex')).find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
-let cli, launched;
-async function installed() {
-  if (cli) return cli;
-  const bin = codexBin();
-  if (!bin) throw new Error('codex is not installed on PATH');
+const CLI_ROUTES = ['codex', 'claude'];
+const cliBin = (route) => process.env.PATH?.split(delimiter).map((p) => resolve(p, route)).find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
+const cli = new Map(), launched = new Map();
+async function installed(route) {
+  if (cli.has(route)) return cli.get(route);
+  const bin = cliBin(route);
+  if (!bin) throw new Error(`${route} is not installed on PATH`);
   const stateDir = join(process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft'), 'cli');
   mkdirSync(stateDir, { recursive: true });
   const { cliAccounts } = await import('@byokit/accounts/cli');
-  return cli = { bin, accounts: cliAccounts({ stateDir, bins: { codex: bin }, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))), installed: true }) };
+  // Filter names before reading values: installed subscription routes never read API keys.
+  const env = Object.fromEntries(Object.keys(process.env).filter((k) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && !/KEY|TOKEN|SECRET/i.test(k)).map((k) => [k, process.env[k]]));
+  const value = { bin, accounts: cliAccounts({ stateDir, bins: { [route]: bin }, env, installed: true }) };
+  cli.set(route, value);
+  return value;
 }
-async function launch() {
-  if (launched) return launched;
-  const { bin, accounts } = await installed();
-  const account = await accounts.launch('installed-codex');
+async function launch(route) {
+  if (launched.has(route)) return launched.get(route);
+  const { bin, accounts } = await installed(route);
+  const account = await accounts.launch(`installed-${route}`);
   if (!account.ok) throw new Error(account.message);
-  return launched = { bin, account };
+  if (route === 'claude' && account.account.method !== 'subscription') throw new Error('Claude must be signed in with a Claude subscription, not an API key or another billing route');
+  const value = { bin, account };
+  launched.set(route, value);
+  return value;
 }
-export { launch as installedCodex }; // Asset adapter reuses BYOKit's installed account by path.
+export const installedCodex = () => launch('codex'); // Asset adapter reuses BYOKit's installed account by path.
 const MEMBER = 'first-draft';
 
 const KEY_VIA = ['plan_key', 'key'];
@@ -31,7 +39,7 @@ export const routeOf = (agent) => agent?.match(/^byokit:(.+)/)?.[1];
 // Ready plan-key and api-key aliases plus the installed CLI, when present.
 export async function readyRoutes() {
   const keys = (await import('@byokit/accounts')).routes().filter((r) => KEY_VIA.includes(r.via) && r.readiness === 'ready').flatMap((r) => (r.aliases?.length ? r.aliases : [r.id]));
-  return [...new Set([...keys, ...(codexBin() ? ['codex'] : [])])];
+  return [...new Set([...keys, ...CLI_ROUTES.filter(cliBin)])];
 }
 
 const planKey = async (route) => (await import('@byokit/accounts')).routes().find((r) => KEY_VIA.includes(r.via) && (r.id === route || r.aliases?.includes(route)));
@@ -40,7 +48,7 @@ const signIn = async (key) => `set ${key.upstream.method} to your ${key.name} ke
 async function check(route) {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 18)) return `BYOKit needs Node 22.18 or later; this is ${process.version}: install Node 22.18 or later`;
-  if (route === 'codex') return;
+  if (CLI_ROUTES.includes(route)) return;
   if (!await planKey(route)) return `byokit:${route} is not a BYOKit plan or api key route: use one of: ${(await readyRoutes()).map((r) => `byokit:${r}`).join(', ')}`;
 }
 
@@ -56,13 +64,13 @@ async function modelFor(provider, id) {
 
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
 export async function respond({ route, model, context, maxTokens, signal, timeoutMs }) {
-  if (route === 'codex') {
-    const { bin, account } = await launch();
-    const { codex } = await import('@byokit/decide/codex');
+  if (CLI_ROUTES.includes(route)) {
+    const { bin, account } = await launch(route);
+    const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
     const schema = { type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
       text: { type: 'string' }, calls: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
-    const answer = await codex({ bin, account, model: model.replace(/^openai-codex\//, ''), timeoutMs }).generate({
+    const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({
       system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), schema, signal, maxOutputTokens: maxTokens });
     if (!answer.data) throw new Error('BYOKit returned no structured engine response');
     const { text, calls } = answer.data;
@@ -98,11 +106,12 @@ export async function doctor(route, model) {
   const label = `byokit:${route}`;
   const problem = await check(route).catch((e) => e.message);
   if (problem) return { status: 'fail', label, detail: problem };
-  if (route === 'codex') {
+  if (CLI_ROUTES.includes(route)) {
     try {
-      const { accounts } = await installed();
-      const row = await accounts.status('installed-codex');
-      return { label, status: row.state === 'ready' ? 'ok' : 'fail', detail: row.state === 'ready' ? `installed CLI; model ${model} (availability not probed)` : row.cause || row.state };
+      const { accounts } = await installed(route);
+      const row = await accounts.status(`installed-${route}`);
+      if (row.state === 'ready' && route === 'claude' && row.method !== 'subscription') return { label, status: 'fail', detail: 'Claude must be signed in with a Claude subscription, not an API key or another billing route' };
+      return { label, status: row.state === 'ready' ? 'ok' : 'fail', detail: row.state === 'ready' ? `installed CLI; model ${model} (availability not probed)${route === 'claude' ? '; adapter supports image input' : ''}` : row.cause || row.state };
     } catch (e) { return { label, status: 'fail', detail: e.message }; }
   }
   const key = await planKey(route);
