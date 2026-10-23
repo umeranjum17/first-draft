@@ -6,7 +6,11 @@ import { promisify } from 'node:util';
 import { doctor, installedCodex } from './byokit.mjs';
 const exec = promisify(execFile);
 const run = async (bin, args, options = {}) => {
-  try { return (await exec(bin, args, { timeout: 600_000, maxBuffer: 8_000_000, ...options })).stdout; }
+  try {
+    const call = exec(bin, args, { signal: AbortSignal.timeout(600_000), maxBuffer: 8_000_000, ...options });
+    call.child.stdin.end(); // Codex appends piped stdin even with an argv prompt; it must receive EOF.
+    return (await call).stdout;
+  }
   catch (e) {
     const detail = e.code === 'ENOENT' ? `${bin} is not installed` : e.stderr?.trim() || e.message;
     throw new Error(`${detail}${/No version is set for shim/.test(detail) ? '; run with mise exec node@26.1.0 -- first-draft-axi ...' : ''}`);
