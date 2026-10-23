@@ -22,8 +22,9 @@ export function designFiles(args) {
   }))];
 }
 
-// Comment pins, read-only: `<design>.comments.json` next to the design (`mocks/x.html` or `mocks/x` -> `mocks/x.comments.json`),
-// an array of { option, x, y, text } with x and y as fractions (0-1) of the frame. No file means no pins.
+// Comment pins: `<design>.comments.json` next to the design (`mocks/x.html` or `mocks/x` -> `mocks/x.comments.json`), an array of
+// { option, x, y, text, device? } with x and y as fractions (0-1) of the frame; a pin with a device ('phone' or 'desktop') shows on that
+// device's frame only. No file means no pins. The view adds a comment a person places on the canvas to the same file (`addComment`).
 export const commentsPath = (arg) => { const p = resolve(arg); return join(dirname(p), `${basename(p, extname(p))}.comments.json`); };
 export function readPins(file) {
   if (!file) return { pins: [] };
@@ -33,8 +34,22 @@ export function readPins(file) {
     const list = JSON.parse(raw);
     if (!Array.isArray(list)) throw new Error('expected an array of { option, x, y, text }');
     const frac = (v) => typeof v === 'number' && v >= 0 && v <= 1;
-    return { pins: list.filter((c) => Number.isInteger(c?.option) && frac(c.x) && frac(c.y) && typeof c.text === 'string' && c.text).map(({ option, x, y, text }) => ({ option, x, y, text })) };
+    return { pins: list.filter((c) => Number.isInteger(c?.option) && frac(c.x) && frac(c.y) && typeof c.text === 'string' && c.text)
+      .map(({ option, x, y, text, device }) => ({ option, x, y, text, ...(DEVICES.includes(device) ? { device } : {}) })) };
   } catch (e) { return { pins: [], error: `${basename(file)} is not valid comments: ${e.message}` }; }
+}
+
+const DEVICES = ['phone', 'desktop'];
+// Appends one comment to the file, keeping every entry already there; a file that is not a JSON array is never overwritten.
+export function addComment(file, { option, device, x, y, text }) {
+  let list = [];
+  try { list = JSON.parse(readFileSync(file, 'utf8')); } catch (e) {
+    if (e.code !== 'ENOENT') throw new Error(e.code ? `${basename(file)} cannot be read: ${e.code}` : `${basename(file)} is not valid comments, so the comment was not added: ${e.message}`);
+  }
+  if (!Array.isArray(list)) throw new Error(`${basename(file)} is not valid comments, so the comment was not added: expected an array of { option, x, y, text }`);
+  const round = (v) => Math.round(v * 10_000) / 10_000;
+  list.push({ option, x: round(x), y: round(y), text, ...(device ? { device } : {}) });
+  writeFileSync(file, `${JSON.stringify(list, null, 2)}\n`);
 }
 
 export async function tailnetHost() {
@@ -108,12 +123,28 @@ export async function serve({ files, name, host, advertise = host, port, framePo
   };
   // One change runs at a time: the model call takes minutes and the person's agent is one account.
   let running = false;
+  // A POST from the view page itself: its JSON body, or null once it has answered why not.
+  const posted = async (req, reply) => {
+    const same = (() => { try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; } })();
+    if (!same || !/^application\/json/.test(req.headers['content-type'] ?? '')) { reply(403, { error: 'this request did not come from the view page' }); return null; }
+    try { return JSON.parse(await readBody(req)) ?? {}; } catch { reply(400, { error: 'the request is not valid JSON' }); return null; }
+  };
+  const comment = async (req, res) => {
+    const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
+    const body = await posted(req, reply);
+    if (!body) return;
+    const frac = (v) => typeof v === 'number' && v >= 0 && v <= 1, text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!options.some((o) => o.n === body.option) || !frac(body.x) || !frac(body.y) || !text || text.length > 2000 || (body.device !== undefined && !DEVICES.includes(body.device))) {
+      return reply(400, { error: 'a comment needs an option, a point on its frame and a few words' });
+    }
+    if (!comments) return reply(501, { error: 'this view cannot save comments' });
+    try { addComment(comments, { option: body.option, device: body.device, x: body.x, y: body.y, text }); } catch (e) { return reply(409, { error: e.message }); }
+    reply(200, readPins(comments));
+  };
   const change = async (req, res) => {
     const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
-    const same = (() => { try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; } })();
-    if (!same || !/^application\/json/.test(req.headers['content-type'] ?? '')) return reply(403, { error: 'this request did not come from the view page' });
-    let body;
-    try { body = JSON.parse(await readBody(req)); } catch { return reply(400, { error: 'the request is not valid JSON' }); }
+    const body = await posted(req, reply);
+    if (!body) return;
     const from = options.find((o) => o.n === body?.option), text = typeof body?.change === 'string' ? body.change.trim() : '';
     if (!from || !text) return reply(400, { error: 'a change needs an option and a few words about the change' });
     if (!refine) return reply(501, { error: 'this view cannot make a change' });
@@ -131,6 +162,7 @@ export async function serve({ files, name, host, advertise = host, port, framePo
   const view = createServer((req, res) => {
     const path = pathOf(req);
     if (req.method === 'POST' && path === '/refine') return change(req, res);
+    if (req.method === 'POST' && path === '/comments') return comment(req, res);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
     if (path === '/') return send(res, 200, 'text/html; charset=utf-8', page(), { 'content-security-policy': viewPolicy(frameOrigin) });
     if (ASSETS[path]) {

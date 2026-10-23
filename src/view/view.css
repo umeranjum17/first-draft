@@ -77,9 +77,29 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 /* The More menu (phone width): opens under its button, right-aligned to it (app.js sets top and right). */
 .menu { inset: auto; margin: 0; min-width: 160px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .menu .button { width: 100%; justify-content: flex-start; border: 0; background: none; }
-.stage { flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; background: var(--canvas); }
+.stage { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; background: var(--canvas); }
 .stage.dotted { border: 1px solid var(--border); border-radius: 14px; background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 18px 18px; }
 .work .error-bar { border: 1px solid var(--border); border-radius: 10px; }
+/* Both: the desktop and the phone side by side at one scale (app.js sets the gap), each under a caption (32px, canvas.js CAPTION) with its own Play. */
+.pair { display: flex; align-items: flex-start; }
+.pair figure { margin: 0; }
+.pair figcaption { display: flex; align-items: center; gap: 8px; height: 32px; padding-bottom: 6px; font-size: 13px; white-space: nowrap; }
+.device-name { color: var(--text); font-weight: 600; text-decoration: none; }
+.device-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.play-one { min-height: 26px; margin-left: auto; padding: 0 10px; font-size: 13px; }
+
+/* Comment mode: a layer over each screen takes the tap (crosshair, a dashed edge), a pill over the canvas says what to do, and the
+   comment box opens beside the tapped point, which a pin-coloured mark shows. */
+.comment-tool[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.catch { position: absolute; z-index: 4; display: none; cursor: crosshair; }
+.commenting .catch { display: block; outline: 2px dashed var(--accent); outline-offset: 2px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.comment-hint { position: absolute; z-index: 6; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 14px; border: 1px solid var(--border); border-radius: 9999px; background: var(--surface); box-shadow: var(--shadow); font-size: 13px; white-space: nowrap; }
+.comment-hint .button { min-height: 30px; border-radius: 9999px; }
+.studio:not(.commenting) .comment-hint { display: none; }
+.comment-box { position: fixed; z-index: 20; width: min(320px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+.comment-box textarea { width: 100%; min-height: 72px; resize: vertical; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.comment-error { color: var(--error); font-size: 13px; }
+.comment-mark { position: fixed; z-index: 19; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #ca8a04; border-radius: 9999px; background: #fde68a; box-shadow: 0 1px 4px rgb(0 0 0 / 0.3); pointer-events: none; }
 /* Hide brief: the column and its composer fold away and the canvas takes the full width (wide screens only). */
 @media (min-width: 860px) {
   .studio.folded { grid-template-columns: minmax(0, 1fr); grid-template-areas: "work" "work"; background: none; }
@@ -119,7 +139,7 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
   .work:has(.artboard) { height: auto; }
   .tools select { display: block; flex: 1 1 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
   .zoom { display: none; }
-  .tools .full-link { display: none; }
+  .tools :is(.full-link, .comment-tool), .devices a[href$="/both"] { display: none; }
   .tools .more { display: inline-flex; min-width: 40px; margin-left: auto; padding: 0; font-size: 18px; }
   .stage.dotted:has(.artboard) { flex: none; }
   .stage.dotted:has(.artboard) { height: auto; aspect-ratio: 1328 / 848; } /* the desktop artboard plus the stage padding */
@@ -138,6 +158,9 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
   .brief:is(:focus-within, :has(textarea:not(:placeholder-shown)), :has(.command:not([hidden]))) > .brief-row > .link { display: block; }
   .brief:is(:focus-within, :has(textarea:not(:placeholder-shown))) textarea { height: 80px; }
   .tools .button, .devices a { min-height: 40px; }
+  /* Commenting: the hint is a row above the device (app.js fits the device below it) rather than over the phone's top. */
+  .commenting .stage { grid-template-rows: auto minmax(0, 1fr); }
+  .comment-hint { position: static; order: -1; margin-top: 12px; transform: none; }
 }
 
 /* PhoneFrame.tsx */

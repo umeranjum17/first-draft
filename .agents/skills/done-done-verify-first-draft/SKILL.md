@@ -24,9 +24,9 @@ When the repo's .done-done.yaml has an instance block, done-done already runs th
 Harness: A shell runs the CLI and curl for the url. A browser tool opens the url and each #/o/<n> route for screenshots. Drive through the repo's real handles that each feature file names:
 
 - [Grid of every option](features/grid-of-every-option.md): Open the view url at #/ (the root) (`src/view/app.js`)
-- [Studio: one option on a phone 390 or desktop 1280 canvas, beside its brief column](features/canvas-for-one-option-at-phone-390-and-d.md): From the grid, click an option card, or open <url>#/o/1 (`src/view/app.js`)
+- [Studio: one option with desktop 1280 and phone 390 side by side (or one device), beside its brief column](features/canvas-for-one-option-at-phone-390-and-d.md): From the grid, click an option card, or open <url>#/o/1 (`src/view/app.js`)
 - [Play: click through the screens of an option](features/play-click-through-the-screens-of-an-opt.md): From the canvas, press the Play button, or open <url>#/o/1/play (`src/view.mjs`)
-- [Comment pins read from the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design, then open the view for that design (`src/view.mjs`)
+- [Comment pins: read from and added to the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design and open the view, or press Comment on the canvas and tap a spot (`src/view.mjs`, `src/view/app.js`)
 - [View startup output and error codes](features/view-startup-output-and-error-codes.md): Run the view command in a shell (`src/cli.mjs`)
 - [Make a landing page from a README](features/make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README (`src/make.mjs`)
 - [Make with a named design style](features/make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>` (`src/styles.mjs`)

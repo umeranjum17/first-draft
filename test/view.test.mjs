@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { connect as netConnect } from 'node:net';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -36,15 +36,16 @@ test('a path under a file is no design, not a crash', (t) => {
 const CHROME = [process.env.CHROME, 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].find((c) => c && execFileSync('sh', ['-c', `command -v "${c}" || true`]).toString().trim());
 const dom = (dir, url) => promisify(execFile)(CHROME, ['--headless', '--no-sandbox', '--disable-gpu', `--user-data-dir=${join(dir, 'chrome')}`, '--virtual-time-budget=3000', '--dump-dom', url]).then((r) => r.stdout);
 
+// Both (the default on a wide window) is proven by journeys/studio.mjs: --dump-dom's window can be 0 wide, so it is checked there at a set width.
 test('the Studio viewport switch shows the option on the picked device only, and Play opens on it', { skip: !CHROME && 'no Chrome on PATH' }, async (t) => {
   const dir = temp(t);
   writeFileSync(join(dir, 'a-1.html'), MOCK);
   const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
   t.after(v.close);
   const shows = (html) => ({ phone: /class="phone"/.test(html), desktop: /class="artboard"/.test(html), current: html.match(/<a href="#\/o\/1\/(phone|desktop)" aria-current="true">/)?.[1],
-    other: html.match(/<a href="#\/o\/1\/(phone|desktop)">/)?.[1], play: html.match(/href="#\/o\/1\/play\/(phone|desktop)"/)?.[1] });
-  assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/phone`)), { phone: true, desktop: false, current: 'phone', other: 'desktop', play: 'phone' }); // never a desktop pane under the phone
-  assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/desktop`)), { phone: false, desktop: true, current: 'desktop', other: 'phone', play: 'desktop' });
+    play: [...html.matchAll(/href="#\/o\/1\/play\/(phone|desktop)"/g)].map((m) => m[1]).join() });
+  assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/phone`)), { phone: true, desktop: false, current: 'phone', play: 'phone' }); // never a desktop pane under the phone
+  assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/desktop`)), { phone: false, desktop: true, current: 'desktop', play: 'desktop' });
 });
 
 test('the canvas and Play fit one device to the stage without upscaling, and defaults to the device that fits the viewport', () => {
@@ -52,7 +53,8 @@ test('the canvas and Play fit one device to the stage without upscaling, and def
   assert.ok(FRAMES.desktop.width * fitDevice('desktop', 1280, 900) <= 1280 - 48);
   assert.ok((FRAMES.phone.height + FRAMES.phone.bezel * 2) * fitDevice('phone', 1280, 700) <= 700 - 48);
   assert.ok((FRAMES.phone.width + FRAMES.phone.bezel * 2) * fitDevice('phone', 390, 900) <= 390 - 48);
-  assert.deepEqual([deviceFor(undefined, 390), deviceFor(undefined, 1280), deviceFor('phone', 1280)], ['phone', 'desktop', 'phone']);
+  assert.deepEqual([deviceFor(undefined, 390), deviceFor(undefined, 800), deviceFor(undefined, 1280), deviceFor('phone', 1280), deviceFor('both', 390)], ['phone', 'desktop', 'both', 'phone', 'phone']);
+  assert.ok((FRAMES.desktop.width + FRAMES.phone.width + FRAMES.phone.bezel * 2) * fitDevice('both', 1280, 800) <= 1280 - 48 - 48);
 });
 
 test('an errored option opens its canvas, never the grid or a frame', () => {
@@ -189,7 +191,7 @@ test('a malformed request target gets an answer and the view keeps serving', asy
   assert.equal((await fetch(v.url)).status, 200);
 });
 
-test('comment pins load read-only from <design>.comments.json; no file means none, a bad file says why', async (t) => {
+test('comment pins load from <design>.comments.json; no file means none, a bad file says why', async (t) => {
   const dir = temp(t);
   writeFileSync(join(dir, 'a-1.html'), MOCK);
   const open = async () => {
@@ -215,4 +217,31 @@ test('comment pins load read-only from <design>.comments.json; no file means non
   const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0, comments: join(dir, 'a.comments.json') });
   t.after(v.close);
   assert.doesNotMatch(await (await fetch(`${v.frames}/o/1`)).text(), /Make this bigger/);
+});
+
+test('a comment placed on the canvas is added to <design>.comments.json, keeping what is there', async (t) => {
+  const dir = temp(t);
+  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  const file = join(dir, 'a.comments.json');
+  const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0, comments: file });
+  t.after(v.close);
+  const view = new URL(v.url).origin;
+  const add = (body, origin = view) => fetch(`${view}/comments`, { method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  const first = await add({ option: 1, device: 'phone', x: 0.123456, y: 0.3, text: '  More room here  ' }); // no file yet: it is made
+  assert.equal(first.status, 200);
+  assert.deepEqual((await first.json()).pins, [{ option: 1, device: 'phone', x: 0.1235, y: 0.3, text: 'More room here' }]);
+  writeFileSync(file, JSON.stringify([{ option: 1, x: 0.5, y: 0.5, text: 'kept', note: 'an extra field' }, 'not a comment']));
+  assert.equal((await add({ option: 1, x: 0.9, y: 0.1, text: 'Second' })).status, 200);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), [{ option: 1, x: 0.5, y: 0.5, text: 'kept', note: 'an extra field' }, 'not a comment', { option: 1, x: 0.9, y: 0.1, text: 'Second' }]);
+
+  for (const bad of [{ option: 2, x: 0.5, y: 0.5, text: 'no such option' }, { option: 1, x: 1.5, y: 0.5, text: 'off the frame' }, { option: 1, x: 0.5, y: 0.5, text: ' ' }, { option: 1, device: 'watch', x: 0.5, y: 0.5, text: 'no such device' }]) {
+    assert.equal((await add(bad)).status, 400, JSON.stringify(bad));
+  }
+  assert.equal((await add({ option: 1, x: 0.5, y: 0.5, text: 'from elsewhere' }, 'http://example.com')).status, 403);
+  writeFileSync(file, '{"nope"');
+  const broken = await add({ option: 1, x: 0.5, y: 0.5, text: 'Third' });
+  assert.equal(broken.status, 409);
+  assert.match((await broken.json()).error, /a\.comments\.json is not valid comments, so the comment was not added/);
+  assert.equal(readFileSync(file, 'utf8'), '{"nope"'); // never overwritten
 });

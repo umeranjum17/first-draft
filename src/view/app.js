@@ -1,7 +1,7 @@
-// The first-draft view: every option of a design as a grid, one option in the Studio (a brief column beside a canvas showing one device at a time), fullscreen, and Play (clickable screens).
+// The first-draft view: every option of a design as a grid, one option in the Studio (a brief column beside a canvas showing the desktop and the phone side by side, or one of them), fullscreen, and Play (clickable screens).
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, PIN_GUTTER, SANDBOX, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor } from './canvas.js';
+import { FRAMES, PIN_GUTTER, SANDBOX, commentBubblePosition, commentKeyAction, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor, pairGap } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -11,6 +11,8 @@ let frames = []; // [{ n, iframe }] currently mounted
 let resize = null;
 let draft = ''; // the Studio brief being written, kept across options and devices
 let column = true; // the Studio's column (and its brief) shown on a wide screen; Hide brief folds it away until Show brief
+let openPin = null; // the comment number to open once the next page is drawn (a comment just added, or one on the other device)
+let lastCanvas = null; // the Studio route Play's Exit goes back to
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -28,16 +30,21 @@ function frame(option, title, lazy, query = '') {
 }
 
 // PreviewPane.tsx ScaledPreviewFrame: lay the artboard out at its real size and scale it down.
-// `pins` (this option's comments) are drawn in a layer over the frame, in this page, outside the iframe; `pad` is the bezel around the screen.
-function scaled(width, height, child, pins = [], pad = 0) {
+// `pins` (this option's comments on this device) are drawn in a layer over the frame, in this page, outside the iframe; `pad` is the bezel around the screen.
+// `point(x, y, at)`, when given, is called with the fractions of the screen a person taps in comment mode (a layer over the screen catches the tap).
+function scaled(width, height, child, pins = [], pad = 0, point) {
   const inner = el('div', { class: 'scaled-inner' }, child);
   inner.style.width = `${width}px`;
   inner.style.height = `${height}px`;
   const layer = pins.length ? pinLayer(pins) : null;
-  const outer = el('div', { class: 'scaled' }, inner, ...(layer ? [layer] : []));
+  const catcher = point && el('div', { class: 'catch', 'aria-hidden': 'true' });
+  if (catcher) catcher.onclick = (e) => { const b = catcher.getBoundingClientRect(); point((e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height, { left: e.clientX - 6, top: e.clientY - 6, width: 12, height: 12 }); };
+  const outer = el('div', { class: 'scaled' }, inner, ...[layer, catcher].filter(Boolean));
   outer.rescale = (scale) => {
+    const screen = { left: `${pad * scale}px`, top: `${pad * scale}px`, width: `${(width - pad * 2) * scale}px`, height: `${(height - pad * 2) * scale}px` };
+    if (catcher) Object.assign(catcher.style, screen);
     if (layer) {
-      Object.assign(layer.style, { left: `${pad * scale}px`, top: `${pad * scale}px`, width: `${(width - pad * 2) * scale}px`, height: `${(height - pad * 2) * scale}px` });
+      Object.assign(layer.style, screen);
       layer.layout((width - pad * 2) * scale, (height - pad * 2) * scale);
     }
     outer.style.width = `${width * scale}px`;
@@ -47,11 +54,12 @@ function scaled(width, height, child, pins = [], pad = 0) {
   return outer;
 }
 
-// PinOverlay.tsx: numbered round pins, read-only, in the margin beside the frame, level with what they point at (a short leader reaches the frame's edge), so no pin covers the page.
+// PinOverlay.tsx: numbered round pins in the margin beside the frame, level with what they point at (a short leader reaches the frame's edge), so no pin covers the page.
 // x and y are fractions of the frame, so they hold at any scale; the side is the nearer one. A pin shows its comment text when clicked or tapped, away from the point it names.
 function pinLayer(pins) {
   const layer = el('div', { class: 'pins' });
-  const items = pins.map((p, i) => {
+  const items = pins.map((p) => {
+    const i = p.i; // the comment's number on its option, the same on every frame and in the column
     const pin = el('button', { type: 'button', class: `pin ${p.x < 0.5 ? 'left' : 'right'}`, 'aria-label': `Comment ${i + 1}`, 'aria-expanded': 'false', 'data-i': i }, String(i + 1));
     const bubble = el('div', { class: 'pin-bubble', role: 'note', hidden: '' }, el('strong', {}, `${i + 1}  `), p.text);
     bubble.style.setProperty('--x', p.x < 0.5 ? '0px' : '100%'); // the bubble is placed from --x by CSS, so it stays inside the frame
@@ -59,7 +67,7 @@ function pinLayer(pins) {
     pin.onclick = () => {
       const open = pin.getAttribute('aria-expanded') !== 'true';
       document.querySelectorAll('.pin').forEach((o) => {
-        const on = open && o.getAttribute('data-i') === String(i);
+        const on = open && o === pin;
         o.setAttribute('aria-expanded', String(on));
         o.bubble.hidden = !on;
         o.bubble.style.translate = '';
@@ -90,6 +98,8 @@ function pinLayer(pins) {
   return layer;
 }
 const pinsFor = (o) => design.pins.filter((p) => p.option === o.n);
+// The option's comments numbered, on one device's frame: those placed on it and those that name no device.
+const pinsOn = (o, dev) => pinsFor(o).map((p, i) => ({ ...p, i })).filter((p) => !p.device || p.device === dev);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const pinsNotice = () => design.pinsError ? [el('div', { class: 'error-bar', role: 'alert' }, el('div', {}, design.pinsError))] : [];
 
@@ -97,12 +107,14 @@ const pinsNotice = () => design.pinsError ? [el('div', { class: 'error-bar', rol
 const phoneFrame = (iframe) => el('div', { class: 'phone' }, el('div', { class: 'phone-screen' }, iframe),
   el('div', { class: 'phone-island', 'aria-hidden': 'true' }), el('div', { class: 'phone-home', 'aria-hidden': 'true' }));
 // One option on one device: the phone in its frame, the desktop on an artboard, each laid out at its real size.
-const artFor = (dev, iframe, pins) => {
+const artFor = (dev, iframe, pins, point) => {
   const f = FRAMES[dev];
-  return dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe), pins);
+  return dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel, point) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe), pins, 0, point);
 };
-const devices = (base, dev) => el('nav', { class: 'devices', 'aria-label': 'Viewport' },
-  ...['desktop', 'phone'].map((d) => el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined }, d === 'phone' ? 'Phone' : 'Desktop')));
+const NAMES = { both: 'Both', desktop: 'Desktop', phone: 'Phone' };
+// The viewport switch; Both (the two side by side) only on the Studio canvas, and only on a wide screen (view.css).
+const devices = (base, dev, list = ['desktop', 'phone']) => el('nav', { class: 'devices', 'aria-label': 'Viewport' },
+  ...list.map((d) => el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined }, NAMES[d])));
 
 // CanvasErrorBar.tsx: the latest runtime error of the open option, with a count and a dismiss button.
 function errorBar(n) {
@@ -169,7 +181,7 @@ async function send(o, change) {
     design.options.push(body.option);
     draft = '';
     result = { n: body.option.n, text: `Option ${body.option.n} is Option ${o.n} with this change: ${change}` };
-    if (/^#\/o\/\d+(\/(phone|desktop))?$/.test(location.hash)) location.hash = `#/o/${body.option.n}${location.hash.match(/\/(phone|desktop)$/)?.[0] ?? ''}`;
+    if (/^#\/o\/\d+(\/(phone|desktop|both))?$/.test(location.hash)) location.hash = `#/o/${body.option.n}${location.hash.match(/\/(phone|desktop|both)$/)?.[0] ?? ''}`;
   } catch (e) { result = { n: o.n, error: e.message === 'Failed to fetch' ? 'The view cannot be reached. Is first-draft-axi view still running?' : e.message, help: e.help }; }
   job = null;
   clearInterval(clock);
@@ -210,43 +222,124 @@ function brief(o) {
   return form;
 }
 
+// Comment mode: a person taps a point on a frame and writes what should change there; the view server adds it to
+// <design>.comments.json and it shows as a pin. `stopCommenting` (set by the Studio) closes the open comment box, else leaves
+// comment mode, and answers whether it did either.
+let stopCommenting = null;
+
+// CommentBubble.tsx: the box opens beside the tapped point (a mark shows it), never over it; Cmd/Ctrl+Enter saves, Escape closes.
+// `done(i)` gets the new comment's number on its option once it is saved. Returns the box's close.
+function commentBox(o, dev, x, y, at, done) {
+  const mark = el('span', { class: 'comment-mark', 'aria-hidden': 'true' });
+  Object.assign(mark.style, { left: `${at.left + at.width / 2}px`, top: `${at.top + at.height / 2}px` });
+  const text = el('textarea', { rows: '3', 'aria-label': `Comment on Option ${o.n}`, placeholder: 'What should change here?' });
+  const problem = el('p', { class: 'comment-error', role: 'alert', hidden: '' });
+  const cancel = el('button', { type: 'button', class: 'button' }, 'Cancel');
+  const save = el('button', { type: 'submit', class: 'button primary' }, 'Save');
+  const box = el('form', { class: 'comment-box', 'aria-label': 'Add a comment' }, text, problem, el('div', { class: 'brief-row' }, cancel, save));
+  const close = () => { box.remove(); mark.remove(); };
+  cancel.onclick = close;
+  text.onkeydown = (e) => {
+    const act = commentKeyAction(e);
+    if (!act) return;
+    e.preventDefault();
+    e.stopPropagation(); // Escape closes this box only, not comment mode
+    if (act === 'send') box.requestSubmit(); else close();
+  };
+  box.onsubmit = async (e) => {
+    e.preventDefault();
+    const words = text.value.trim();
+    if (!words) return text.focus();
+    Object.assign(save, { disabled: true, textContent: 'Saving…' });
+    problem.hidden = true;
+    try {
+      const res = await fetch('/comments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ option: o.n, device: dev, x, y, text: words }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `The view answered ${res.status}`);
+      Object.assign(design, { pins: body.pins, pinsError: body.error });
+      close();
+      done(pinsFor(o).length - 1);
+    } catch (err) {
+      problem.textContent = err.message === 'Failed to fetch' ? 'The view cannot be reached. Is first-draft-axi view still running?' : err.message;
+      problem.hidden = false;
+      Object.assign(save, { disabled: false, textContent: 'Save' });
+    }
+  };
+  app.append(mark, box);
+  const b = box.getBoundingClientRect();
+  const pos = commentBubblePosition(at, { width: b.width, height: b.height }, { width: innerWidth, height: innerHeight });
+  Object.assign(box.style, { top: `${pos.top}px`, left: `${pos.left}px` });
+  text.focus();
+  return close;
+}
+
 // Studio: the design, its options and the open option's comments in a column beside the canvas, the brief under them.
-// Hide brief folds the column away on a wide screen; under 860px (view.css) the column moves below the canvas and the brief docks at the bottom of the screen.
+// On a wide screen the canvas shows the desktop and the phone side by side (Both), each captioned with its own Play, or the one device
+// the switch picks. Hide brief folds the column away on a wide screen; under 860px (view.css) there is no Both, the column moves below
+// the canvas and the brief docks at the bottom of the screen. Comment (in the More menu under 860px) turns on comment mode.
 function canvas(o, device) {
-  const dev = deviceFor(device, innerWidth), f = FRAMES[dev], pins = pinsFor(o);
-  const art = o.error ? null : artFor(dev, frame(o, `Option ${o.n} at ${f.width}px`), pins);
-  const stage = el('div', { class: 'stage dotted' }, art ?? el('div', { class: 'thumb-error', role: 'alert' }, o.error));
+  const dev = deviceFor(device, innerWidth), f = FRAMES[dev], all = pinsFor(o);
+  const gutter = (dev === 'both' ? all : pinsOn(o, dev)).length ? PIN_GUTTER : 0;
+  let close = null; // the open comment box's
+  const point = (d) => (x, y, at) => { close?.(); close = commentBox(o, d, x, y, at, (i) => { openPin = i; render(); }); };
+  const one = (d) => artFor(d, frame(o, `Option ${o.n} at ${FRAMES[d].width}px`), pinsOn(o, d), point(d));
+  let art = null;
+  if (!o.error && dev === 'both') {
+    const pair = ['desktop', 'phone'].map((d) => [d, one(d)]);
+    art = el('div', { class: 'pair' }, ...pair.map(([d, a]) => el('figure', {},
+      el('figcaption', {}, link(`#/o/${o.n}/${d}`, NAMES[d], 'device-name'), el('span', { class: 'muted' }, `${FRAMES[d].width} × ${FRAMES[d].height}`), link(`#/o/${o.n}/play/${d}`, 'Play', 'button play-one')), a)));
+    art.style.gap = `${pairGap(gutter > 0)}px`;
+    art.rescale = (scale) => pair.forEach(([, a]) => a.rescale(scale));
+  } else if (!o.error) art = one(dev);
+  const done = el('button', { type: 'button', class: 'button' }, 'Done');
+  const hint = el('div', { class: 'comment-hint', role: 'status' }, el('span', {}, 'Tap the spot your comment is about'), done);
+  const stage = el('div', { class: 'stage dotted' }, art ?? el('div', { class: 'thumb-error', role: 'alert' }, o.error), ...(art ? [hint] : []));
   const zoom = el('span', { class: 'muted zoom' });
   const pick = el('select', { 'aria-label': 'Option' }, ...design.options.map((x) => el('option', { value: x.n, selected: x === o ? '' : undefined }, `Option ${x.n} · ${x.label}`)));
   pick.onchange = () => { location.hash = `#/o/${pick.value}/${dev}`; };
-  // Under 860px (view.css) Fullscreen moves into the More menu, so Play is the one primary in the row.
+  // Under 860px (view.css) Fullscreen and Comment move into the More menu, so Play is the one primary in the row.
   const more = el('button', { type: 'button', class: 'button more', popovertarget: 'more-menu', 'aria-label': 'More' }, '⋯');
-  const menu = el('div', { id: 'more-menu', class: 'menu', popover: '' }, link(`#/o/${o.n}/full`, 'Fullscreen', 'button'));
+  const add = el('button', { type: 'button', class: 'button' }, 'Add comment');
+  const menu = el('div', { id: 'more-menu', class: 'menu', popover: '' }, link(`#/o/${o.n}/full`, 'Fullscreen', 'button'), add);
   menu.addEventListener('beforetoggle', (e) => {
     if (e.newState !== 'open') return;
     const b = more.getBoundingClientRect();
     Object.assign(menu.style, { top: `${b.bottom + 6}px`, right: `${innerWidth - b.right}px` });
   });
-  const tools = el('div', { class: 'tools' }, pick, devices(`#/o/${o.n}`, dev), zoom,
-    ...(o.error ? [] : [link(`#/o/${o.n}/full`, 'Fullscreen', 'button full-link'), more, menu, link(`#/o/${o.n}/play/${dev}`, 'Play', 'button primary')]));
+  const tool = el('button', { type: 'button', class: 'button comment-tool', 'aria-pressed': 'false' }, 'Comment');
+  const tools = el('div', { class: 'tools' }, pick, devices(`#/o/${o.n}`, dev, ['both', 'desktop', 'phone']), zoom,
+    ...(o.error ? [] : [tool, link(`#/o/${o.n}/full`, 'Fullscreen', 'button full-link'), more, menu, link(`#/o/${o.n}/play/${dev === 'both' ? 'desktop' : dev}`, 'Play', 'button primary')]));
 
   const options = el('ol', { class: 'list' }, ...design.options.map((x) => el('li', {}, el('a', { href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'page' : undefined },
     el('span', { class: 'num' }, String(x.n)), el('span', { class: 'name' }, x.label), el('span', { class: 'muted' }, x.error ? 'cannot open' : pinsFor(x).length ? plural(pinsFor(x).length, 'comment') : '')))));
-  const notes = pins.length ? el('ol', { class: 'list' }, ...pins.map((p, i) => {
-    const b = el('button', { type: 'button' }, el('span', { class: 'num pin-num' }, String(i + 1)), el('span', { class: 'name' }, p.text));
-    b.onclick = () => document.querySelector(`.pin[data-i="${i}"]`)?.click(); // the pin with this number opens its comment on the canvas
+  const notes = all.length ? el('ol', { class: 'list' }, ...all.map((p, i) => {
+    const b = el('button', { type: 'button' }, el('span', { class: 'num pin-num' }, String(i + 1)), el('span', { class: 'name' }, p.text), ...(p.device ? [el('span', { class: 'muted' }, NAMES[p.device])] : []));
+    // The pin with this number opens its comment on the canvas; a comment on the other device switches to it first.
+    b.onclick = () => { const pin = document.querySelector(`.pin[data-i="${i}"]`); if (pin) pin.click(); else if (p.device) { openPin = i; location.hash = `#/o/${o.n}/${p.device}`; } };
     return el('li', {}, b);
-  })) : el('p', { class: 'muted' }, 'No comments on this option.');
+  })) : el('p', { class: 'muted' }, 'No comments on this option yet.');
   const side = el('aside', { id: 'studio-side', class: 'side', 'aria-label': 'Design' },
     el('section', {}, el('p', { class: 'kicker' }, 'Design'), el('h2', { class: 'title' }, design.name), el('p', { class: 'muted' }, plural(design.options.length, 'option'))),
     el('section', {}, el('h3', { class: 'kicker' }, 'Options'), options),
     el('section', {}, el('h3', { class: 'kicker' }, `Comments on Option ${o.n}`), notes));
 
   const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), stage), ...(o.error ? [] : [brief(o)]));
+  const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };
+  tool.onclick = () => commenting(!studio.classList.contains('commenting'));
+  add.onclick = () => { menu.hidePopover(); commenting(true); };
+  done.onclick = () => commenting(false);
+  stopCommenting = () => {
+    if (document.querySelector('.comment-box')) close?.();
+    else if (studio.classList.contains('commenting')) commenting(false);
+    else return false;
+    return true;
+  };
   const fit = art && (() => {
-    const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight, pins.length ? PIN_GUTTER : 0);
+    // Under 860px (view.css) the hint takes its own row at the top of the canvas, so the device fits in the room below it.
+    const row = hint.offsetHeight && getComputedStyle(hint).position === 'static' ? hint.offsetHeight + 12 : 0;
+    const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight - row, gutter);
     art.rescale(scale);
-    zoom.textContent = `${f.width} × ${f.height} · ${Math.round(scale * 100)}%`;
+    zoom.textContent = `${dev === 'both' ? 'Side by side' : `${f.width} × ${f.height}`} · ${Math.round(scale * 100)}%`;
   });
   // Wide screens only (view.css): the canvas takes the column's room; under 860px the column is below the canvas and the brief is docked.
   const fold = el('button', { type: 'button', class: 'button fold', 'aria-controls': 'studio-side', 'aria-expanded': String(column) }, column ? 'Hide brief' : 'Show brief');
@@ -284,21 +377,23 @@ function playControls() {
 }
 
 function play(o, device) {
-  const dev = deviceFor(device, innerWidth), f = FRAMES[dev];
+  const want = deviceFor(device, innerWidth), dev = want === 'both' ? 'desktop' : want, f = FRAMES[dev]; // Play runs on one device
+  const back = lastCanvas?.split('/')[2] === String(o.n) ? lastCanvas : `#/o/${o.n}/${dev}`;
   const iframe = frame(o, `Option ${o.n} Play at ${f.width}px`, false, '?play');
   playing = { iframe, screens: [], current: null, canBack: false };
   const controls = el('div', { class: 'play-controls' }, ...playControls());
-  const art = artFor(dev, iframe, pinsFor(o));
+  const pins = pinsOn(o, dev), art = artFor(dev, iframe, pins);
   const stage = el('main', { class: 'stage' }, art);
-  return { body: [el('header', { class: 'bar' }, link(`#/o/${o.n}/${dev}`, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), devices(`#/o/${o.n}/play`, dev)),
-    controls, errorBar(o.n), ...pinsNotice(), stage], dev, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight, pinsFor(o).length ? PIN_GUTTER : 0)) };
+  return { body: [el('header', { class: 'bar' }, link(back, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), devices(`#/o/${o.n}/play`, dev)),
+    controls, errorBar(o.n), ...pinsNotice(), stage], dev: want, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight, pins.length ? PIN_GUTTER : 0)) };
 }
 
 function render() {
-  const [, n, mode, device] = location.hash.match(/^#\/o\/(\d+)(?:\/(full|play))?(?:\/(phone|desktop))?$/) ?? [];
+  const [, n, mode, device] = location.hash.match(/^#\/o\/(\d+)(?:\/(full|play))?(?:\/(phone|desktop|both))?$/) ?? [];
   const o = n && option(Number(n));
   const page = pageFor(o, mode);
   playing = null;
+  stopCommenting = null;
   if (page !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   frames = [];
   resize?.disconnect();
@@ -306,8 +401,10 @@ function render() {
   document.title = o ? `Option ${o.n} · ${design.name}` : design.name;
   app.className = `page-${page}`;
   app.replaceChildren(...view.body);
-  // With no device in the route, the page follows the window: a resize past the phone width switches the device.
-  if (view.fit) { resize = new ResizeObserver(() => (view.dev && !device && deviceFor(undefined, innerWidth) !== view.dev ? render() : view.fit())); resize.observe(app); }
+  if (page === 'canvas') lastCanvas = location.hash;
+  if (openPin !== null) { const i = openPin; openPin = null; requestAnimationFrame(() => document.querySelector(`.pin[data-i="${i}"]`)?.click()); }
+  // The page follows the window: a resize past the phone width, or below the width for Both, switches the device.
+  if (view.fit) { resize = new ResizeObserver(() => (view.dev && deviceFor(device, innerWidth) !== view.dev ? render() : view.fit())); resize.observe(app); }
 }
 
 const current = () => Number(location.hash.match(/^#\/o\/(\d+)/)?.[1]);
@@ -329,7 +426,7 @@ window.addEventListener('message', (e) => {
     document.querySelector('.play-controls')?.replaceChildren(...playControls());
   }
 });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') leaveFull(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !stopCommenting?.()) leaveFull(); });
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveFull(); });
 window.addEventListener('hashchange', render);
 document.addEventListener('touchstart', () => {}, { passive: true }); // iOS Safari shows :active (the press states) only on a page that listens for touches
