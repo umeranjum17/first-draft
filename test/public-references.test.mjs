@@ -142,6 +142,7 @@ else {
   const before=requests.length;
   assert.equal(JSON.parse((await run('references','--like',origin+'/','--capture')).stdout).reference_capture.cached,true);
   assert.equal(requests.length,before,'fresh project cache makes no site calls');
+  const brokenBrowser=join(dir,'bin','broken-browser');writeFileSync(brokenBrowser,`#!${process.execPath}\nprocess.stderr.write('synthetic browser startup failure\\n');process.exit(7);`,{mode:0o700});env.FIRST_DRAFT_CHROME=brokenBrowser;await assert.rejects(run('references','--like',origin+'/browser-startup','--capture'),e=>/browser exited before it was ready/.test(e.stdout)&&e.stdout.includes(brokenBrowser)&&/synthetic browser startup failure/.test(e.stdout));delete env.FIRST_DRAFT_CHROME;
   for(const [path,pattern] of [['/blocked',/robots.txt disallows/],['/redirect',/public HTTPS/],['/cross-origin',/redirect left the source site/],['/?secret=x',/query strings/],['/huge',/byte cap/],['/slow',/timeout|aborted/i],['/no-terms',/permission is unclear/],['/login',/Login\/challenge/]]){
     await assert.rejects(run('references','--like',origin+path,'--capture'),e=>{assert.match(e.stdout,pattern);return true;});
   }
