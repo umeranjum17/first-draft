@@ -25,7 +25,7 @@ export const findBrowser = () => {
 };
 
 // One DevTools connection: a command in, an answer or an event out.
-const connect = async (url) => {
+export const connect = async (url) => {
   const ws = new WebSocket(url);
   await new Promise((ok, no) => {
     ws.addEventListener('open', ok, { once: true });
@@ -42,7 +42,7 @@ const connect = async (url) => {
       msg.error ? call.no(new Error(msg.error.message)) : call.ok(msg.result);
       return;
     }
-    for (const fn of listeners.get(msg.method) ?? []) fn(msg.params);
+    for (const fn of listeners.get(msg.method) ?? []) fn(msg.params, msg.sessionId);
     const wait = events.get(msg.method);
     if (wait) { events.delete(msg.method); wait(msg.params); }
   });
@@ -51,7 +51,8 @@ const connect = async (url) => {
     listeners.get(method).add(fn);
     return () => listeners.get(method).delete(fn);
   };
-  const send = (method, params = {}) => new Promise((ok, no) => { const i = ++id; open.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, method, params })); });
+  ws.addEventListener('close', () => { for (const call of open.values()) call.no(new Error('the browser debugger connection closed')); open.clear(); });
+  const send = (method, params = {}, sessionId) => new Promise((ok, no) => { const i = ++id; open.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, method, params, sessionId })); });
   const once = (method, ms = 30000) => new Promise((ok, no) => {
     const t = setTimeout(() => { events.delete(method); no(new Error(`the browser never sent ${method}`)); }, ms);
     events.set(method, (p) => { clearTimeout(t); ok(p); });

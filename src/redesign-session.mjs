@@ -1,7 +1,7 @@
 // Explicit caller-owned signed-link session. Browser streams responses directly; no proxy or body buffering.
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Renderer, findBrowser } from './render-check.mjs';
+import { Renderer, findBrowser, connect } from './render-check.mjs';
 const sensitiveFragment=value=>/(?:^#|[?&#])(?:access[_-]?token|token|auth|secret|session|password|api[_-]?key)[=:]/i.test(value);
 const observe=()=>{
   const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(e).visibility!=='hidden';};
@@ -20,12 +20,13 @@ export async function sessionSource({source,session,out,maxPages=6,maxRequests=6
   const key=value=>{const u=new URL(value);if(sensitiveFragment(u.hash))throw Error('Credential-bearing URL fragments are unsupported; use a signed-link query session');for(const k of [...u.searchParams.keys()])if(keys.has(k)||/token|secret|auth|session|password|api.?key/i.test(k)){const v=u.searchParams.get(k);if(v&&!secrets.includes(v))secrets.push(v);u.searchParams.delete(k);}return u.href;};
   const bin=findBrowser();if(!bin)throw Error('Signed-session discovery requires Chrome/Chromium');
   const renderer=new Renderer(bin,()=>{},false),pages=[],queue=[start.href],ids=new Map(),bodies=new Map(),blocked={writes:0,cross_origin:0},base=resolve(out,'sources');
-  let bytes=0,requests=0,failure=null,largestResource=0;
+  let bytes=0,requests=0,failure=null,largestResource=0,guard=null,closing=false;
+  const targetTypes=new Map(),guardedTargets={},blockedTargets={},initializing=new Set(),detached=new Set(),netKey=(sid,id)=>`${sid}:${id}`;
   const resourceBytes=new Map(),deferredImages=new Map(),cancelled=new Set(),loadingData=new Set();let queuedImages=0;
   const skipped=[],families=new Map();
   const family=value=>{const u=new URL(value);return(u.hash.slice(1)||u.pathname).split('/').filter(Boolean)[0]||'/';};
-  const cancelImages=async()=>{const ids=[...deferredImages.keys()];deferredImages.clear();await Promise.allSettled(ids.map(requestId=>renderer.client.send('Fetch.failRequest',{requestId,errorReason:'Aborted'})));};
-  const releaseImages=async images=>{const known=new Set(images.map(i=>i.url)),visible=new Set(images.filter(i=>i.visible).map(i=>i.url));for(const [requestId,item] of deferredImages)if(!known.has(item.url)||visible.has(item.url)){deferredImages.delete(requestId);try{await renderer.client.send('Fetch.continueRequest',{requestId});}catch(e){if(!cancelled.has(item.networkId))throw e;}}};
+  const cancelImages=async()=>{const items=[...deferredImages.values()];deferredImages.clear();await Promise.allSettled(items.map(i=>guard.send('Fetch.failRequest',{requestId:i.requestId,errorReason:'Aborted'},i.sid)));};
+  const releaseImages=async images=>{const known=new Set(images.map(i=>i.url)),visible=new Set(images.filter(i=>i.visible).map(i=>i.url));for(const [id,item] of deferredImages)if(!known.has(item.url)||visible.has(item.url)){deferredImages.delete(id);try{await guard.send('Fetch.continueRequest',{requestId:item.requestId,interceptResponse:true},item.sid);}catch(e){if(!cancelled.has(item.networkId)&&!detached.has(item.sid))throw e;}}};
   const settled=async()=>{
     let previous='',stable=0,observed;const deadline=Date.now()+60000;
     while(Date.now()<deadline){
@@ -43,22 +44,42 @@ export async function sessionSource({source,session,out,maxPages=6,maxRequests=6
   };
   try{
     mkdirSync(base,{recursive:true});await renderer.start();const c=renderer.client;
-    await c.send('Browser.setDownloadBehavior',{behavior:'deny'});await c.send('Network.enable');await c.send('Network.setBypassServiceWorker',{bypass:true});await c.send('Network.setBlockedURLs',{urls:['ws://*','wss://*']});
-    c.on('Network.requestWillBeSent',e=>{if(['Fetch','XHR'].includes(e.type))loadingData.add(e.requestId);});
-    c.on('Network.loadingFinished',e=>loadingData.delete(e.requestId));
-    c.on('Network.loadingFailed',e=>{loadingData.delete(e.requestId);if(e.canceled||/ABORTED|BLOCKED_BY_CLIENT/.test(e.errorText))cancelled.add(e.requestId);for(const [id,item] of deferredImages)if(item.networkId===e.requestId)deferredImages.delete(id);});
-    c.on('Network.dataReceived',e=>{bytes+=e.dataLength;const size=(resourceBytes.get(e.requestId)||0)+e.dataLength;resourceBytes.set(e.requestId,size);largestResource=Math.max(largestResource,size);if(!failure&&(size>maxResourceBytes||bytes>maxBytes)){failure=Error(size>maxResourceBytes?`Signed-session source exceeds ${maxResourceBytes} byte resource budget`:`Signed-session source exceeds ${maxBytes} byte transfer budget`);c.send('Page.stopLoading').catch(()=>{});}});
-    await c.send('Fetch.enable',{patterns:['Request','Response'].map(requestStage=>({urlPattern:'*',requestStage}))});
-    c.on('Fetch.requestPaused',async e=>{
+    const [port,browserPath]=readFileSync(join(renderer.dir,'DevToolsActivePort'),'utf8').trim().split('\n');
+    guard=await connect(`ws://127.0.0.1:${port}${browserPath}`);
+    await guard.send('Browser.setDownloadBehavior',{behavior:'deny'});
+    const rootTarget=(await guard.send('Target.getTargets')).targetInfos.find(t=>t.type==='page'&&t.url==='about:blank');if(!rootTarget)throw Error('Owned capture browser has no blank root target');
+    const children={autoAttach:true,waitForDebuggerOnStart:true,flatten:true,filter:[{type:'iframe'},{type:'worker'},{exclude:true}]};
+    guard.on('Target.attachedToTarget',e=>{
+      const job=(async()=>{
+        const sid=e.sessionId,type=e.targetInfo.type;
+        if(type==='service_worker'||!['page','iframe','worker','shared_worker'].includes(type)){
+          if(!e.waitingForDebugger)throw Error('A denied browser target was not paused before execution');
+          const result=await guard.send('Target.closeTarget',{targetId:e.targetInfo.targetId});if(!result.success)throw Error('Could not block denied browser target');blockedTargets[type]=(blockedTargets[type]||0)+1;return;
+        }
+        await guard.send('Target.setAutoAttach',children,sid);await guard.send('Network.enable',{},sid);await guard.send('Network.setBypassServiceWorker',{bypass:true},sid);await guard.send('Network.setBlockedURLs',{urls:['ws://*','wss://*']},sid);
+        await guard.send('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]},sid);
+        targetTypes.set(sid,type);guardedTargets[type]=(guardedTargets[type]||0)+1;if(!failure)await guard.send('Runtime.runIfWaitingForDebugger',{},sid);
+      })().catch(e2=>{if(!closing&&!detached.has(e.sessionId))failure??=Error(`Browser-context source guard failed: ${clean(e2.message)}`);});
+      initializing.add(job);job.then(()=>initializing.delete(job));
+    });
+    guard.on('Target.detachedFromTarget',e=>{detached.add(e.sessionId);for(const id of loadingData)if(id.startsWith(e.sessionId+':'))loadingData.delete(id);for(const [id,item] of deferredImages)if(item.sid===e.sessionId)deferredImages.delete(id);});
+    guard.on('Network.requestWillBeSent',(e,sid)=>{if(['Fetch','XHR'].includes(e.type))loadingData.add(netKey(sid,e.requestId));});
+    guard.on('Network.loadingFinished',(e,sid)=>loadingData.delete(netKey(sid,e.requestId)));
+    guard.on('Network.loadingFailed',(e,sid)=>{const id=netKey(sid,e.requestId);loadingData.delete(id);if(e.canceled||/ABORTED|BLOCKED_BY_CLIENT/.test(e.errorText))cancelled.add(id);for(const [key,item] of deferredImages)if(item.networkId===id)deferredImages.delete(key);});
+    guard.on('Network.dataReceived',(e,sid)=>{bytes+=e.dataLength;const id=netKey(sid,e.requestId),size=(resourceBytes.get(id)||0)+e.dataLength;resourceBytes.set(id,size);largestResource=Math.max(largestResource,size);if(!failure&&(size>maxResourceBytes||bytes>maxBytes)){failure=Error(size>maxResourceBytes?`Signed-session source exceeds ${maxResourceBytes} byte resource budget`:`Signed-session source exceeds ${maxBytes} byte transfer budget`);c.send('Page.stopLoading').catch(()=>{});}});
+    guard.on('Fetch.requestPaused',async(e,sid)=>{
       try{
         const u=new URL(e.request.url);
-        if(e.request.method!=='GET'||u.origin!==start.origin){e.request.method!=='GET'?blocked.writes++:blocked.cross_origin++;await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'});return;}
+        if(e.request.method!=='GET'||u.origin!==start.origin){e.request.method!=='GET'?blocked.writes++:blocked.cross_origin++;await guard.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'},sid);return;}
         if(failure)throw failure;
-        if(e.responseStatusCode!==undefined||e.responseErrorReason){if(e.resourceType==='Document'&&e.responseStatusCode>=400)throw Error(`Source document returned HTTP ${e.responseStatusCode}`);const length=Number(e.responseHeaders?.find(h=>h.name.toLowerCase()==='content-length')?.value||0);if(length>maxResourceBytes)throw Error(`Signed-session source exceeds ${maxResourceBytes} byte resource budget (announced ${length})`);if(e.resourceType==='Document')await c.send('Fetch.continueResponse',{requestId:e.requestId,responseCode:e.responseStatusCode,responsePhrase:e.responseStatusText||'',responseHeaders:[...(e.responseHeaders||[]),{name:'Content-Security-Policy',value:"worker-src 'none'; frame-src 'none'; form-action 'none'"}]});else await c.send('Fetch.continueRequest',{requestId:e.requestId});return;}
-        if(++requests>maxRequests||failure)throw Error(`Signed-session budget exceeded: ${requests}/${maxRequests} requests, ${bytes}/${maxBytes} bytes`);
-        key(u.href);if(e.resourceType==='Image'){queuedImages++;deferredImages.set(e.requestId,{url:u.href,networkId:e.networkId});return;}await c.send('Fetch.continueRequest',{requestId:e.requestId});
-      }catch(e2){failure??=Error(`Read-only source request failed: ${clean(e2.message)} (${requests} requests, ${bytes} bytes)`);c.send('Page.stopLoading').catch(()=>{});try{await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'});}catch{}}
+        if(e.responseStatusCode!==undefined||e.responseErrorReason){if(e.resourceType==='Document'&&e.responseStatusCode>=400)throw Error(`Source document returned HTTP ${e.responseStatusCode}`);const length=Number(e.responseHeaders?.find(h=>h.name.toLowerCase()==='content-length')?.value||0);if(length>maxResourceBytes)throw Error(`Signed-session source exceeds ${maxResourceBytes} byte resource budget (announced ${length})`);await guard.send('Fetch.continueRequest',{requestId:e.requestId},sid);return;}
+        if(++requests>maxRequests)throw Error(`Signed-session budget exceeded: ${requests}/${maxRequests} requests, ${bytes}/${maxBytes} bytes`);
+        key(u.href);if(e.resourceType==='Image'){queuedImages++;deferredImages.set(netKey(sid,e.requestId),{requestId:e.requestId,sid,url:u.href,networkId:netKey(sid,e.networkId)});return;}await guard.send('Fetch.continueRequest',{requestId:e.requestId,interceptResponse:true},sid);
+      }catch(e2){if(detached.has(sid)||closing)return;failure??=Error(`Read-only source request failed: ${clean(e2.message)} (${requests} requests, ${bytes} bytes)`);c.send('Page.stopLoading').catch(()=>{});try{await guard.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'},sid);}catch{}}
     });
+    const attached=guard.once('Target.attachedToTarget',10000);
+    await guard.send('Target.setAutoAttach',{autoAttach:true,waitForDebuggerOnStart:true,flatten:true,filter:[{type:'browser',exclude:true},{type:'tab',exclude:true},{type:'iframe',exclude:true},{type:'worker',exclude:true},{}]});
+    if((await attached).targetInfo.targetId!==rootTarget.targetId)throw Error('Capture browser initial target changed');await Promise.all([...initializing]);if(failure)throw failure;
     let currentBase='';
     while(queue.length&&pages.length<maxPages){
       queue.sort((a,b)=>(families.get(family(a))||0)-(families.get(family(b))||0)||((new URL(a).hash||new URL(a).pathname).split('/').length-(new URL(b).hash||new URL(b).pathname).split('/').length));
@@ -77,11 +98,12 @@ export async function sessionSource({source,session,out,maxPages=6,maxRequests=6
       }
       const links=[];
       for(const l of data.links.sort((a,b)=>Number(b.nav)-Number(a.nav))){const u=new URL(l.href);if(u.origin!==start.origin||!['http:','https:'].includes(u.protocol))continue;const target=key(u.href);links.push({label:clean(l.label),url:target});if(!ids.has(target)&&!queue.includes(target))queue.push(target);}
-      pages.push({id,url:canonical,title:clean(data.heading||data.title),text:clean(data.text.slice(0,12000)),text_truncated:data.text.length>12000,links_truncated:data.linkCount>300,visible_frames_omitted:data.frames,links,screenshots});
+      pages.push({id,url:canonical,title:clean(data.heading||data.title),text:clean(data.text.slice(0,12000)),text_truncated:data.text.length>12000,links_truncated:data.linkCount>300,frame_text_unread:data.frames,links,screenshots});
     }
+    await Promise.all([...initializing]);if(failure)throw failure;
     if(!pages.length)throw Error('No authorized HTML screens found; no design generated');
     for(const p of pages)p.links=p.links.map(l=>({...l,target:ids.get(l.url)??null}));
-    const inventory={version:1,mode:'explicit signed-link session, direct read-only browser',pages,skipped,cap:maxPages,pending:queue.filter(u=>!ids.has(u)),blocked_requests:blocked,bytes,requests,limits:{requests:maxRequests,bytes:maxBytes,resource_bytes:maxResourceBytes},largest_resource_bytes:largestResource,deferred_image_requests:queuedImages,offscreen_dom_images_deferred:true,limitations:['Caller explicitly authorizes this exact origin with a local signed-link JSON; interactive login, cross-origin requests, non-GET requests, workers, frames, form submissions and downloads are blocked. Visible frame omissions are reported per screen.','Only anchor-linked states are discovered; equivalent visible states are deduplicated. Page, link, text, request and transfer caps are reported, not a claim of complete hidden-state coverage.','Session secrets are removed from URLs and text; source screenshots are whole light/dark viewports, not full scrolling pages. Offscreen DOM image requests are deferred until visible and cancelled when leaving the state; this is not a full scrolling-page asset capture.']};
+    const inventory={version:1,mode:'explicit signed-link session, direct read-only browser',pages,skipped,cap:maxPages,pending:queue.filter(u=>!ids.has(u)),blocked_requests:blocked,bytes,requests,limits:{requests:maxRequests,bytes:maxBytes,resource_bytes:maxResourceBytes},largest_resource_bytes:largestResource,deferred_image_requests:queuedImages,guarded_targets:guardedTargets,blocked_targets:blockedTargets,offscreen_dom_images_deferred:true,limitations:['Caller explicitly authorizes this exact origin with a local signed-link JSON; interactive login, cross-origin requests, non-GET requests and downloads are blocked across browser targets. Service workers are closed before execution. Embedded frame text is not extracted and is reported per screen.','Only anchor-linked states are discovered; equivalent visible states are deduplicated. Page, link, text, request and transfer caps are reported, not a claim of complete hidden-state coverage.','Session secrets are removed from URLs and text; source screenshots are whole light/dark viewports, not full scrolling pages. Offscreen DOM image requests are deferred until visible and cancelled when leaving the state; this is not a full scrolling-page asset capture.']};
     writeFileSync(join(base,'sources.json'),clean(JSON.stringify(inventory,null,2)));return inventory;
-  }catch(e){const reason=failure??e;try{writeFileSync(join(base,'failure.json'),JSON.stringify({message:clean(reason.message),requests,bytes,limits:{requests:maxRequests,bytes:maxBytes,resource_bytes:maxResourceBytes},largest_resource_bytes:largestResource,blocked,pages:pages.map(p=>({id:p.id,title:p.title}))},null,2));}catch{}throw Error(clean(reason.message));}finally{renderer.close();}
+  }catch(e){const reason=failure??e;try{writeFileSync(join(base,'failure.json'),JSON.stringify({message:clean(reason.message),requests,bytes,limits:{requests:maxRequests,bytes:maxBytes,resource_bytes:maxResourceBytes},largest_resource_bytes:largestResource,blocked,pages:pages.map(p=>({id:p.id,title:p.title}))},null,2));}catch{}throw Error(clean(reason.message));}finally{closing=true;const proc=renderer.proc,exited=proc&&proc.exitCode===null&&!proc.signalCode?new Promise(r=>proc.once('exit',r)):Promise.resolve();renderer.close();const timer=proc?setTimeout(()=>proc.kill('SIGKILL'),3000):null;timer?.unref();await exited;if(timer)clearTimeout(timer);guard?.close();}
 }
