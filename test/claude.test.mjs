@@ -26,6 +26,9 @@ if (args.includes('auth')) {
   if (!args.includes('--safe-mode') || !args.includes('--strict-mcp-config')) throw Error('unsafe execution');
   if (args[args.indexOf('--model') + 1] !== 'claude-opus-5-5') throw Error('model changed');
   const envelope = JSON.parse(input), { messages, tools } = JSON.parse(envelope.message.content.at(-1).text);
+  const images = envelope.message.content.filter(c => c.type === 'image');
+  if (images.length !== 3 || images.some(c => c.source.media_type !== 'image/png' || !Buffer.from(c.source.data, 'base64').subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))) throw Error('reference images were not sent natively');
+  if (!args[args.indexOf('--system-prompt') + 1].includes('visual guidance only')) throw Error('reference policy missing');
   if (!tools.length) throw Error('missing engine tools');
   const results = messages.filter(m => m.role === 'toolResult');
   const call = (name, a) => ({ name, arguments: JSON.stringify(a) });
@@ -56,24 +59,47 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   assert.match(doctor.checks.at(-1).detail, /availability not probed/);
   const calls = () => readFileSync(join(dir, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(calls().every(args => args.includes('auth')), 'doctor makes no generation call');
+  const refs = [];
+  for (const ext of ['png', 'jpg', 'webp']) {
+    const file = join(dir, `reference.${ext}`);
+    await promisify(execFile)('convert', ['-size', '3x2', 'xc:purple', file]);
+    refs.push('--ref', file);
+  }
   const out = join(dir, 'notes.html');
-  const made = JSON.parse((await run('make', 'Notes for Umer', '--out', out)).stdout).made;
+  const made = JSON.parse((await run('make', 'Notes for Umer', '--out', out, ...refs)).stdout).made;
   assert.equal(made.model, 'claude-opus-5-5');
   assert.equal(made.files[0].turns, 5);
   assert.equal(made.tokens_in, 35);
   assert.equal(made.tokens_out, 40);
   assert.match(readFileSync(out, 'utf8'), /Content-Security-Policy/);
-  await run('refine', out, 'warmer palette', '--out', join(dir, 'warm.html'));
+  assert.doesNotMatch(readFileSync(out, 'utf8'), /data:image/);
+  await run('refine', out, 'warmer palette', '--out', join(dir, 'warm.html'), ...refs);
   assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /A warm note/);
   assert.doesNotMatch(readFileSync(out, 'utf8'), /A warm note/);
   const generated = () => calls().filter(args => args.includes('-p')).length;
   assert.equal(generated(), 10);
+  writeFileSync(join(dir, 'bad.png'), Buffer.from('89504e470d0a1a0a', 'hex'));
+  writeFileSync(join(dir, 'not-image.jpg'), 'not an image');
+  writeFileSync(join(dir, 'big.png'), Buffer.alloc(5_000_001));
+  await promisify(execFile)('convert', ['-size', '4097x1', 'xc:purple', join(dir, 'wide.png')]);
+  const padded = Buffer.alloc(4_000_000); readFileSync(refs[1]).copy(padded);
+  writeFileSync(join(dir, 'padded.png'), padded);
+  await assert.rejects(run('make', 'Notes', '--out', out, ...Array(3).fill(['--ref', join(dir, 'padded.png')]).flat()), e => /10 MB total/.test(e.stdout));
+  for (const file of ['bad.png', 'not-image.jpg', 'big.png', 'wide.png', 'missing.png', 'remote.svg']) {
+    await assert.rejects(run('make', 'Notes', '--out', out, '--ref', join(dir, file)), e => /REFERENCE_FAILED/.test(e.stdout));
+    assert.equal(generated(), 10, 'invalid references never call the model');
+  }
+  await assert.rejects(run('refine', out, 'warmer', '--out', join(dir, 'bad.html'), ...Array(7).fill(['--ref', refs[1]]).flat()), e => /at most 6/.test(e.stdout));
   for (const auth of ['out', 'api_key', 'bedrock', 'vertex', 'other']) {
     env.FD_AUTH = auth;
     await assert.rejects(run('doctor'), e => /"ready":false/.test(e.stdout));
     await assert.rejects(run('make', 'Notes', '--out', join(dir, 'refused.html')));
     assert.equal(generated(), 10, `${auth} never spends`);
   }
+  await run('init', '--agent', 'byokit:minimax:key', '--model', 'MiniMax-M3.1-Flash-Preview');
+  await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /does not support reference images; none were sent/.test(e.stdout));
+  assert.equal(generated(), 10);
+  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
   delete env.FD_AUTH;
   const config = join(dir, 'config.json'), original = readFileSync(config, 'utf8');
   for (const [agent, model] of [
@@ -92,5 +118,6 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   }
   writeFileSync(config, original);
   env.PATH = dir + '/missing';
+  await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /needs ImageMagick/.test(e.stdout));
   await assert.rejects(run('doctor'), e => /claude is not installed/.test(e.stdout));
 });

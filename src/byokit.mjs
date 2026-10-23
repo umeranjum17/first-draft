@@ -80,10 +80,17 @@ async function modelFor(provider, id) {
   return { ...template, id, name: id };
 }
 
+export async function imageSupport(route, model) {
+  if (CLI_ROUTES.includes(route)) return true; // Both published CLI adapters accept native image blocks.
+  const key = await planKey(route);
+  return key ? (await modelFor(key.upstream.id, model)).input?.includes('image') === true : false;
+}
+
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
-export async function respond({ route, model, context, maxTokens, signal, timeoutMs }) {
+export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [] }) {
   const problem = await check(route, model);
   if (problem) throw new Error(problem);
+  if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
   if (CLI_ROUTES.includes(route)) {
     const { bin, account } = await launch(route);
     const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
@@ -91,7 +98,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
       text: { type: 'string' }, calls: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
     const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({
-      system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), schema, signal, maxOutputTokens: maxTokens });
+      system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
     if (!answer.data) throw new Error('BYOKit returned no structured engine response');
     const { text, calls } = answer.data;
     return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
@@ -107,6 +114,14 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
   const account = `${key.id}.${MEMBER}`, index = memoryStore();
   const accounts = new Accounts({ store: () => index, keyStore: () => overrideStore({ [`accounts.${account}`]: secret }) });
   try {
+    if (images.length) {
+      const first = context.messages.findIndex((m) => m.role === 'user');
+      if (first < 0) throw new Error('Reference images require a user message');
+      context = { ...context, messages: context.messages.map((m, i) => i !== first ? m : { ...m, content: [
+        ...(typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content),
+        ...images.map((image) => ({ type: 'image', mimeType: image.mime, data: image.dataUrl.slice(image.dataUrl.indexOf(',') + 1) })),
+      ] }) };
+    }
     return await accounts.respondKey(MEMBER, { account, model: { ...found, ...(base && { baseUrl: base }) },
       context,
       options: { signal, ...(maxTokens && { maxTokens: Math.min(found.maxTokens ?? Infinity, maxTokens * 4) }) } }); // thinking models spend the cap before the page; the model's own limit bounds it
@@ -129,11 +144,11 @@ export async function doctor(route, model) {
       const { accounts } = await installed(route);
       const row = await accounts.status(`installed-${route}`);
       if (row.state === 'ready' && route === 'claude' && row.method !== 'subscription') return { label, status: 'fail', detail: 'Claude must be signed in with a Claude subscription, not an API key or another billing route' };
-      return { label, status: row.state === 'ready' ? 'ok' : 'fail', detail: row.state === 'ready' ? `installed CLI; model ${model} (availability not probed)${route === 'claude' ? '; adapter supports image input' : ''}` : row.cause || row.state };
+      return { label, status: row.state === 'ready' ? 'ok' : 'fail', detail: row.state === 'ready' ? `installed CLI; model ${model} (availability not probed); adapter supports image input` : row.cause || row.state };
     } catch (e) { return { label, status: 'fail', detail: e.message }; }
   }
   const key = await planKey(route);
   try { await modelFor(key.upstream.id, model); } catch (e) { return { status: 'fail', label, detail: e.message }; }
   const set = Boolean(process.env[key.upstream.method]);
-  return { status: set ? 'ok' : 'fail', label, detail: `${key.upstream.method} is ${set ? '' : 'not '}set`, ...(!set && { fix: await signIn(key) }) };
+  return { status: set ? 'ok' : 'fail', label, detail: `${key.upstream.method} is ${set ? '' : 'not '}set; reference images ${await imageSupport(route, model) ? 'supported' : 'not supported by this model'}`, ...(!set && { fix: await signIn(key) }) };
 }
