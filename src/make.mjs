@@ -129,6 +129,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, a
       if (e.type === 'tool_execution_end') tools[e.toolName] = (tools[e.toolName] ?? 0) + 1;
       if (e.type !== 'tool_execution_end' || e.toolName !== 'done' || e.isError) return;
       const { status, path, errors } = e.result.details ?? {};
+      if (status !== 'ok' && status !== 'has_errors') return; // A protocol-blocked done has no verifier path and verifies nothing.
       lastDone = key(path);
       if (status === 'ok' && key(path) !== 'DESIGN.md') verified = { path: key(path), source: files.get(key(path)) };
       lastErrors = status === 'ok' ? '' : (errors ?? []).map((x) => x.message).join('; ');
