@@ -23,7 +23,10 @@ try {
       browser('emulate','--viewport',`${width}x${height}x1`,'--color-scheme',theme);browser('resize',String(width),String(height));
       browser('open',`${opened.frames}/o/1?play&screen=${encodeURIComponent(page.id)}`);
       const metric=browser('eval',`async()=>{await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const e=document.getElementById(${JSON.stringify(page.id)});if(!e||!e.getBoundingClientRect().height||innerWidth!==${width}||document.documentElement.scrollWidth>innerWidth)throw Error('Screen not ready');return {width:innerWidth,screen:e.id,active:document.documentElement.getAttribute('data-oc-active-screen'),text:e.innerText.slice(0,400)};}`);
-      const file=`${key}.png`;browser('screenshot',join(out,file));const png=readFileSync(join(out,file));assert.equal(png.readUInt32BE(16),width);assert.equal(png.readUInt32BE(20),height);shots.push({file,metric});
+      const file=`${key}.png`;browser('screenshot',join(out,file));const png=readFileSync(join(out,file));assert.equal(png.readUInt32BE(16),width);assert.equal(png.readUInt32BE(20),height);
+      const edge=page.links.find(l=>l.target&&l.target!==page.id);
+      const navigation=edge?browser('eval',`async()=>{const target=${JSON.stringify(edge?.target)},a=[...document.querySelectorAll('a[href]')].find(a=>a.getAttribute('href')==='#'+target&&a.getBoundingClientRect().height);if(!a)throw Error('No visible source edge');a.click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));if(document.documentElement.getAttribute('data-oc-active-screen')!==target)throw Error('Navigation did not switch screen');return {clicked:true,target};}`):'No mapped outgoing edge';
+      shots.push({file,metric,navigation});
     } finally { browser('stop'); }
   }
   writeFileSync(join(out,'steps.json'),JSON.stringify({start:'Retained real redesign output; no generation repeated',steps:['Launch real first-draft viewer on owned loopback ports','Open every screen independently at 390/1280, light/dark, using chrome-devtools-axi','Keep whole generated viewport captures; compare with sources/*.png beside the original output'],shots,limitations:inventory.limitations},null,2));
