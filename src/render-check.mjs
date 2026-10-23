@@ -286,7 +286,8 @@ export class Renderer {
     }
     if (redesignPages) {
       const findings = await this.eval(this.client, `(${((pages) => {
-        const errors=[];
+        const errors=[],screens=[...document.querySelectorAll('[data-oc-screen]')];
+        if(screens.length!==pages.length||new Set(screens.map(e=>e.id)).size!==pages.length)errors.push('Expected exactly '+pages.length+' distinct screen section(s)');
         for(const p of pages) {
           const e=document.getElementById(p.id);
           if(!e?.hasAttribute('data-oc-screen')) { errors.push('Missing required screen '+p.id); continue; }
@@ -294,6 +295,7 @@ export class Renderer {
           for(const l of p.links) if(l.target && l.target!==p.id && !links.includes('#'+l.target)) errors.push('Missing navigation '+p.id+' -> '+l.target);
         }
         if(/\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/u.test(document.body.textContent)) errors.push('Remove emoji filler; use SVG icons or plain labels');
+        if(/\((?:title|rest of text) cut off in source\)/i.test(document.body.textContent))errors.push('Remove diagnostic provenance notes from product UI; keep readable source fragments without inventing completion');
         return [...new Set(errors)];
       }).toString()})(${JSON.stringify(redesignPages)})`);
       errors.push(...findings.map(message=>({source:'redesign',message})));

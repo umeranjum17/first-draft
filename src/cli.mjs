@@ -14,6 +14,7 @@ import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 import { STYLES } from './styles.mjs';
 import { redesignSource } from './redesign.mjs';
+import { makeRedesign } from './redesign-writer.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -220,7 +221,7 @@ if (command === 'references') {
     let made;
     try {
       const assets = assetSession ? await assetSession.generate(numbered) : [];
-      made = await make({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, references:refs.images, referenceBrief:refs.metadata?.brief, direction:values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
+      made = await (redesign ? makeRedesign : make)({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction:values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
     try {

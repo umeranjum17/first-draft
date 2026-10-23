@@ -36,6 +36,14 @@ const LANDING_BRIEF = 'Landing page brief (the prompt asks for a landing page): 
 // Every screen's phone and desktop layouts, in both themes, are checked before acceptance.
 const outputRules = (dark) => `Output rules: deliver every screen in ONE file with a phone layout at 390x844 and a desktop layout at 1280x800. The whole file AND each data-oc-screen section in isolation are rendered at both sizes in light and dark before acceptance. Keep screen sections as full-width siblings, never use different screens as desktop grid columns: put responsive columns INSIDE each screen. Every screen must remain visible and usable when all other screens are hidden. Use CSS media queries for real desktop/phone layouts, not a fixed-width phone canvas stretched into desktop space. (1) Both sizes and themes must fit without sideways scroll: wrap every pre and table in a container with overflow-x:auto, write grid columns as minmax(0,1fr) instead of 1fr, give every grid and flex child min-width:0, and let long text wrap. ${dark ? '(2) The style you were given is dark-first, so the page is dark by default, in light and in dark: a near-black page background with light text on :root, no light palette, and color-scheme: dark; never a light page background.' : '(2) It must have a real light theme and a real dark theme, both chosen by prefers-color-scheme: :root holds the light palette (a light page background, dark text) and a @media (prefers-color-scheme: dark) block overrides every colour custom property with a dark palette (a dark background, light text); also set color-scheme: light dark. Never write one dark palette for both: in light the page background is light.'}`;
 
+export function staticExport(html) {
+  const errors=[];
+  if ((html.match(TAG) ?? []).some((tag) => /^<script\b|\son(?!ce\b)[a-z]+\s*=|(?:href|src|action|formaction|xlink:href|poster)\s*=\s*["']?\s*javascript:|url\(\s*["']?\s*javascript:/i.test(tag))) errors.push({source:'export',message:'the page contains script; only script-free HTML is supported'});
+  if (!/<head(?:\s[^>]*)?>|<html[^>]*>|<!doctype[^>]*>/i.test(html)) errors.push({source:'export',message:'the page is not a complete HTML document'});
+  const page=/<head(?:\s[^>]*)?>/i.test(html)?html.replace(/<head(?:\s[^>]*)?>/i,h=>`${h}\n${POLICY}`):/<html[^>]*>/i.test(html)?html.replace(/<html[^>]*>/i,h=>`${h}<head>${POLICY}</head>`):html.replace(/<!doctype[^>]*>/i,h=>`${h}<head>${POLICY}</head>`);
+  return {html:page,errors,remote:[...new Set([...page.matchAll(REMOTE)].map(m=>m[1]??m[2]??m[3]??m[4]??'').filter(v=>!v.trim().startsWith('data:')).flatMap(v=>[...v.matchAll(REMOTE_URL)].map(u=>u[0])))]};
+}
+
 export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets = [], references = [], referenceBrief, redesignPages }) {
   if (screens?.length) prompt += `\nRequired screens/pages: ${screens.join(', ')}. Include every named screen, with distinct ids and links between them.`;
   const { generateViaAgent, composeSystemPrompt, collectResourceManifest, loadDesignSkills, loadFrameTemplates, makeDoneTool, buildStandaloneDocument } = await engine();
@@ -71,10 +79,8 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
     if (!pages.has(source)) pages.set(source, (async () => {
       let html = source, errors = [];
       if (render.drawing) ({ html, errors } = await render.snapshot(buildStandaloneDocument(source, { path })));
-      if ((html.match(TAG) ?? []).some((tag) => /^<script\b|\son(?!ce\b)[a-z]+\s*=|(?:href|src|action|formaction|xlink:href|poster)\s*=\s*["']?\s*javascript:|url\(\s*["']?\s*javascript:/i.test(tag))) errors.push({ source: 'export', message: 'the page contains script; only script-free HTML is supported' });
-      if (!/<head(?:\s[^>]*)?>|<html[^>]*>|<!doctype[^>]*>/i.test(html)) errors.push({ source: 'export', message: 'the page is not a complete HTML document' });
-      const plain = /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${POLICY}`) : /<html[^>]*>/i.test(html) ? html.replace(/<html[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`) : html.replace(/<!doctype[^>]*>/i, (tag) => `${tag}<head>${POLICY}</head>`);
-      const page = embedMedia(await embedFonts(plain, warn), media);
+      const exported=staticExport(html);errors.push(...exported.errors);
+      const page = embedMedia(await embedFonts(exported.html, warn), media);
       if (!errors.length) errors.push(...await render.verify(page, { signal }));
       if (redesignPages && render.status === 'skipped') throw new Error('Redesign checks require a working browser; render verification was skipped');
       if (redesignPages && !errors.length) {
