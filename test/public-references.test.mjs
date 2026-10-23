@@ -58,11 +58,11 @@ else {
   calls=[call('define_redesign_plan',{title:'Umer projects',css,notes:'Use the same metric and value classes everywhere'})];
  }
  else if(tools.some(t=>t.name==='write_redesign_screen')){
-  const q=JSON.parse(messages.at(-1).content),first=q.attempt===1;
+  const q=JSON.parse(messages.at(-1).content),first=q.attempt===1;if(q.screen.id==='screen-2'&&!q.component_example?.html.includes('id="screen-1"'))throw Error('accepted component example missing');if(!args[args.indexOf('--system-prompt')+1].includes('all-state desktop board'))throw Error('responsive source preservation rule missing');
   let page=process.env.FD_REVIEW_ALWAYS_FAIL?${JSON.stringify(BAD_SEMANTICS)}:first&&q.screen.id==='screen-1'?${JSON.stringify(BAD_STRUCTURE)}:first?${JSON.stringify(BAD_SEMANTICS)}:${JSON.stringify(REDESIGN_PAGE)};
   let html=page.match(new RegExp('<section data-oc-screen id="'+q.screen.id+'">[\\\\s\\\\S]*?<\\\\/section>'))[0];
   if(!q.screen.links.some(l=>l.target&&l.target!==q.screen.id))html=html.replace(/<a href="#[^"]+">([\\s\\S]*?)<\\/a>/g,'$1');
-  if(!process.env.FD_REVIEW_ALWAYS_FAIL&&!process.env.FD_EXTRA_SCREEN&&q.screen.id==='screen-1'&&q.attempt>1){if(!q.feedback.some(f=>f.includes('clipped text'))||!q.feedback.some(f=>f.includes('Redesign semantic metrics')))throw Error('layout and semantic feedback were not aggregated');if(q.attempt===3&&!q.feedback.some(f=>f.includes('Remove diagnostic provenance notes')))throw Error('third attempt lost second-attempt feedback');if(q.attempt===2)html=html.replace('</section>','<p>(title cut off in source)</p></section>');}
+  if(!q.previous_attempts&&!process.env.FD_REVIEW_ALWAYS_FAIL&&!process.env.FD_EXTRA_SCREEN&&q.screen.id==='screen-1'&&q.attempt>1){if(!q.feedback.some(f=>f.includes('clipped text'))||!q.feedback.some(f=>f.includes('Redesign semantic metrics')))throw Error('layout and semantic feedback were not aggregated');if(q.attempt===3&&!q.feedback.some(f=>f.includes('Remove diagnostic provenance notes')))throw Error('third attempt lost second-attempt feedback');if(q.attempt===2)html=html.replace('</section>','<p>(title cut off in source)</p></section>');}
   if(process.env.FD_EXTRA_SCREEN)html+='<section data-oc-screen id="extra">Extra screen</section>';
   calls=[call('write_redesign_screen',{id:q.screen.id,html})];
  }
@@ -137,6 +137,7 @@ else {
   const beforeReviews=reviewCount();env.FD_REVIEW_ALWAYS_FAIL='1';
   await assert.rejects(run('redesign',sourceDir,'Clearer','--no-references','--out',refused),e=>/failed after 3 attempts/.test(e.stdout));
   assert.equal(reviewCount()-beforeReviews,3,'a persistently failing screen stops at the three-attempt contract');assert.equal(existsSync(join(refused,'writer-option-1/screen-1-attempt-4.json')),false);assert.equal(existsSync(join(refused,'option-1.html')),false);delete env.FD_REVIEW_ALWAYS_FAIL;
+  const budgetOut=join(project,'remaining-budget'),budgetBefore=reviewCount();env.FD_REVIEW_ALWAYS_FAIL='1';await assert.rejects(run('redesign',sourceDir,'Repair prior visual failure','--no-references','--out',budgetOut,'--used-screen-attempts','1','--used-plan-attempts','1'),e=>/failed after 3 attempts/.test(e.stdout));delete env.FD_REVIEW_ALWAYS_FAIL;assert.equal(reviewCount()-budgetBefore,2,'only two screen responses remain');for(const f of ['shared-plan-attempt-2.json','screen-1-attempt-2.json','screen-1-attempt-3.json'])assert.ok(existsSync(join(budgetOut,'writer-option-1',f)));for(const f of ['shared-plan-attempt-1.json','shared-plan-attempt-3.json','screen-1-attempt-1.json','screen-1-attempt-4.json'])assert.equal(existsSync(join(budgetOut,'writer-option-1',f)),false);for(const [flag,n]of [['--used-screen-attempts','3'],['--used-plan-attempts','2']])await assert.rejects(run('redesign',sourceDir,'Repair','--out',budgetOut,flag,n),e=>/budgets cannot be increased/.test(e.stdout));
   assert.ok(!requests.some(r=>r.url==='/never.js'));
   const before=requests.length;
   assert.equal(JSON.parse((await run('references','--like',origin+'/','--capture')).stdout).reference_capture.cached,true);
