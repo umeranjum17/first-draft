@@ -9,30 +9,55 @@ Required packages: `@open-codesign/core`, `@open-codesign/providers`, `@open-cod
 `vendor/open-codesign` is a `git subtree` import of a filtered tree, retaining the
 original `packages/core`, `packages/providers`, `packages/shared`, `LICENSE` and
 `NOTICE` paths. Filter commit: `c838ca9`. Import commit: `56d3a2c`.
-`packages/runtime` was added later by a plain copy from the same fixed commit,
-every file except its `vendor/` folder (the React, ReactDOM and Babel UMD builds).
-All imported file blobs match the fixed source (`git hash-object` against the
-commit's tree); no `apps`, runtime/vendor, or other packages are included. The
+`packages/runtime` was added later by a plain copy from the same fixed commit, and
+its `vendor/` folder (the React, ReactDOM and Babel builds and the device-frame JSX)
+after that, also by a plain copy, as was `apps/desktop/resources/templates` (the
+templates tree: method skills, design starters, scaffolds, frames, brand
+references). All imported file blobs match the fixed source (`git hash-object`
+against the commit's tree); no other `apps` file or package is included. The
 vendored tree is unmodified: every import path and file matches the
 fixed source, and no upstream edit follows. The model boundary lives in our glue,
 which registers itself as the engine's model transport before the engine runs.
 
-`make` runs core's `generateViaAgent`, prompt composer, editor and static
-`done` tools. The composed prompt is passed through unchanged, and the host's
-export contract closes it by naming the only two tools it registers and ruling
-out every other tool call. Core uses providers'
-model/reasoning/error helpers and shared's
-schemas, artifact and design validation. `scripts/build.mjs` bundles those three
-packages and the runtime's preview builder with their upstream prompt sections,
-and the view page; the package includes the bundles, LICENSE and NOTICE. `src/make.mjs` registers BYOKit as the transport for the
-engine's model api, so BYOKit, not the upstream provider transport, answers every
-engine turn. No BYOKit fork or copied credential is used.
+`make` runs core's `generateViaAgent` the way upstream's desktop host does
+(`apps/desktop/src/main/ipc/generate.ts`): the engine's own prompt for the mode,
+the resource manifest from the templates tree, and every default tool (`set_title`,
+`set_todos`, `skill`, `scaffold`, the editor, `done` with its DESIGN.md
+requirement, `tweaks` and the UI-kit tools). The workspace is in memory and is seeded
+with `frames/*.jsx` and `skills/*.jsx` (the design starters) as upstream's
+`runtime-fs.ts` seeds it; `scaffold` copies into a temporary folder and the file
+joins the workspace through `onScaffolded`. One method skill is first-draft's own,
+`templates/skills/interaction-motion.md` (press, hover, focus and entrance motion in
+CSS, reduced motion and worst-case data), written from the ideas in Emil Kowalski's
+MIT skills (https://github.com/emilkowalski/skills) with no text copied; the build
+adds it to the engine's `skills/`, so the same `skill` tool loads it. The host's export contract, added after
+the engine's prompt, keeps only what the board needs (see below). Core uses
+providers' model/reasoning/error helpers and shared's schemas, artifact and design
+validation. `scripts/build.mjs` bundles those packages and the runtime (its `?raw`
+imports load the vendored files' text), copies the templates tree to
+`dist/templates` and the upstream prompt sections, and builds the view page; the
+package includes the bundles, LICENSE and NOTICE. `src/make.mjs` registers BYOKit as
+the transport for the engine's model api, so BYOKit, not the upstream provider
+transport, answers every engine turn. No BYOKit fork or copied credential is used.
 
-The first slice exports one script-free `index.html` from a bounded, in-memory
-workspace. It explicitly overrides the engine's JSX output guidance, requires
-successful static `done`, rejects script-bearing output, and retains the existing
-CSP and 5 MB sign-off limit. An engine run may need multiple model turns; it
-stops on its first boundary failure, with no retry or route fallback.
+The board takes one script-free page under the CSP below, at most 5 MB. With Chrome
+or Chromium on the machine the engine writes its usual source (`App.jsx`), and `done`'s
+runtime check, like upstream's `done-verify.ts`, draws it: the runtime's
+`buildStandaloneDocument` (React and Babel inline) is loaded headless at 1280px under
+a policy that allows inline script, Babel's eval and cdnjs scripts only, and the page
+it drew is kept as static HTML: scripts, handlers, `javascript:` URLs, `base` and
+policy tags removed, form values and canvases kept as markup. Its errors go back to
+the model. The Google Fonts stylesheets the page links or imports are fetched by the
+host and their latin faces embedded as `data:` URIs (`src/fonts.mjs`); images are
+inline SVG, CSS or `data:` URIs. That static page is what the 390px and dark-theme
+check and the board see. With no browser the contract asks the engine for
+script-free `index.html` instead, and a page with script is refused. The engine ends
+a run when the model stops or after three failed `done` rounds, even when no version
+has passed `done`; upstream's app then waits for the user. make instead sends `done`'s
+errors back as the next message, at most three times, so a brief ends with a version
+that passed. An engine run may need many model turns; a bound of 60 turns stops a run
+that never ends (the last version that passed `done` is kept), and a failed boundary
+call is retried only when it timed out or its connection dropped.
 
 `doctor` loads the actual built engine and prompt sections, validates plan-key
 and api-key model metadata, and checks the selected route locally. Installed-CLI readiness
@@ -51,9 +76,8 @@ each option's page server side: it drops the mock's own CSP meta, adds the
 preview viewport support and the overlay script, whose error reporting
 (`IFRAME_ERROR`), Escape (`PREVIEW_ESCAPE`) and navigation guard run inside the
 option. The view page imports `isIframeErrorMessage` from `iframe-errors.ts`.
-The build resolves the runtime's `../vendor/*?raw` imports to empty strings,
-since the UMD builds are not vendored, so JSX previews are not supported. The
-view never sends `SET_MODE`, so the overlay's selection and comment modes stay
+Options are static HTML (see above), so the
+view never needs the JSX runtime. The view never sends `SET_MODE`, so the overlay's selection and comment modes stay
 off, and the page acts only on `IFRAME_ERROR` and `PREVIEW_ESCAPE` from its own
 iframes.
 
@@ -110,10 +134,11 @@ layer is a sibling of the scaled frame, so pin size does not scale. Not ported: 
 `<design>.comments.json` beside the design (`src/view.mjs` `readPins`), read on each page load; no file, no pins.
 Pins are drawn by the view page above the iframe, never inside the sandboxed option, which gains no permission.
 
-`packages/core/src/frames` holds JSX device snippets for the agent; the view
-renders HTML only and does not use them.
+`packages/core/src/frames` and the templates' `frames/` hold JSX device snippets
+for the agent; the view renders HTML only and does not use them.
 
-Not in this slice: JSX/runtime exports, external assets, image generation,
-workspace persistence, revision, editing comments,
+Not in this slice: the `preview` tool (upstream's is Electron's), image generation,
+web research, the `ask` tool, workspace persistence (the `App.jsx` source is not
+kept beside the option), editing comments,
 sign-off links, or new publication. The first PR
 target remains **2026-10-20**; merge and publication require Main's approval.

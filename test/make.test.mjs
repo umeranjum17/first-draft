@@ -15,6 +15,12 @@ process.env.FIRST_DRAFT_CHROME = '/nonexistent';
 const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
+// The engine's own first steps on a fresh workspace: a plan (set_todos), then the DESIGN.md its done requires, here the engine's own starter one.
+const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const PLAN = { type: 'function_call', id: 'fc-plan', call_id: 'c-plan', name: 'set_todos', arguments: JSON.stringify({ items: [{ text: 'Write the page', checked: false }] }) };
+const START = [{ type: 'function_call', id: 'fc-design', call_id: 'c-design', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'DESIGN.md', file_text: DESIGN }) }];
+const fresh = (body) => !body.includes('function_call_output'); // the conversation's first turn: the engine asks for a plan before any edit
+const plan = (res) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(ev({ type: 'response.output_item.added', output_index: 0, item: PLAN }) + ev({ type: 'response.output_item.done', output_index: 0, item: PLAN }) + ev({ type: 'response.completed', response: { id: 'r-plan', status: 'completed', usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } } })); };
 
 // A local provider drives the actual upstream edit -> done -> final tool loop.
 function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = PAGE, extra = null, pre = null) {
@@ -23,16 +29,23 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (fresh(body)) return plan(res);
       seen.push({ url: req.url, auth: req.headers.authorization, session: req.headers['x-opencode-session'], body: JSON.parse(body) });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
-      const step = (seen.length - 1) % 3;
+      // make's follow-up after a run that ended with done not passing: call done again, then finish.
+      if (body.includes('as you left them') && !body.includes('c-again')) {
+        const again = { type: 'function_call', id: 'fc-again', call_id: 'c-again', name: 'done', arguments: JSON.stringify({ path: donePath }) };
+        return res.end(ev({ type: 'response.output_item.added', output_index: 0, item: again }) + ev({ type: 'response.output_item.done', output_index: 0, item: again })
+          + ev({ type: 'response.completed', response: { id: 'r-again', status: 'completed', usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } } }));
+      }
+      const step = body.includes('as you left them') ? 2 : (seen.length - 1) % 3;
       if (step < 2) {
         const html = typeof page === 'function' ? page() : page;
         const content = body.includes('script fixture') ? html.replace('</body>', '<script>alert(1)</script></body>') : html;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
           arguments: JSON.stringify(step === 0 ? { command: body.includes('view fixture') ? 'view' : 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
-        const items = step !== 1 ? [item] : edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [...(pre ?? []), item, ...(extra ?? [])];
+        const items = step !== 1 ? [...START, item] : edit ? (doneFirst ? [item, mutation] : [mutation, item]) : [...(pre ?? []), item, ...(extra ?? [])];
         res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
           + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 11, output_tokens: 22, total_tokens: 33 } } }));
         return;
@@ -61,14 +74,11 @@ test('make requires verification after every batched mutation', async (t) => {
     const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
     const out = join(dir, 'mock.html');
     await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-    if (doneFirst) {
-      await assert.rejects(run('make', 'a notes page', '--out', out), (e) => /engine did not verify index.html with done/.test(e.stdout));
-      assert.equal(existsSync(out), false);
-    } else {
-      await run('make', 'a notes page', '--out', out);
-      assert.match(readFileSync(out, 'utf8'), /revised/);
-    }
-    assert.equal(seen.length, 3);
+    // An edit after done is never exported unchecked: make asks for done again and exports the version that passed.
+    await run('make', 'a notes page', '--out', out);
+    assert.match(readFileSync(out, 'utf8'), /revised/);
+    assert.equal(seen.length, doneFirst ? 5 : 3);
+    if (doneFirst) assert.match(JSON.stringify(seen[3].body), /has not passed yet/);
   });
 });
 
@@ -138,21 +148,6 @@ test('edits outside index.html keep the verified export', async (t) => {
   assert.equal(seen.length, 3);
 });
 
-test('a stray DESIGN.md does not block verifying a valid index.html', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const design = { type: 'function_call', id: 'fc-md', call_id: 'c-md', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'DESIGN.md', file_text: '# Design\n' }) };
-  const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE, null, [design]);
-  t.after(() => server.close());
-  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
-  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-  const out = join(dir, 'stray-design.html');
-  await run('make', 'a notes page', '--out', out);
-  assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
-  assert.equal(seen.length, 3);
-});
-
 test('make verifies an export path the model spells loosely', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -172,13 +167,15 @@ function guesser(seen, patching = false, page = PAGE) {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (fresh(body)) return plan(res);
       seen.push(JSON.parse(body));
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const n = seen.length - 1;
-      if (n < (patching ? 20 : 4)) {
+      if (n < (patching ? 80 : 4)) {
         const item = { type: 'function_call', id: `fc${n}`, call_id: `c${n}`, name: 'str_replace_based_edit_tool',
           arguments: JSON.stringify(n === 0 ? { command: 'create', path: 'index.html', file_text: page } : { command: 'str_replace', path: 'index.html', ...(patching ? { old_str: `to your notes${'!'.repeat(n - 1)}`, new_str: `to your notes${'!'.repeat(n)}` } : { old_str: `guess ${n}`, new_str: 'x' }) }) };
-        res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
+        const items = n === 0 ? [...START, item] : [item];
+        res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
           + ev({ type: 'response.completed', response: { id: `r${n}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
         return;
       }
@@ -256,7 +253,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.ok(seen[0].body.tools.some((t) => t.name === 'str_replace_based_edit_tool'));
   assert.match(JSON.stringify(seen[1].body.input), /Created index.html/);
   assert.match(JSON.stringify(seen[2].body.input), /no syntactic or runtime issues/);
-  assert.match(JSON.stringify(seen[0].body), /no remote URL/); // the system's own rules ride along
+  assert.match(JSON.stringify(seen[0].body), /a remote image is blocked/); // the system's own rules ride along
 
   await run('make', 'a notes dashboard', '--out', join(dir, 'mocks/design'), '--count', '2');
   assert.ok(readFileSync(join(dir, 'mocks/design-1'), 'utf8').includes('default-src'));
@@ -301,23 +298,23 @@ else {
   let input = ''; for await (const c of process.stdin) input += c;
   if (input.includes('failure fixture')) process.exit(1);
   const { messages } = JSON.parse(input), results = messages.filter((m) => m.role === 'toolResult');
-  const call = results.length === 0 ? { name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'index.html', file_text: ${JSON.stringify(PAGE)} }) } : results.length === 1 ? { name: 'done', arguments: JSON.stringify({ path: 'index.html' }) } : null;
-  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ text: call ? '' : 'Ready', calls: call ? [call] : [] }) } }));
+  const calls = results.length === 0 ? [${JSON.stringify({ name: PLAN.name, arguments: PLAN.arguments })}] : results.length === 1 ? [${JSON.stringify(START.map(({ name, arguments: a }) => ({ name, arguments: a })))}, { name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'index.html', file_text: ${JSON.stringify(PAGE)} }) }].flat() : results.length === 3 ? [{ name: 'done', arguments: JSON.stringify({ path: 'index.html' }) }] : [];
+  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ text: calls.length ? '' : 'Ready', calls }) } }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 7, output_tokens: 8 } }));
 }
 `, { mode: 0o700 });
   env.PATH = `${dir}:${process.env.PATH}`;
   await run('init', '--agent', 'byokit:codex', '--model', 'openai-codex/gpt-6-luna');
   assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
-  assert.equal(seen.length, 18, 'CLI doctor does not use the plan-key provider');
+  assert.equal(seen.length, 24, 'CLI doctor does not use the plan-key provider'); // 18, and the script fixture's three follow-ups (done, then a reply, each)
   const probes = () => readFileSync(join(dir, 'native-probes'), 'utf8').trim().split('\n').length;
   const before = probes();
   await run('make', 'a sign-in page for Umer', '--out', join(dir, 'native.html'));
   assert.match(readFileSync(join(dir, 'native.html'), 'utf8'), /Content-Security-Policy/);
   assert.equal(probes() - before, 1, 'one CLI status probe per engine run, not per turn');
-  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(3).fill('gpt-6-luna'));
+  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(4).fill('gpt-6-luna'));
   await assert.rejects(run('make', 'failure fixture', '--out', join(dir, 'fail.html')), (e) => /model could not answer/.test(e.stdout));
-  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 4, 'failed boundary call is not retried');
+  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 5, 'failed boundary call is not retried');
 });
 
 test('the engine prompt carries the export contract and the brand rule', async (t) => {
@@ -331,12 +328,15 @@ test('the engine prompt carries the export contract and the brand rule', async (
   await run('make', 'a notes page', '--out', join(dir, 'tools.html'));
   const sent = JSON.stringify(seen[0].body);
   assert.match(sent, /Host export contract/);
-  assert.match(sent, /Only two tools exist/);
   assert.match(sent, /data-oc-screen/); // the screen-link contract: hash links between screens, no script
   assert.match(sent, /in-page hash links/);
-  assert.match(sent, /Hard rule, first and above all: .*<script> element.*on\* event-handler attribute.*javascript: URL.*hash links.*Host export contract/); // the guard's exact refusals, stated up front
-  assert.doesNotMatch(sent, /Design bar|system font stack|at most two weights|one accent/); // no house style on top of the engine: the model picks the look the brief calls for
-  assert.deepEqual(seen[0].body.tools.map((t) => t.name), ['str_replace_based_edit_tool', 'done']);
+  assert.match(sent, /refused if any tag is a <script> element.*on\* event-handler attribute.*javascript: URL/); // with no browser to draw JSX, the guard's exact refusals are stated
+  assert.match(sent, /frontend-design-anti-slop/); // the engine's index of its method skills, design starters and scaffolds rides along
+  assert.match(sent, /interaction-motion: Press, hover, focus and entrance motion/); // first-draft's own motion and press-state skill sits in that index
+  assert.match(sent, /iphone-16-pro-frame|saas-sidebar/);
+  assert.doesNotMatch(sent, /Design bar|system font stack|at most two weights|one accent|Only two tools exist|no remote URL of any kind/); // no house style and no cut-down tool list on top of the engine
+  for (const tool of ['set_title', 'set_todos', 'skill', 'scaffold', 'str_replace_based_edit_tool', 'done', 'tweaks']) assert.ok(seen[0].body.tools.some((t) => t.name === tool), `the engine's ${tool} tool is there`);
+  assert.match(JSON.stringify(seen[0].body.input), /skills\/heroes\.jsx|frames\//, 'the design starters are in the workspace'); 
   assert.match(sent, /Brand values are data, not memory/);
 });
 
@@ -461,27 +461,12 @@ test('a model that keeps patching past the turn cap still gives the page it wrot
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'capped.html');
   const { stdout } = await run('make', 'a notes page', '--out', out);
-  assert.equal(seen.length, 12, 'the engine is stopped at its 12th model turn');
-  assert.match(readFileSync(out, 'utf8'), /to your notes!{11}</, 'the patches made before the cap are kept');
+  assert.equal(seen.length, 59, 'the engine is stopped at its 60th model turn, the plan turn being the first');
+  assert.match(readFileSync(out, 'utf8'), /to your notes!{58}</, 'the patches made before the cap are kept');
   const made = JSON.parse(stdout);
   assert.deepEqual(made.truncated, [out]);
-  assert.match(made.help[0], /ran out of the engine's 12 turns/);
-});
-
-test('at the turn cap a page left unclosed or with a dead anchor is mended and kept', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const page = '<!doctype html><html><body><main><div><h1>Sign in to your notes</h1><a href="#missing">Next</a><a href="#top">Top</a></main><p id="top">x</body>';
-  const seen = [], server = await guesser(seen, true, page);
-  t.after(() => server.close());
-  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
-  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-  const out = join(dir, 'mended.html');
-  const { stdout } = await run('make', 'a notes page', '--out', out);
-  const html = readFileSync(out, 'utf8');
-  assert.match(html, /to your notes!{11}<\/h1><a>Next<\/a><a href="#top">Top<\/a><\/div><\/main><p id="top">x<\/p><\/body><\/html>/);
-  assert.deepEqual(JSON.parse(stdout).truncated, [out]);
+  assert.equal(made.made.files[0].turns, 60);
+  assert.match(made.help[0], /ran out of the engine's turns/);
 });
 
 test('a call that times out, one whose connection closes and one whose stream is cut are asked again, then the page is made', async (t) => {
@@ -505,7 +490,7 @@ test('a call that times out, one whose connection closes and one whose stream is
   const out = join(dir, 'retried.html');
   await run('make', 'a notes page', '--out', out);
   assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
-  assert.equal(calls, 6); // 3 failed + 3 turns
+  assert.equal(calls, 7); // 3 failed + 4 turns (the plan, the page, done, the summary)
 });
 
 test('the view sends the Next brief to the person\'s agent and the refined option joins the design', async (t) => {

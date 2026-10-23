@@ -2,7 +2,8 @@
 // two facts that break a landing page on a phone are read off that render — the page must fit
 // 390px, and it must have a dark theme (or, for a dark-first style, be dark). The browser is the one already on the machine: no
 // dependency is added and no browser is bundled. With no browser the check is skipped, never
-// failed.
+// failed. The same browser draws the engine's source (App.jsx and its runtime) once, and the
+// page it drew is kept as static HTML: that snapshot is what the check and the board see.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,7 +32,7 @@ const connect = async (url) => {
     ws.addEventListener('error', () => no(new Error('the browser refused the connection')), { once: true });
   });
   let id = 0;
-  const open = new Map(), events = new Map();
+  const open = new Map(), events = new Map(), listeners = new Map();
   ws.addEventListener('message', (e) => {
     const msg = JSON.parse(e.data);
     if (msg.id !== undefined) {
@@ -41,15 +42,21 @@ const connect = async (url) => {
       msg.error ? call.no(new Error(msg.error.message)) : call.ok(msg.result);
       return;
     }
+    for (const fn of listeners.get(msg.method) ?? []) fn(msg.params);
     const wait = events.get(msg.method);
     if (wait) { events.delete(msg.method); wait(msg.params); }
   });
+  const on = (method, fn) => {
+    if (!listeners.has(method)) listeners.set(method, new Set());
+    listeners.get(method).add(fn);
+    return () => listeners.get(method).delete(fn);
+  };
   const send = (method, params = {}) => new Promise((ok, no) => { const i = ++id; open.set(i, { ok, no }); ws.send(JSON.stringify({ id: i, method, params })); });
   const once = (method, ms = 30000) => new Promise((ok, no) => {
     const t = setTimeout(() => { events.delete(method); no(new Error(`the browser never sent ${method}`)); }, ms);
     events.set(method, (p) => { clearTimeout(t); ok(p); });
   });
-  return { send, once, close: () => ws.close() };
+  return { send, once, on, close: () => ws.close() };
 };
 
 // What the page measures at 390px: its width, and the elements that push it wider.
@@ -103,6 +110,45 @@ const paintSignature = () => {
   return (h >>> 0).toString(16);
 };
 
+// The source's page while it renders: inline script, Babel's eval and the one script host upstream's output rules allow (cdnjs, exact versions); nothing else loads, so what it draws comes from the file.
+const DRAW_POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:" />`;
+
+// Wait until the source has drawn: React has mounted into #root (or there is no #root), fonts are in, and the effects, timers and chart animations that set the first state have run.
+const drawn = async () => {
+  const root = document.getElementById('root');
+  for (let i = 0; i < 50 && root && !root.firstElementChild; i++) await new Promise((r) => setTimeout(r, 100));
+  await document.fonts.ready;
+  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return Boolean(!root || root.firstElementChild);
+};
+
+// The page as drawn, as static HTML: form values and canvases kept as markup, every script, handler, javascript: URL, base and policy tag removed.
+const staticPage = () => {
+  for (const el of document.querySelectorAll('input, textarea, select')) {
+    if (el.type === 'checkbox' || el.type === 'radio') el.toggleAttribute('checked', el.checked);
+    else if (el.tagName === 'TEXTAREA') el.textContent = el.value;
+    else if (el.tagName === 'SELECT') for (const o of el.options) o.toggleAttribute('selected', o.selected);
+    else if (el.type !== 'password' && el.type !== 'file') el.setAttribute('value', el.value);
+  }
+  for (const canvas of document.querySelectorAll('canvas')) {
+    const img = document.createElement('img');
+    for (const a of canvas.attributes) img.setAttribute(a.name, a.value);
+    try { img.src = canvas.toDataURL(); } catch { continue; }
+    img.alt = canvas.getAttribute('aria-label') ?? '';
+    canvas.replaceWith(img);
+  }
+  const page = document.documentElement.cloneNode(true);
+  for (const el of page.querySelectorAll('script, noscript, base, meta[http-equiv]')) el.remove();
+  const comments = document.createTreeWalker(page, NodeFilter.SHOW_COMMENT), gone = [];
+  while (comments.nextNode()) gone.push(comments.currentNode);
+  for (const c of gone) c.remove();
+  for (const el of [page, ...page.querySelectorAll('*')]) for (const { name, value } of [...el.attributes]) {
+    if (/^on/i.test(name) || (/^(?:href|src|action|formaction|xlink:href|poster)$/i.test(name) && /^\s*javascript:/i.test(value))) el.removeAttribute(name);
+  }
+  return `<!doctype html>\n${page.outerHTML}`;
+};
+
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 class Renderer {
@@ -128,6 +174,7 @@ class Renderer {
     if (!page) throw new Error('the browser opened no page to render in');
     this.client = await connect(page.webSocketDebuggerUrl);
     await this.client.send('Page.enable');
+    await this.client.send('Runtime.enable'); // the source's errors, for the snapshot
   }
 
   close() {
@@ -153,7 +200,7 @@ class Renderer {
   }
 
   async eval(c, expression) {
-    const r = await c.send('Runtime.evaluate', { expression, returnByValue: true });
+    const r = await c.send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text ?? 'the page could not be measured');
     return r.result.value;
   }
@@ -178,6 +225,26 @@ class Renderer {
 
   async settle(c) {
     await c.send('Runtime.evaluate', { expression: 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))', awaitPromise: true, returnByValue: true });
+  }
+
+  // The source drawn once at 1280px in light, as upstream's standalone export runs it, and kept as the page it drew, with the errors it threw.
+  async snapshot(doc) {
+    const file = join(this.dir, `source-${++this.n}.html`);
+    writeFileSync(file, /<head(?:\s[^>]*)?>/i.test(doc) ? doc.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}\n${DRAW_POLICY}`) : `${DRAW_POLICY}\n${doc}`);
+    const c = this.client, errors = new Set();
+    const off = [
+      c.on('Runtime.exceptionThrown', ({ exceptionDetails: d }) => errors.add(d.exception?.description?.split('\n')[0] ?? d.text)),
+      c.on('Runtime.consoleAPICalled', ({ type, args }) => { if (type === 'error') errors.add(args.map((a) => a.value ?? a.description ?? '').join(' ')); }),
+    ];
+    try {
+      await c.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+      await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+      const loaded = c.once('Page.loadEventFired');
+      await c.send('Page.navigate', { url: `file://${file}` });
+      await loaded;
+      if (!await this.eval(c, `(${drawn.toString()})()`)) errors.add('App rendered nothing: #root is still empty after 5 seconds');
+      return { html: await this.eval(c, `(${staticPage.toString()})()`), errors: [...errors].map((message) => ({ source: 'runtime', message })) };
+    } finally { for (const stop of off) stop(); }
   }
 
   // The check itself: the errors done must report, so the model can fix the page in the loop.
@@ -215,10 +282,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false } = {}) => {
   if (!bin) {
     const warning = `no Chrome or Chromium was found on this machine, so the ${PHONE}px and dark-theme render check was skipped`;
     onWarn(warning);
-    return { status: 'skipped', warning, verify: async () => [], close: () => {} };
+    return { status: 'skipped', warning, drawing: false, verify: async () => [], close: () => {} };
   }
   const render = new Renderer(bin, onWarn, dark);
   return {
+    drawing: true, // this machine can draw an App.jsx into static HTML
     get status() { return render.state === 'ready' ? 'checked' : 'skipped'; },
     get warning() { return render.warning; },
     verify: async (html, ctx) => {
@@ -228,6 +296,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false } = {}) => {
         catch (e) { render.skip(e.message); return []; }
       }
       return render.check(html);
+    },
+    // The source's standalone document drawn into static HTML. A browser that cannot start is the real failure here: the source cannot become a page without it.
+    snapshot: async (doc) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to draw the design: ${e.message}`); });
+      return render.snapshot(doc);
     },
     close: () => render.close(),
   };
