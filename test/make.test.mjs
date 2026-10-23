@@ -67,6 +67,8 @@ test('CLI option controls reach the real engine and reject bad values before cal
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
+  const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version;
+  for (const flag of ['--version', '-v']) assert.equal((await run(flag)).stdout, `${version}\n`);
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'configured-model');
   const config = readFileSync(join(dir, 'config.json'), 'utf8');
   await assert.rejects(run('make', 'Notes', '--out', 'refused.html', '--model', 'claude-opus-5-5'), (e) => /SUBSCRIPTION_ONLY/.test(e.stdout));
