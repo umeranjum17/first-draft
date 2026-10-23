@@ -16,7 +16,7 @@ Node **22.18+** and your own model subscription or API key. Three steps:
 
 Replace `YOUR_MODEL` with a model your installed, signed-in Codex CLI supports. [Other routes ↓](#models) · Open the URL that `view` prints. Stop it with Ctrl+C.
 
-[Landing page](https://umeranjum17.github.io/first-draft/) · [Agent skill](skills/first-draft-axi/SKILL.md), to hand the CLI to your coding agent · [CLI reference ↓](#reference)
+[Landing page](https://umeranjum17.github.io/first-draft/) · [Vision](VISION.md) · [Agent skill](skills/first-draft-axi/SKILL.md), to hand the CLI to your coding agent · [CLI reference ↓](#reference)
 
 ## Choose a direction, not just a screenshot
 
