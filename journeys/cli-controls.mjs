@@ -20,7 +20,7 @@ try {
   mkdirSync(installed);
   console.log('Packing this committed candidate and installing in an empty folder');
   const packed = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', work], root));
-  writeFileSync(join(out, 'install.log'), run('npm', ['install', '--no-audit', '--no-fund', join(work, packed[0].filename)]));
+  writeFileSync(join(out, 'install.log'), run('npm', ['install', '--no-audit', '--no-fund', join(work, Object.values(packed)[0].filename)]));
   const cli = join(installed, 'node_modules/.bin/first-draft-axi');
   const version = JSON.parse(readFileSync(join(installed, 'node_modules/first-draft-axi/package.json'))).version;
   writeFileSync(join(out, 'help.txt'), run(cli, ['make', '--help']));
