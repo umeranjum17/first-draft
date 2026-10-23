@@ -9,7 +9,7 @@ Written by `done-done init` through claude from this repo's own files (surface: 
 
 ## Launch
 
-The suite builds and drives the real CLI/engine/native browser using local provider-edge stand-ins, with no paid model calls. Run npm ci and the launch below with caller-owned HOME/XDG/TMPDIR outside any existing sign-off board ancestor: a shared /tmp/.sign-off can invalidate the no-board test. Use real Node/npm executables from the Node 22.18+ toolchain, not a shim whose trust/config depends on the replaced HOME. Individual journeys create their own config/files and clean them up. For a live view use a task-owned draft and FIRST_DRAFT_HOME, 127.0.0.1 and a private port. Never read/copy owner credentials or touch an owner board.
+The suite builds and drives the real CLI/engine/native browser using local provider-edge stand-ins, with no paid model calls. Run npm ci and the launch below with caller-owned HOME/XDG and a short real TMPDIR (e.g. a mktemp root under `/var/tmp/fd.XXXXXX`) outside any existing sign-off board ancestor: a shared /tmp/.sign-off can invalidate the no-board test. Use real Node/npm executables from the Node 22.18+ toolchain, not a shim whose trust/config depends on the replaced HOME. Individual journeys create their own config/files and clean them up. For a live view use a task-owned draft and FIRST_DRAFT_HOME, 127.0.0.1 and a private port. Never read/copy owner credentials or touch an owner board.
 
 npm test
 
