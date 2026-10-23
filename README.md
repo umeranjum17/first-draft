@@ -31,6 +31,20 @@ Replace `YOUR_MODEL` with a model your installed, signed-in Codex CLI supports. 
 
 The screenshots come from one real run of `first-draft-axi make "A notes app for Umer with a sign-in screen and a notes dashboard" --count 3` (first-draft-axi 0.2.4, no `--direction`, so each option took a different named style), with no editing. Options 2 and 3 hit the engine's turn cap, and `make` said so: they hold the screens written so far. The large screenshot at the top is option 1. Generating needs your chosen model; viewing does not call it. These are prototypes, not production apps.
 
+## Works alone, or with sign-off
+
+First Draft needs nothing else: `make`, `view` and `refine` work on their own, and comments from people show as read-only pins on the canvas ([comment pins ↓](#reference)).
+
+To get someone's pick, hand the options to [sign-off](https://github.com/umeranjum17/sign-off), a sibling review board. The board shows the options side by side; each one links into first-draft for the detail:
+
+```sh
+first-draft-axi post notes.html \
+  --title "Which notes app?" \
+  --recommend a
+```
+
+`post` copies the options into the board, starts `view` if it is not running, and posts one card with an **Open** link under each option. The link opens that option in Play in the viewer, and the card text repeats each one as "Open in first-draft". It needs `sign-off-axi` 0.5.0+ and a `.sign-off/` board in this folder or above (or `--board`). Links point at the viewer on its tailnet address, or at `--host`. Name options with `--option a=<label>`; demos that ask for no pick use `--evidence --media <shot>` instead of `--recommend`.
+
 ## Models
 
 Every generation goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), using the route and model **you** choose. First Draft never silently changes accounts or models.
@@ -91,4 +105,4 @@ npm test
 
 Tests build and exercise the engine loop against local stand-ins, with no paid model call. A command, default or viewer change updates this README, the agent skill and the screenshots together.
 
-MIT · [License](LICENSE)
+MIT · [License](LICENSE) · [Notice](NOTICE): the design engine is [Open CoDesign](https://github.com/OpenCoworkAI/open-codesign), MIT

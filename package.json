@@ -19,7 +19,8 @@
     "src",
     "skills",
     "dist",
-    "ENGINE.md"
+    "ENGINE.md",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=22.18"
