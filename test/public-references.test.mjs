@@ -51,6 +51,7 @@ else {
  let calls=[];
  if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
  else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
+ else if(tools.some(t=>t.name==='assess_reference_redesign'))calls=[call('assess_reference_redesign',{verdict:'pass',checks:['reference-craft','metrics','coherence','content','responsive'].map((name,i)=>({name,passed:!(process.env.FD_VISUAL_BAD&&i===0),detail:'Fixture transport check only'}))})];
  else if(tools.some(t=>t.name==='assess_redesign')) {
   if(Number(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS)!==8192)throw Error('semantic review reasoning budget missing');
   const bad=raw.includes('Remaining 3 tasks remaining')||process.env.FD_REVIEW_ALWAYS_FAIL;
@@ -129,6 +130,8 @@ else {
   assert.ok(!requests.some(r=>['/blocked','/specific','/never.js','/never-frame'].includes(r.url)));
   assert.ok(requests.every(r=>!r.cookie&&!r.auth&&r.ua.includes('FirstDraftReference/1.0')),'all site requests are anonymous and polite');
   assert.ok(readdirSync(join(project,'.first-draft/refs')).length>=1);
+  const visualProbe=`import assert from 'node:assert/strict';import {reviewReferences} from ${JSON.stringify(new URL('../journeys/redesign-reference-check.mjs',import.meta.url).href)};const input={quality:[${JSON.stringify(join(captured.cache,'..',manifest.screenshots[0].file))}],diagnostics:[],captures:[{file:${JSON.stringify(join(captured.cache,'..',manifest.screenshots[1].file))},label:'fixture capture only'}],agent:'byokit:claude',model:'claude-opus-5-5'};if(process.env.FD_VISUAL_BAD)await assert.rejects(reviewReferences(input),/inconsistent visual benchmark/);else assert.equal((await reviewReferences(input)).verdict,'pass');`;
+  for(const bad of ['', '1'])await promisify(execFile)(process.execPath,['--input-type=module','-e',visualProbe],{env:{...env,FD_VISUAL_BAD:bad},cwd:project,timeout:30000,maxBuffer:100000});
   const out=join(project,'notes.html'),warm=join(project,'warm.html');
   const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--options','1','--out',out)).stdout);
   assert.equal(made.references.name,'Vercel');assert.equal(made.made.render_check,'checked');
