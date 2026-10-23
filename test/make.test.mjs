@@ -69,6 +69,8 @@ test('CLI option controls reach the real engine and reject bad values before cal
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'configured-model');
   const config = readFileSync(join(dir, 'config.json'), 'utf8');
+  await assert.rejects(run('make', 'Notes', '--out', 'refused.html', '--model', 'claude-opus-5-5'), (e) => /SUBSCRIPTION_ONLY/.test(e.stdout));
+  assert.equal(seen.length, 0, 'model overrides respect the subscription boundary');
   writeFileSync(join(dir, 'brief.md'), 'A notes app for Umer');
   for (const n of [1, 3, 5, undefined]) {
     seen.length = 0;

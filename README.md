@@ -100,7 +100,7 @@ Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pi
 | `--out <file.html>` | Output file; multiple options add `-1`, `-2`, etc. Every `{i}` is replaced by the option number. |
 | `--out-dir <folder>` | Alternative to `--out`; writes `option-1.html`, etc. One output flag is required. |
 
-Empty values, invalid counts, conflicting aliases, and unreadable briefs fail before generation. Screen coverage and style are model instructions, not deterministic guarantees. Output stays responsive at 390px/1280px with light/dark themes (dark-first styles stay dark); no theme, size, image-reference, numeric seed or variation-strength switches are exposed.
+Empty values, invalid counts, conflicting aliases, and unreadable briefs fail before generation. Screen coverage and style are model instructions, not deterministic guarantees. Output stays responsive at 390px/1280px with light/dark themes (dark-first styles stay dark); no theme, size, numeric seed or variation-strength switches are exposed.
 
 ```sh
 first-draft-axi make --brief-file brief.md --options 5 \

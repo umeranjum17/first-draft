@@ -46,7 +46,7 @@ import { createInterface } from 'node:readline';
 createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(line); if(q.id) console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}})); });
 `, { mode: 0o700 });
   const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, FIRST_DRAFT_CHROME: '/nonexistent', ANTHROPIC_API_KEY: 'synthetic-never-deliver', ANTHROPIC_AUTH_TOKEN: 'synthetic-never-deliver' };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args, ...(args[0] === 'make' ? ['--options', '1'] : [])], { env });
   await promisify(execFile)(join(dir, 'claude'), ['auth', 'status'], { env });
   const expected = ['Claude subscription: first-draft-axi init --agent byokit:claude --model <model>', 'ChatGPT subscription: first-draft-axi init --agent byokit:codex --model <model>'];
   await assert.rejects(run('init'), e => { assert.deepEqual(JSON.parse(e.stdout).help, expected); return true; });
