@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, imageSupport, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
 import { referenceDoctor, referenceFlags, referenceHelp, references } from './references.mjs';
+import { discoverReference, discoveryHelp, explicitReferenceUrl } from './reference-discovery.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
@@ -90,7 +91,8 @@ const refineHtml = async (seed, change) => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[8]:
+commands[9]:
+  references "<prompt>" [--like <brand-or-https-url>]   discover a named reference candidate (no fetch or design change)
   assets                              detect installed asset providers without spending
   make "<prompt>" --out <file.html> [--count N] [--direction "<look>"]   make N design mocks: self-contained HTML pages (one engine run each); --direction names the look all of them take (a style, a brand, a reference), else several options each get a different one
   styles                              list the named design styles that make --direction <id> takes (or write your own direction in words)
@@ -106,13 +108,22 @@ view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAF
 post copies the options into the board's mocks folder (the nearest .sign-off/, or --board), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) as that option's --link (a tappable Open under its mock; needs sign-off-axi 0.5.0+) and in the card's --tradeoff text as the fallback: the card's sandbox blocks a link inside the mock.
 ${assetHelp}
 ${referenceHelp}
+${discoveryHelp}
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
 if (!command || command === '--help' || command === '-h') { console.log(HELP); process.exit(0); }
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
-if (command === 'assets') {
+if (command === 'references') {
+  const { values, positionals } = flags(rest, { like: { type: 'string' } });
+  const prompt = positionals.join(' ').trim();
+  if ((!prompt && values.like === undefined) || values.like?.trim() === '') fail('USAGE', 'references needs a prompt or --like <brand-or-https-url>', [discoveryHelp]);
+  try {
+    const c = explicitReferenceUrl(values.like) ? {} : await agentOrThrow();
+    console.log(JSON.stringify({ reference_discovery: await discoverReference({ prompt, like: values.like, ...c }) }));
+  } catch (e) { fail(e.help ? e.code : 'REFERENCE_DISCOVERY_FAILED', e.message, e.help ?? [discoveryHelp]); }
+} else if (command === 'assets') {
   console.log(JSON.stringify({ providers: await detectAssets(), help: [assetHelp] }));
 } else if (command === 'styles') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));

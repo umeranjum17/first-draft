@@ -84,6 +84,18 @@ first-draft-axi make "Umer's botanical shop with a leaf illustration" --out shop
 
 The adapter contract is `detect()`, `estimate({prompt}) → {amount,unit,detail}`, and `generate({prompt,dir}) → local raster path` in `src/assets.mjs`. New providers use that same boundary; the host handles approval, image budget, optimization and embedding. No account switching or generation retries. A failed design can leave a paid asset on disk; the error is reported, not silently retried.
 
+## Discover a named reference (first slice)
+
+```sh
+first-draft-axi references "make it like Vercel"
+first-draft-axi references "a mobile notes app" --like Linear
+first-draft-axi references --like https://vercel.com/
+```
+
+`references` asks **your configured model** to name one explicitly requested visual reference and, if known, its public HTTPS homepage. `--like` overrides the prompt; an explicit HTTPS URL needs no model call. Generic styles return no candidate; an unknown homepage stays `null`. Model calls use the same BYOKit route as generation and consume its normal quota.
+
+This is **discovery only**, not automatic reference gathering. URLs are unverified model suggestions. No site is visited, no robots or terms are checked, no screenshots or cache are created, and `make`/`refine` do not consume this result yet. Public access is not permission to capture or reuse content. Fetching with public-only safety controls, project caching, visual-language extraction and viewer references are follow-up slices. For actual image-guided generation today, use `make` or `refine` with `--ref <local.png|jpg|webp>` (repeatable).
+
 ## Reference
 
 Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pinned engine and model boundary.
