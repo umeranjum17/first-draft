@@ -7,8 +7,9 @@ const observe=()=>{
   const anchors=[...document.querySelectorAll('a[href]')].filter(visible);
   return {href:location.href,type:document.contentType,title:document.title.slice(0,200),text:document.body.innerText,loading:[...document.querySelectorAll('[class*="skeleton"],[aria-busy="true"]')].some(visible),login:!!document.querySelector('input[type=password]'),fonts:document.fonts.status,images:[...document.images].filter(i=>{const r=i.getBoundingClientRect();return visible(i)&&r.top<innerHeight&&r.bottom>0;}).every(i=>i.complete),links:anchors.slice(0,300).map(a=>({href:a.href,label:a.innerText.trim().slice(0,120),nav:!!a.closest('nav,[role=tablist]')})),linkCount:anchors.length};
 };
-export async function sessionSource({source,session,out,maxPages=6}){
+export async function sessionSource({source,session,out,maxPages=6,maxRequests=64,maxBytes=32000000}){
   if(!Number.isInteger(maxPages)||maxPages<1||maxPages>12)throw Error('--max-pages must be 1-12');
+  if(!Number.isInteger(maxRequests)||maxRequests<1||maxRequests>512||!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>32000000)throw Error('Session budgets require 1-512 requests and 1-32000000 bytes');
   if(!statSync(session).isFile()||statSync(session).size>64000)throw Error('--session must be a regular signed-link JSON file, at most 64 KB');
   let state;try{state=JSON.parse(readFileSync(session,'utf8'));}catch{throw Error('Cannot read signed-link session JSON');}
   if(state?.version!==1||typeof state.url!=='string'||Object.keys(state).some(k=>!['version','url'].includes(k)))throw Error('Session format: {version:1,url:<authorized signed URL>}');
@@ -37,15 +38,15 @@ export async function sessionSource({source,session,out,maxPages=6}){
   try{
     mkdirSync(base,{recursive:true});await renderer.start();const c=renderer.client;
     await c.send('Browser.setDownloadBehavior',{behavior:'deny'});await c.send('Network.enable');await c.send('Network.setBypassServiceWorker',{bypass:true});await c.send('Network.setBlockedURLs',{urls:['ws://*','wss://*']});
-    c.on('Network.dataReceived',e=>{bytes+=e.dataLength;if(bytes>32000000)failure??=Error('Signed-session source exceeds 32 MB transfer budget');});
+    c.on('Network.dataReceived',e=>{bytes+=e.dataLength;if(bytes>maxBytes&&!failure){failure=Error(`Signed-session source exceeds ${maxBytes} byte transfer budget`);c.send('Page.stopLoading').catch(()=>{});}});
     await c.send('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
     c.on('Fetch.requestPaused',async e=>{
       try{
         const u=new URL(e.request.url);
         if(e.request.method!=='GET'||u.origin!==start.origin){e.request.method!=='GET'?blocked.writes++:blocked.cross_origin++;await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'});return;}
-        if(++requests>64||failure)throw Error(`Signed-session budget exceeded: ${requests}/64 requests, ${bytes}/32000000 bytes`);
+        if(++requests>maxRequests||failure)throw Error(`Signed-session budget exceeded: ${requests}/${maxRequests} requests, ${bytes}/${maxBytes} bytes`);
         key(u.href);await c.send('Fetch.continueRequest',{requestId:e.requestId});
-      }catch(e2){failure??=Error(`Read-only source request failed: ${clean(e2.message)} (${requests} requests, ${bytes} bytes)`);try{await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'});}catch{}}
+      }catch(e2){failure??=Error(`Read-only source request failed: ${clean(e2.message)} (${requests} requests, ${bytes} bytes)`);c.send('Page.stopLoading').catch(()=>{});try{await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'});}catch{}}
     });
     let currentBase='';
     while(queue.length&&pages.length<maxPages){
@@ -66,7 +67,7 @@ export async function sessionSource({source,session,out,maxPages=6}){
     }
     if(!pages.length)throw Error('No authorized HTML screens found; no design generated');
     for(const p of pages)p.links=p.links.map(l=>({...l,target:ids.get(l.url)??null}));
-    const inventory={version:1,mode:'explicit signed-link session, direct read-only browser',pages,skipped,cap:maxPages,pending:queue.filter(u=>!ids.has(u)),blocked_requests:blocked,bytes,requests,limitations:['Caller explicitly authorizes this exact origin with a local signed-link JSON; interactive login, cross-origin requests and non-GET requests are blocked.','Only anchor-linked states are discovered; equivalent visible states are deduplicated. Page, link, text, request and transfer caps are reported, not a claim of complete hidden-state coverage.','Session secrets are removed from URLs and text; source screenshots are whole light/dark viewports, not full scrolling pages.']};
+    const inventory={version:1,mode:'explicit signed-link session, direct read-only browser',pages,skipped,cap:maxPages,pending:queue.filter(u=>!ids.has(u)),blocked_requests:blocked,bytes,requests,limits:{requests:maxRequests,bytes:maxBytes},limitations:['Caller explicitly authorizes this exact origin with a local signed-link JSON; interactive login, cross-origin requests and non-GET requests are blocked.','Only anchor-linked states are discovered; equivalent visible states are deduplicated. Page, link, text, request and transfer caps are reported, not a claim of complete hidden-state coverage.','Session secrets are removed from URLs and text; source screenshots are whole light/dark viewports, not full scrolling pages.']};
     writeFileSync(join(base,'sources.json'),clean(JSON.stringify(inventory,null,2)));return inventory;
-  }catch(e){writeFileSync(join(base,'failure.json'),JSON.stringify({message:clean(e.message),requests,bytes,blocked,pages:pages.map(p=>({id:p.id,title:p.title}))},null,2));throw Error(clean(e.message));}finally{renderer.close();}
+  }catch(e){const reason=failure??e;try{writeFileSync(join(base,'failure.json'),JSON.stringify({message:clean(reason.message),requests,bytes,limits:{requests:maxRequests,bytes:maxBytes},blocked,pages:pages.map(p=>({id:p.id,title:p.title}))},null,2));}catch{}throw Error(clean(reason.message));}finally{renderer.close();}
 }

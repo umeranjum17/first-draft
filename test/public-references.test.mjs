@@ -99,14 +99,18 @@ else {
   const session=join(dir,'session.json'),secret='synthetic-session-secret-umer';
   writeFileSync(session,JSON.stringify({version:1,url:origin+'/session.html?token='+secret}),{mode:0o600});
   const sessionStart=requests.length;
-  const live=JSON.parse((await run('redesign',origin+'/session.html','Clearer projects','--session',session,'--no-references','--out',join(project,'live-redesign'),'--max-pages','2')).stdout);
-  const sessionEnd=requests.length,liveInventory=JSON.parse(readFileSync(live.redesign.sources,'utf8'));
+  const live=JSON.parse((await run('redesign',origin+'/session.html','Clearer projects','--session',session,'--no-references','--out',join(project,'live-redesign'),'--max-pages','2','--max-requests','512','--max-bytes','8000000')).stdout);
+  let sessionEnd=requests.length;const liveInventory=JSON.parse(readFileSync(live.redesign.sources,'utf8'));
+  assert.deepEqual(liveInventory.limits,{requests:512,bytes:8000000});
   assert.equal(liveInventory.pages.length,2);assert.ok(liveInventory.bytes>2_000_000,'browser streams a hydrated API response larger than the former proxy cap');
   assert.match(liveInventory.pages[0].text,/7 active projects/);assert.match(liveInventory.pages[1].text,/3 tasks remaining/);
   assert.equal(liveInventory.pages[0].links.find(l=>l.label==='Project detail').target,'screen-2');
   assert.ok(liveInventory.blocked_requests.writes>0);assert.ok(!requests.some(r=>r.url==='/write-attempt'),'browser blocks source background POST before it reaches the server');
   assert.ok(!JSON.stringify(live).includes(secret)&&!readFileSync(live.redesign.sources,'utf8').includes(secret));
   for(const p of liveInventory.pages){assert.equal(p.screenshots.length,4);for(const shot of p.screenshots){const png=readFileSync(join(project,'live-redesign/sources',shot.file));assert.equal(png.readUInt32BE(16),shot.width);assert.equal(png.readUInt32BE(20),shot.height);}}
+  for(const [flag,value,pattern] of [['--max-requests','1',/2\/1 requests/],['--max-bytes','1',/exceeds 1 byte/]]){const refused=join(project,'limited-'+flag.slice(2));await assert.rejects(run('redesign',origin+'/session.html','Clearer','--session',session,'--no-references','--out',refused,flag,value),e=>{assert.match(e.stdout,pattern);assert.ok(!e.stdout.includes(secret));return true;});assert.equal(existsSync(join(refused,'option-1.html')),false);}
+  sessionEnd=requests.length;
+  for(const [flag,value] of [['--max-requests','513'],['--max-bytes','32000001']])await assert.rejects(run('redesign',origin+'/session.html','Clearer','--session',session,'--out',join(project,'invalid'),flag,value),e=>/USAGE/.test(e.stdout));
   const capped=JSON.parse((await run('redesign',origin+'/product.html','Clearer','--no-references','--out',join(project,'capped'),'--max-pages','1')).stdout);
   assert.deepEqual(capped.redesign.pending,[origin+'/detail.html']);
   const sourceDir=join(project,'export');mkdirSync(sourceDir);
