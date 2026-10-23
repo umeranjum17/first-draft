@@ -4,7 +4,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { doctor as routeDoctor, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
+import { doctor as routeDoctor, imageSupport, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
+import { referenceDoctor, referenceFlags, referenceHelp, references } from './references.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
@@ -69,6 +70,16 @@ const agentOrThrow = async () => {
 const agentOrAsk = async () => {
   try { return await agentOrThrow(); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
 };
+const readReferences = async (paths) => {
+  try {
+    const images = await references(paths);
+    if (images.length) {
+      const { agent, model } = await agentOrThrow();
+      if (!await imageSupport(routeOf(agent), model)) throw new Error(`${agent} / ${model} does not support reference images; none were sent`);
+    }
+    return images;
+  } catch (e) { fail('REFERENCE_FAILED', e.message, [referenceHelp]); }
+};
 // The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
 const refineHtml = async (seed, change) => {
   const c = await agentOrThrow();
@@ -94,6 +105,7 @@ A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a
 view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.
 post copies the options into the board's mocks folder (the nearest .sign-off/, or --board), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) as that option's --link (a tappable Open under its mock; needs sign-off-axi 0.5.0+) and in the card's --tradeoff text as the fallback: the card's sandbox blocks a link inside the mock.
 ${assetHelp}
+${referenceHelp}
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
@@ -105,11 +117,12 @@ if (command === 'assets') {
 } else if (command === 'styles') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
 } else if (command === 'make') {
-  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' }, direction: { type: 'string' }, ...assetFlags });
+  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' }, direction: { type: 'string' }, ...referenceFlags, ...assetFlags });
   const prompt = positionals.join(' ').trim();
   const count = Number(values.count);
   if (!prompt || !values.out) fail('USAGE', 'make needs a prompt and --out <file.html>', ['Run `first-draft-axi make "<prompt>" --out <file.html>`']);
   if (!Number.isInteger(count) || count < 1 || count > 5) fail('USAGE', '--count is 1-5', ['Run `first-draft-axi make "<prompt>" --out <file.html> --count 3`']);
+  const images = await readReferences(values.ref);
   let assetSession;
   try { assetSession = await prepareAssets(values, prompt, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
   if (assetSession) {
@@ -127,7 +140,7 @@ if (command === 'assets') {
     let made;
     try {
       const assets = assetSession ? await assetSession.generate(numbered) : [];
-      made = await make({ prompt, ...c, assets, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
+      made = await make({ prompt, ...c, assets, references: images, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
     mkdirSync(dirname(out), { recursive: true });
@@ -160,7 +173,7 @@ if (command === 'assets') {
     fail(e.code, e.message, e.help);
   }
 } else if (command === 'refine') {
-  const { values, positionals } = flags(rest, { out: { type: 'string' } });
+  const { values, positionals } = flags(rest, { out: { type: 'string' }, ...referenceFlags });
   const [file, ...words] = positionals, change = words.join(' ').trim();
   if (!file || !change || !values.out) fail('USAGE', 'refine needs an option file, a change and --out <file.html>', ['Run `first-draft-axi refine <option.html> "<change>" --out <file.html>`']);
   if (resolve(values.out) === resolve(file)) fail('USAGE', '--out must be a new file, not the option being refined', ['Pass a different --out path']);
@@ -169,7 +182,8 @@ if (command === 'assets') {
   const c = await agentOrAsk();
   const started = Date.now();
   let made;
-  try { made = await make({ prompt: change, ...c, seed }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+  const images = await readReferences(values.ref);
+  try { made = await make({ prompt: change, ...c, seed, references: images }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
   const out = resolve(values.out);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, made.html);
@@ -177,7 +191,7 @@ if (command === 'assets') {
     ...(made.remote.length && { blocked_remote: made.remote }),
     help: [`See both: first-draft-axi view ${resolve(file)} ${out}`] }));
 } else if (command === 'doctor') {
-  const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor()];
+  const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor(), referenceDoctor()];
   let c;
   try { c = read(); } catch (e) { fail('CONFIG', e.message, [`Fix ${CONFIG()}, then run \`first-draft-axi doctor\``]); }
   const subscriptions = await readySubscriptions();

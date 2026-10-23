@@ -212,7 +212,10 @@ test('make runs on a BYOKit api-key route as well as a plan-key route', async (t
   await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
   assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
   assert.equal(seen.length, 0, 'doctor makes no paid call');
-  await run('make', 'a sign-in page', '--out', join(dir, 'k.html'), '--count', '1');
+  const reference = join(dir, 'reference.png');
+  await promisify(execFile)('convert', ['-size', '3x2', 'xc:purple', reference]);
+  await run('make', 'a sign-in page', '--out', join(dir, 'k.html'), '--count', '1', '--ref', reference);
+  assert.match(JSON.stringify(seen[0].body), /input_image.*data:image\/png;base64/);
   assert.equal(seen[0].auth, 'Bearer test-key');
   assert.match(readFileSync(join(dir, 'k.html'), 'utf8'), /Sign in to your notes/);
   await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
