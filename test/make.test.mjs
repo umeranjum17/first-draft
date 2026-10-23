@@ -99,7 +99,7 @@ test('CLI option controls reach the real engine and reject bad values before cal
     ['--out-dir', 'other'], ['--screens', 'A,,B'], ['--screens', Array(13).fill('A').join(',')],
     ['--screens', 'a'.repeat(101)], ['--screens', ' '], ['--model', 'bad model'], ['--model', ''],
     ['--direction', ' '], ['--style', ''], ['--brief-file', 'missing.md'], ['--brief-file', 'empty.md'],
-    ['--brief-file', 'binary.md'], ['--brief-file', 'large.md'], ['--out', ''], ['--unknown', 'x'],
+    ['--brief-file', 'binary.md'], ['--brief-file', 'large.md'], ['--brief-file', '.'], ['--out', ''], ['--unknown', 'x'],
   ]) await assert.rejects(run('make', 'Notes', '--out', 'bad.html', ...bad), (e) => {
     assert.equal(e.code, 1);
     assert.equal(JSON.parse(e.stdout).error.code, 'USAGE');
@@ -610,7 +610,7 @@ test('asset CLI previews without spending, then embeds one optimized image per p
   });
   t.after(() => server.close());
   const env = { ...process.env, PATH: bin, CI: '', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, ['--import', hook, CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, ['--import', hook, CLI, ...args, ...(args[0] === 'make' ? ['--options', '1'] : [])], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   for (provider of ['codex', 'higgsfield']) {
     const out = join(dir, provider + '.html');

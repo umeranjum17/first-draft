@@ -137,7 +137,7 @@ test('the engine writes App.jsx; the model is told its runtime error and fixes i
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'runs.html');
-  const { stdout } = await run('make', 'the home screen of a running app', '--out', out);
+  const { stdout } = await run('make', 'the home screen of a running app', '--out', out, '--options', '1');
   const made = JSON.parse(stdout).made;
   if (made.render_check === 'skipped') return t.skip('no Chrome or Chromium on this machine');
   assert.match(seen[0], /the host renders it once in a headless browser/); // the engine is told how its source becomes the board page

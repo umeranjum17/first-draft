@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
 import { isUtf8 } from 'node:buffer';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -136,7 +136,11 @@ if (command === 'assets') {
   let prompt = positionals.join(' ').trim();
   if (values['brief-file']) {
     let brief;
-    try { brief = readFileSync(values['brief-file']); } catch (e) { fail('USAGE', `cannot read --brief-file: ${e.message}`); }
+    try {
+      const info = statSync(values['brief-file']);
+      if (!info.isFile() || info.size > 100_000) fail('USAGE', '--brief-file must be a regular file at most 100 KB');
+      brief = readFileSync(values['brief-file']);
+    } catch (e) { fail('USAGE', `cannot read --brief-file: ${e.message}`); }
     if (!brief.length || brief.length > 100_000 || !brief.toString('utf8').trim() || !isUtf8(brief)) fail('USAGE', '--brief-file must be nonempty UTF-8 text, at most 100 KB');
     prompt = [prompt, brief.toString('utf8')].filter(Boolean).join('\n\n');
   }

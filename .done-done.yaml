@@ -2,6 +2,10 @@
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
 journeys:
+  cli-controls:
+    command: node journeys/cli-controls.mjs
+    core: true
+    timeout: 120m
   assets-recapture:
     command: node journeys/assets.mjs higgsfield --capture-only
     timeout: 10m

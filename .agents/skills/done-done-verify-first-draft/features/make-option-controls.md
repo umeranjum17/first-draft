@@ -2,7 +2,7 @@
 
 Drive the real installed CLI from an empty folder, with FIRST_DRAFT_HOME pointing to task-private config. Use the approved BYOKit route/model and its environment key, never copy credentials. Pack with `npm pack --pack-destination <scratch>` and install the tarball in an empty folder first.
 
-1. Run `first-draft-axi init --agent byokit:opencode-go --model muse-spark-1.3-contributor`, then doctor (no paid call).
+1. Run `first-draft-axi init --agent byokit:minimax:key` (MiniMax-M3.1-Flash-Preview), then doctor (no paid call). Live proof: `done-done run cli-controls` with the approved MiniMax environment-key wrapper through the memory gate; it packs, installs and generates without Firstmate as a runtime dependency.
 2. Write a brief for a notes app for Umer. Run `make --brief-file brief.md --options N --screens "Sign in,Notes" --style editorial --out-dir options-N` for N=1,3,5. Capture stdout/stderr and exit status, count the files, check each is self-contained HTML and visually inspect screen coverage. Model instructions are not deterministic guarantees.
 3. Confirm default count is 3, legacy `--count`/`--direction` work, `--model` overrides this run only, and saved config is unchanged. Regression journey: `node --test test/make.test.mjs` (local provider, no paid call).
 4. Try 0,6,fractional/non-numeric counts, conflicting aliases/output flags, blank strings, malformed screen lists, unreadable/empty/oversized/non-UTF-8 briefs and malformed model ids. Each must exit 1 with a clear JSON USAGE error before a model call or file write. Unknown provider model ids are rejected by the provider, not a local allowlist.
