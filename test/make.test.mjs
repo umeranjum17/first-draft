@@ -60,6 +60,57 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
 }
 
+test('CLI option controls reach the real engine and reject bad values before calling it', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-controls-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null);
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'configured-model');
+  const config = readFileSync(join(dir, 'config.json'), 'utf8');
+  writeFileSync(join(dir, 'brief.md'), 'A notes app for Umer');
+  for (const n of [1, 3, 5, undefined]) {
+    seen.length = 0;
+    const count = n ?? 3, out = join(dir, `options-${n ?? 'default'}`);
+    const { stdout } = await run('make', '--brief-file', 'brief.md', '--out-dir', out,
+      ...(n === undefined ? [] : ['--options', String(n)]), '--screens', 'Sign in, Notes', '--style', 'editorial', '--model', 'muse-spark-1.3-contributor');
+    const made = JSON.parse(stdout).made;
+    assert.equal(made.files.length, count);
+    assert.equal(seen.length, count * 3);
+    for (let i = 0; i < count; i++) {
+      assert.equal(made.files[i].file, join(out, `option-${i + 1}.html`));
+      assert.match(readFileSync(made.files[i].file, 'utf8'), /Content-Security-Policy/);
+      const sent = JSON.stringify(seen[i * 3].body);
+      assert.match(sent, /A notes app for Umer/);
+      assert.match(sent, /Required screens\/pages: Sign in, Notes/);
+      assert.match(sent, /Design direction: Editorial/);
+      assert.equal(seen[i * 3].body.model, 'muse-spark-1.3-contributor');
+    }
+  }
+  assert.equal(readFileSync(join(dir, 'config.json'), 'utf8'), config, 'model override is not saved');
+  const before = seen.length;
+  writeFileSync(join(dir, 'empty.md'), '  ');
+  writeFileSync(join(dir, 'binary.md'), Buffer.from([255]));
+  writeFileSync(join(dir, 'large.md'), 'a'.repeat(100_001));
+  for (const bad of [
+    ...['0', '6', '-1', '1.5', 'NaN', '1e0', ''].map((n) => ['--options', n]),
+    ['--count', '0'], ['--options', '1', '--count', '1'], ['--direction', 'x', '--style', 'y'],
+    ['--out-dir', 'other'], ['--screens', 'A,,B'], ['--screens', Array(13).fill('A').join(',')],
+    ['--screens', 'a'.repeat(101)], ['--screens', ' '], ['--model', 'bad model'], ['--model', ''],
+    ['--direction', ' '], ['--style', ''], ['--brief-file', 'missing.md'], ['--brief-file', 'empty.md'],
+    ['--brief-file', 'binary.md'], ['--brief-file', 'large.md'], ['--out', ''], ['--unknown', 'x'],
+  ]) await assert.rejects(run('make', 'Notes', '--out', 'bad.html', ...bad), (e) => {
+    assert.equal(e.code, 1);
+    assert.equal(JSON.parse(e.stdout).error.code, 'USAGE');
+    return true;
+  });
+  assert.equal(seen.length, before, 'invalid controls never call the provider');
+  assert.equal(existsSync(join(dir, 'bad.html')), false);
+  const help = (await run('make', '--help')).stdout;
+  for (const flag of ['options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', 'out', 'out-dir']) assert.ok(help.includes(`--${flag}`));
+});
+
 test('make requires verification after every batched mutation', async (t) => {
   for (const edit of [
     { command: 'create', file_text: PAGE.replace('Sign in', 'revised') },
@@ -71,7 +122,7 @@ test('make requires verification after every batched mutation', async (t) => {
     const seen = [], server = await standIn(seen, edit, doneFirst);
     t.after(() => server.close());
     const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
     const out = join(dir, 'mock.html');
     await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
     // An edit after done is never exported unchecked: make asks for done again and exports the version that passed.
@@ -88,7 +139,7 @@ test('make accepts a headless HTML5 document and injects the policy', async (t) 
   const seen = [], server = await standIn(seen, null, true, 'index.html', '<!doctype html><title>Notes</title><body><h1>Sign in to your notes</h1></body>');
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'headless.html');
   await run('make', 'a notes page', '--out', out);
@@ -103,7 +154,7 @@ test('a headless export with a page header still carries the policy inside head'
   const seen = [], server = await standIn(seen, null, true, 'index.html', '<!doctype html><body><header><nav>Notes</nav></header><main><h1>Sign in to your notes</h1></main></body>');
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'headless-header.html');
   await run('make', 'a notes page', '--out', out);
@@ -121,7 +172,7 @@ test('an unrelated done call keeps the verified export', async (t) => {
   const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE, [elsewhere]);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'kept.html');
   await run('make', 'a notes page', '--out', out);
@@ -140,7 +191,7 @@ test('edits outside index.html keep the verified export', async (t) => {
   const seen = [], server = await standIn(seen, null, true, 'index.html', PAGE, elsewhere);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'kept-edit.html');
   await run('make', 'a notes page', '--out', out);
@@ -154,7 +205,7 @@ test('make verifies an export path the model spells loosely', async (t) => {
   const seen = [], server = await standIn(seen, null, true, './index.html');
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'loose.html');
   await run('make', 'a notes page', '--out', out);
@@ -194,7 +245,7 @@ test('the editor escalates to create after three failed exact edits', async (t) 
   const seen = [], server = await guesser(seen);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'guess.html');
   await assert.rejects(run('make', 'a notes page', '--out', out), (e) => /engine did not verify index.html with done/.test(e.stdout));
@@ -208,7 +259,7 @@ test('make runs on a BYOKit api-key route as well as a plan-key route', async (t
   const seen = [], server = await standIn(seen);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENAI_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
   assert.equal(JSON.parse((await run('doctor')).stdout).ready, true);
   assert.equal(seen.length, 0, 'doctor makes no paid call');
@@ -231,7 +282,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   const server = await standIn(seen);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
 
   await assert.rejects(run('make', 'a sign-in page', '--out', join(dir, 'x.html')), (e) => /NO_AGENT/.test(e.stdout));
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
@@ -274,7 +325,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   const option = join(dir, 'sign-in-1.html'), original = readFileSync(option, 'utf8'), warm = [];
   const warmServer = await standIn(warm, null, true, 'index.html', PAGE.replace('Sign in to your notes', 'Welcome back, warm and cosy'));
   t.after(() => warmServer.close());
-  const warmRun = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env: { ...env, FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${warmServer.address().port}` } });
+  const warmRun = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env: { ...env, FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${warmServer.address().port}` } });
   const refined = JSON.parse((await warmRun('refine', option, 'warmer palette, add an empty state', '--out', join(dir, 'warm.html'))).stdout).refined;
   assert.equal(refined.from, option);
   assert.match(JSON.stringify(warm[0].body), /Revise this index\.html: warmer palette, add an empty state.*Current index\.html:.*Sign in to your notes/);
@@ -326,7 +377,7 @@ test('the engine prompt carries the export contract and the brand rule', async (
   const seen = [], server = await standIn(seen, null);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   await run('make', 'a notes page', '--out', join(dir, 'tools.html'));
   const sent = JSON.stringify(seen[0].body);
@@ -349,7 +400,7 @@ test('a named style is the whole direction of an option; several options take di
   const seen = [], server = await standIn(seen, null);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   assert.ok(JSON.parse((await run('styles')).stdout).styles.some((s) => s.id === 'editorial'));
   await run('make', 'a notes page', '--out', join(dir, 'a.html'), '--direction', 'editorial');
@@ -369,7 +420,7 @@ test('a prompt that asks for a landing page carries the landing-page brief, anot
   const seen = [], server = await standIn(seen, null);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir }); // a folder with no screenshot
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env, cwd: dir }); // a folder with no screenshot
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   await run('make', 'Make a landing page for my tool done-done. Its README is below.', '--out', join(dir, 'landing.html'));
   const sent = JSON.stringify(seen[0].body);
@@ -398,7 +449,7 @@ test('a landing page is told about the project\'s screenshot and gets it embedde
   const seen = [], server = await standIn(seen, null, true, 'index.html', page);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env, cwd: dir });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'landing.html');
   await run('make', 'Make a landing page for my tool first-draft.', '--out', out);
@@ -424,7 +475,7 @@ test('script-free prose is exported, not mistaken for script', async (t) => {
   const seen = [], server = await standIn(seen, null, true, 'index.html', prose);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'prose.html');
   await run('make', 'a JavaScript guide page', '--out', out);
@@ -439,7 +490,7 @@ test('a view call that carries file_text is made as a create, one with old_str a
   const seen = [], server = await standIn(seen, { command: 'view', old_str: 'Sign in', new_str: 'revised' }, false);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'view.html');
   await run('make', 'view fixture page', '--out', out);
@@ -460,7 +511,7 @@ test('a model that keeps patching past the turn cap still gives the page it wrot
   const seen = [], server = await guesser(seen, true);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'capped.html');
   const { stdout } = await run('make', 'a notes page', '--out', out);
@@ -487,7 +538,7 @@ test('a call that times out, one whose connection closes and one whose stream is
     serve(req, res);
   }); // turn 1's first call never answers; turn 2's first call drops; turn 3's first call is cut mid-stream after HTTP 200
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   writeFileSync(join(dir, 'config.json'), JSON.stringify({ ...JSON.parse(readFileSync(join(dir, 'config.json'), 'utf8')), agent_timeout: '1s' }));
   const out = join(dir, 'retried.html');

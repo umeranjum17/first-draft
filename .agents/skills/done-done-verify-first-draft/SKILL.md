@@ -30,6 +30,7 @@ Harness: A shell runs the CLI and curl for the url. A browser tool opens the url
 - [Comment pins: read from and added to the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design and open the view, or press Comment on the canvas and tap a spot (`src/view.mjs`, `src/view/app.js`)
 - [View startup output and error codes](features/view-startup-output-and-error-codes.md): Run the view command in a shell (`src/cli.mjs`)
 - [Make a landing page from a README](features/make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README (`src/make.mjs`)
+- [Make option count and brief controls](features/make-option-controls.md): Run the installed CLI with `--options 1`, `3`, `5`, then default count; combine `--screens`, `--brief-file`, `--model`, `--style` and `--out-dir`; check files and errors (`src/cli.mjs`, `src/make.mjs`)
 - [Make with a named design style](features/make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>` (`src/styles.mjs`)
 - [Make render check at 390 and in dark](features/make-render-check-390-and-dark.md): Run `first-draft-axi make` on the real model route with Chrome or Chromium installed (`src/render-check.mjs`)
 - [Installed Claude subscription route](features/installed-claude.md): Run init/doctor/make/refine with `byokit:claude`; doctor spends nothing and API-key sign-ins are refused (`src/byokit.mjs`, `test/claude.test.mjs`)

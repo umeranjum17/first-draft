@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
+import { isUtf8 } from 'node:buffer';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -18,7 +19,7 @@ const PICK = 'which BYOKit route and model to use (first-draft picks none), then
 const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
-// What each option takes when --count asks for several and the person names no direction: styles from different families, so options differ in kind.
+// What each option takes when --options asks for several and the person names no direction: styles from different families, so options differ in kind.
 const DIRECTIONS = ['editorial', 'oled-neon', 'bento', 'organic', 'neobrutalism'];
 
 const read = () => {
@@ -51,8 +52,9 @@ const flags = (args, options) => {
     return parseArgs({ args, options, allowPositionals: true });
   } catch (e) { fail('USAGE', e.message, ['Run `first-draft-axi --help`']); }
 };
-const agentOrThrow = async () => {
+const agentOrThrow = async (model) => {
   const c = read();
+  if (model) c.model = model;
   // `shown` is what the view tells a person: no config path, and the set-up hint worded for them.
   const no = (code, message, shown = message) => Object.assign(new Error(message), { code, help: [ASK], shown: { error: shown, help: [`Choose ${PICK}`] } });
   if (!c.agent) {
@@ -67,14 +69,14 @@ const agentOrThrow = async () => {
   if (!c.model) throw no('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`, `No model is set for ${c.agent} yet.`);
   return c;
 };
-const agentOrAsk = async () => {
-  try { return await agentOrThrow(); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
+const agentOrAsk = async (model) => {
+  try { return await agentOrThrow(model); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
 };
-const readReferences = async (paths) => {
+const readReferences = async (paths, modelOverride) => {
   try {
     const images = await references(paths);
     if (images.length) {
-      const { agent, model } = await agentOrThrow();
+      const { agent, model } = await agentOrThrow(modelOverride);
       if (!await imageSupport(routeOf(agent), model)) throw new Error(`${agent} / ${model} does not support reference images; none were sent`);
     }
     return images;
@@ -92,7 +94,14 @@ const refineHtml = async (seed, change) => {
 const HELP = `usage: first-draft-axi <command> [flags]
 commands[8]:
   assets                              detect installed asset providers without spending
-  make "<prompt>" --out <file.html> [--count N] [--direction "<look>"]   make N design mocks: self-contained HTML pages (one engine run each); --direction names the look all of them take (a style, a brand, a reference), else several options each get a different one
+  make "<prompt>" (--out <file.html> | --out-dir <folder>) [flags]   make self-contained HTML design options (one engine run each)
+    --options <n>      1-5 options (default 3); --count is an alias; cannot combine them
+    --direction <look> named style or free-text direction for all options; --style is an alias; otherwise options vary
+    --screens <names>  comma-separated screen/page names to cover (1-12); default: infer from brief
+    --brief-file <file> append a nonempty UTF-8 brief (up to 100 KB); prompt may be omitted
+    --model <id>       override the configured model for this run only (same BYOKit route)
+    --out <file.html>  output file; multiple options add -1, -2, etc.; {i} is replaced by the option number
+    --out-dir <folder> alternative to --out; writes option-1.html, option-2.html, etc.
   styles                              list the named design styles that make --direction <id> takes (or write your own direction in words)
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
@@ -109,7 +118,7 @@ ${referenceHelp}
 Config: $FIRST_DRAFT_HOME/config.json (default ~/.first-draft).`;
 
 const [command, ...rest] = process.argv.slice(2);
-if (!command || command === '--help' || command === '-h') { console.log(HELP); process.exit(0); }
+if (!command || command === '--help' || command === '-h' || rest.includes('--help') || rest.includes('-h')) { console.log(HELP); process.exit(0); }
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
 if (command === 'assets') {
@@ -117,34 +126,50 @@ if (command === 'assets') {
 } else if (command === 'styles') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
 } else if (command === 'make') {
-  const { values, positionals } = flags(rest, { out: { type: 'string' }, count: { type: 'string', default: '1' }, direction: { type: 'string' }, ...referenceFlags, ...assetFlags });
-  const prompt = positionals.join(' ').trim();
-  const count = Number(values.count);
-  if (!prompt || !values.out) fail('USAGE', 'make needs a prompt and --out <file.html>', ['Run `first-draft-axi make "<prompt>" --out <file.html>`']);
-  if (!Number.isInteger(count) || count < 1 || count > 5) fail('USAGE', '--count is 1-5', ['Run `first-draft-axi make "<prompt>" --out <file.html> --count 3`']);
-  const images = await readReferences(values.ref);
+  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model'].map((name) => [name, { type: 'string' }])) });
+  for (const [name, value] of Object.entries(values)) if (typeof value === 'string' && !value.trim()) fail('USAGE', `--${name} must not be empty`);
+  for (const [a, b] of [['options', 'count'], ['direction', 'style'], ['out', 'out-dir']]) {
+    if (values[a] !== undefined && values[b] !== undefined) fail('USAGE', `use --${a} or --${b}, not both`);
+  }
+  const amount = values.options ?? values.count ?? '3', count = Number(amount);
+  if (!/^[1-5]$/.test(amount)) fail('USAGE', '--options / --count must be an integer from 1 to 5 (default 3)');
+  let prompt = positionals.join(' ').trim();
+  if (values['brief-file']) {
+    let brief;
+    try { brief = readFileSync(values['brief-file']); } catch (e) { fail('USAGE', `cannot read --brief-file: ${e.message}`); }
+    if (!brief.length || brief.length > 100_000 || !brief.toString('utf8').trim() || !isUtf8(brief)) fail('USAGE', '--brief-file must be nonempty UTF-8 text, at most 100 KB');
+    prompt = [prompt, brief.toString('utf8')].filter(Boolean).join('\n\n');
+  }
+  if (!prompt || !(values.out || values['out-dir'])) fail('USAGE', 'make needs a prompt or --brief-file, and --out <file.html> or --out-dir <folder>');
+  const screens = values.screens?.split(',').map((s) => s.trim());
+  if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
+  if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
+  const outPath = values.out ?? join(values['out-dir'], 'option-{i}.html');
+  const images = await readReferences(values.ref, values.model);
   let assetSession;
   try { assetSession = await prepareAssets(values, prompt, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
   if (assetSession) {
     if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
     process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
   }
-  const c = await agentOrAsk();
+  const c = await agentOrAsk(values.model);
   const started = Date.now();
   const files = [];
   let tokens_in = 0, tokens_out = 0;
   const blocked = new Set(), cut = [];
   let render_check = 'checked';
   for (let i = 0; i < count; i++) {
-    const numbered = values.out.includes('{i}') ? values.out.replace('{i}', String(i + 1)) : count > 1 ? values.out.slice(0, -extname(values.out).length || undefined) + `-${i + 1}` + extname(values.out) : values.out;
+    const numbered = outPath.includes('{i}') ? outPath.replaceAll('{i}', String(i + 1)) : count > 1 ? outPath.slice(0, -extname(outPath).length || undefined) + `-${i + 1}` + extname(outPath) : outPath;
     let made;
     try {
       const assets = assetSession ? await assetSession.generate(numbered) : [];
-      made = await make({ prompt, ...c, assets, references: images, direction: values.direction ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
+      made = await make({ prompt, ...c, screens, assets, references: images, direction: values.direction ?? values.style ?? (count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
-    mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, made.html);
+    try {
+      mkdirSync(dirname(out), { recursive: true });
+      writeFileSync(out, made.html);
+    } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
     files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools });
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
@@ -156,8 +181,8 @@ if (command === 'assets') {
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
     help: [...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
-      `See them on the tailnet: first-draft-axi view ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out}`,
-      `Post them for review: first-draft-axi post ${values.out.includes('{i}') ? files.map((f) => f.file).join(' ') : values.out} --title "<question>" --recommend a`] }));} else if (command === 'post') {
+      `See them on the tailnet: first-draft-axi view ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath}`,
+      `Post them for review: first-draft-axi post ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath} --title "<question>" --recommend a`] }));} else if (command === 'post') {
   const { values, positionals } = flags(rest, { title: { type: 'string' }, recommend: { type: 'string' }, evidence: { type: 'boolean' }, media: { type: 'string', multiple: true }, option: { type: 'string', multiple: true }, tradeoff: { type: 'string' }, key: { type: 'string' }, board: { type: 'string' }, host: { type: 'string' }, port: { type: 'string' } });
   const files = designFiles(positionals);
   if (!positionals.length || !values.title || !(values.recommend || values.evidence)) fail('USAGE', 'post needs a design, --title and --recommend (or --evidence)', ['Run `first-draft-axi post <design> --title "<question>" --recommend a`', 'Journeys, tests and demos pick nothing: add --evidence --media <screenshot> instead of --recommend']);
