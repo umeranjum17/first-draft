@@ -22,7 +22,7 @@ On a ChatGPT subscription, use your installed, signed-in Codex CLI instead: `fir
 
 ## Choose a direction, not just a screenshot
 
-- **Make options.** Add `--count 3` to the `make` command to get three directions. Each is a self-contained HTML file, not app code, and with no `--direction` each takes a different named style (`first-draft-axi styles` lists them).
+- **Make options.** `make` generates three directions by default; use `--options 1` for one or `--options 5` for five. Each is a self-contained HTML file, not app code, and with no `--direction` each takes a different named style (`first-draft-axi styles` lists them).
 - **Open one on the canvas.** Studio shows one option at desktop (1280px) and phone (390px) side by side, each with its own Play, beside its options, comments and a brief for your next change. Desktop or Phone shows one device; a phone-width window shows the phone.
 - **Comment on it.** Press Comment (in the ⋯ menu on a phone) and tap the spot you mean: your comment is saved next to the design and shows as a numbered pin beside the frame.
 - **Look closer.** Fullscreen gives the option the whole window; Play is one tap away.
@@ -88,10 +88,29 @@ The adapter contract is `detect()`, `estimate({prompt}) → {amount,unit,detail}
 
 Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pinned engine and model boundary.
 
+### Make flags
+
+| Flag | Behavior / default |
+| --- | --- |
+| `--options <n>` / `--count <n>` | Integer 1–5; default 3. Do not combine aliases. |
+| `--direction <look>` / `--style <look>` | Named style or free-text direction for every option. Default: different styles for multiple options. Do not combine aliases. |
+| `--screens <names>` | 1–12 comma-separated screen/page names, each 1–100 characters; asks the model to include each with ids and navigation. Default: infer from brief. |
+| `--brief-file <file>` | Append nonempty UTF-8 text, at most 100 KB; positional prompt becomes optional. No URLs or images are fetched. |
+| `--model <id>` | This run's model on the configured BYOKit route; does not change saved config. Provider validates availability. |
+| `--out <file.html>` | Output file; multiple options add `-1`, `-2`, etc. Every `{i}` is replaced by the option number. |
+| `--out-dir <folder>` | Alternative to `--out`; writes `option-1.html`, etc. One output flag is required. |
+
+Empty values, invalid counts, conflicting aliases, and unreadable briefs fail before generation. Screen coverage and style are model instructions, not deterministic guarantees. Output stays responsive at 390px/1280px with light/dark themes (dark-first styles stay dark); no theme, size, numeric seed or variation-strength switches are exposed.
+
+```sh
+first-draft-axi make --brief-file brief.md --options 5 \
+  --screens "Sign in,Notes" --style editorial --out-dir drafts
+```
+
 <details>
 <summary><strong>Files, refinement and viewer routes</strong></summary>
 
-`make --count N` accepts 1–5 options. `--out notes.html --count 3` writes `notes-1.html` through `notes-3.html`. Pass the original `notes.html` path to `view`; it finds those numbered options. You can also pass a folder or individual HTML files.
+`make --options N` accepts 1–5 options (default **3**); `--count` remains an alias. `--out notes.html --options 3` writes `notes-1.html` through `notes-3.html`; `--options 1` writes `notes.html`. Pass the original `notes.html` path to `view`; it finds those numbered options. You can also pass a folder or individual HTML files.
 
 ```sh
 first-draft-axi refine \
