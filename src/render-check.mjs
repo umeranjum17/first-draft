@@ -1,6 +1,6 @@
-// The render check: a page is rendered once headless at 390px, in light and in dark, and the
-// two facts that break a landing page on a phone are read off that render — the page must fit
-// 390px, and it must have a dark theme (or, for a dark-first style, be dark). The browser is the one already on the machine: no
+// Render the whole file and each screen independently at 390x844 and 1280x800, in light/dark.
+// Each must fit, remain visible and have both themes (or be dark for a named dark-first style).
+// The browser is the one already on the machine: no
 // dependency is added and no browser is bundled. With no browser the check is skipped, never
 // failed. The same browser draws the engine's source (App.jsx and its runtime) once, and the
 // page it drew is kept as static HTML: that snapshot is what the check and the board see.
@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const PHONE = 390; // the width a page must fit
+const VIEWPORTS = [[390, 844], [1280, 800]];
 const DARK_BELOW = 0.18; // a page background lighter than this (0 black, 1 white) is a light page
 const NAMES = ['google-chrome-stable', 'google-chrome', 'chromium', 'chromium-browser', 'chrome', 'chromium-headless-shell', 'headless-shell'];
 const SPOTS = ['/opt/google/chrome/chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/lib/chromium/chromium', '/snap/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
@@ -59,9 +59,9 @@ const connect = async (url) => {
   return { send, once, on, close: () => ws.close() };
 };
 
-// What the page measures at 390px: its width, and the elements that push it wider.
+// Measure against the actual viewport, not a fixed phone width.
 const measurePage = () => {
-  const vw = 390;
+  const vw = innerWidth;
   const clipped = (el) => {
     for (let p = el.parentElement; p; p = p.parentElement) {
       const o = getComputedStyle(p).overflowX;
@@ -103,6 +103,7 @@ const paintSignature = () => {
   const eat = (s) => { for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } };
   for (const el of document.querySelectorAll('*')) {
     const s = getComputedStyle(el);
+    if (!el.getClientRects().length || s.visibility === 'hidden') continue;
     const r = el.getBoundingClientRect();
     eat([el.tagName, el.id, typeof el.className === 'string' ? el.className : '', s.color, s.backgroundColor, s.borderTopColor, s.borderRightColor, s.borderBottomColor, s.borderLeftColor, s.backgroundImage, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(' '));
   }
@@ -186,17 +187,19 @@ export class Renderer {
 
   skip(why) {
     this.state = 'skipped';
-    this.warning = `the headless browser could not start (${why}), so the ${PHONE}px and dark-theme render check was skipped`;
+    this.warning = `the headless browser could not start (${why}), so the 390px/1280px light/dark render checks were skipped`;
     this.close();
     this.onWarn(this.warning);
   }
 
-  async read(c) {
+  async read(c, screen) {
     const measured = await this.eval(c, `(${measurePage.toString()})()`);
     const sig = await this.eval(c, `(${paintSignature.toString()})()`);
     const lightness = await this.eval(c, `(${pageLightness.toString()})()`);
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
-    return { measured, sig, lightness, png: Buffer.from(shot.data, 'base64') };
+    const layout = screen === null ? null : await this.eval(c, `(()=>{const e=document.querySelectorAll('[data-oc-screen]')[${screen}],r=e.getBoundingClientRect();return {width:r.width,height:r.height,visible:getComputedStyle(e).visibility!=='hidden'}})()`);
+    const visible = screen === null || (layout.width > 0 && layout.height > 0 && layout.visible);
+    return { measured, sig, lightness, visible, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -205,22 +208,29 @@ export class Renderer {
     return r.result.value;
   }
 
-  // The page in light, then the same page in dark: two renders of one file.
+  // One file, both device sizes; isolate screens the same way the preview overlay does.
   async render(html) {
     const file = join(this.dir, `page-${++this.n}.html`);
     writeFileSync(file, html);
-    const c = this.client;
-    await c.send('Emulation.setDeviceMetricsOverride', { width: PHONE, height: 844, deviceScaleFactor: 1, mobile: false });
-    await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'light' }] }); // light is named, not left to the machine's own theme
-    const loaded = c.once('Page.loadEventFired');
-    await c.send('Page.navigate', { url: `file://${file}` });
-    await loaded;
-    await this.settle(c);
-    const light = await this.read(c);
-    await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
-    await this.settle(c);
-    const dark = await this.read(c);
-    return { light, dark };
+    const c = this.client, pairs = [];
+    for (const [width, height] of VIEWPORTS) {
+      await c.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      const loaded = c.once('Page.loadEventFired');
+      await c.send('Page.navigate', { url: `file://${file}` });
+      await loaded;
+      const screens = await this.eval(c, `(()=>{const s=document.createElement('style');s.textContent='[data-oc-screen][hidden]{display:none!important}';document.head.append(s);return [...document.querySelectorAll('[data-oc-screen]')].map((e,i)=>e.id||e.getAttribute('data-oc-screen')||String(i+1))})()`);
+      for (const screen of [null, ...screens.keys()]) {
+        await this.eval(c, `(()=>{const n=${JSON.stringify(screen)},id=${JSON.stringify(screen === null ? '' : screens[screen])};document.querySelectorAll('[data-oc-screen]').forEach((e,i)=>e.hidden=n!==null&&i!==n);if(n===null)document.documentElement.removeAttribute('data-oc-active-screen');else document.documentElement.setAttribute('data-oc-active-screen',id);location.hash=id;scrollTo(0,0)})()`);
+        const shots = {};
+        for (const theme of ['light', 'dark']) {
+          await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: theme }] });
+          await this.settle(c);
+          shots[theme] = await this.read(c, screen);
+        }
+        pairs.push({ width, height, screen: screen === null ? null : screens[screen], ...shots });
+      }
+    }
+    return pairs;
   }
 
   async settle(c) {
@@ -259,17 +269,23 @@ export class Renderer {
       try { await this.start(); shots = await this.render(html); }
       catch (e2) { this.skip(e2.message); return errors; }
     }
-    const { light, dark } = shots;
-    if (light.measured.scrollWidth > PHONE) {
-      const worst = light.measured.worst.tag ? light.measured.worst : null;
-      errors.push({ source: 'render', message: `the page is ${light.measured.scrollWidth}px wide on a ${PHONE}px phone; it must fit ${PHONE}px. ${light.measured.count} element(s) overflow, the widest is ${worst ? name(worst) : 'an unknown element'} at ${worst ? worst.right : light.measured.scrollWidth}px. The overflow comes from ${light.measured.causes.map(name).join(', ') || 'the elements above'}: wrap a pre or table in a container with overflow-x:auto, write grid columns as minmax(0,1fr) instead of 1fr, give grid and flex children min-width:0, and let long text wrap. Then call done again.` });
-    }
-    if (this.dark) {
-      // A dark-first style is dark by default, so the page is dark in light and in dark: a page that renders light is the failure, and the same paint in both is right.
-      const light_ = light.lightness > DARK_BELOW ? 'light' : dark.lightness > DARK_BELOW ? 'dark' : null;
-      if (light_) errors.push({ source: 'render', message: `the style is dark-first but the page paints a light background in ${light_} (background lightness ${(light_ === 'light' ? light : dark).lightness.toFixed(2)} of 1). Make the page dark by default: a near-black page background with light text on :root, no light palette and no override that turns the background light, set color-scheme: dark, then call done again.` });
-    } else if (light.png.equals(dark.png) || light.sig === dark.sig) {
-      errors.push({ source: 'render', message: `the page has no real light and dark themes: it paints the same in light and in dark. Put a light palette in :root custom properties (a light background, dark text), override every colour in a @media (prefers-color-scheme: dark) block with a dark palette (a dark background, light text), and set color-scheme: light dark, then call done again.` });
+    for (const { width, height, screen, light, dark } of shots) {
+      const context = `${screen === null ? 'the page' : `screen ${JSON.stringify(screen)}`} at ${width}x${height}`;
+      for (const [theme, shot] of Object.entries({ light, dark })) {
+        if (!shot.visible) errors.push({ source: 'render', message: `${context} in ${theme} has no visible layout. Each screen must work independently on phone and desktop. Then call done again.` });
+        // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
+        if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
+        if (shot.measured.scrollWidth <= width) continue;
+        const { measured: m } = shot, worst = m.worst.tag ? m.worst : null;
+        errors.push({ source: 'render', message: `${context} in ${theme}: the page is ${m.scrollWidth}px wide on a ${width}px ${width === 390 ? 'phone' : 'desktop'}; it must fit ${width}px. ${m.count} element(s) overflow, the widest is ${worst ? name(worst) : 'an unknown element'} at ${worst ? worst.right : m.scrollWidth}px. The overflow comes from ${m.causes.map(name).join(', ') || 'the elements above'}: wrap a pre or table in a container with overflow-x:auto, write grid columns as minmax(0,1fr), give grid and flex children min-width:0, and let long text wrap. Then call done again.` });
+      }
+      if (!light.visible || !dark.visible) continue; // The layout error already refuses this screen.
+      if (this.dark) {
+        const light_ = light.lightness > DARK_BELOW ? 'light' : dark.lightness > DARK_BELOW ? 'dark' : null;
+        if (light_) errors.push({ source: 'render', message: `${context}: the style is dark-first but the page paints a light background in ${light_} (background lightness ${(light_ === 'light' ? light : dark).lightness.toFixed(2)} of 1). Make the page dark by default: a near-black page background with light text on :root, no light palette and no override that turns the background light, set color-scheme: dark, then call done again.` });
+      } else if (light.png.equals(dark.png) || light.sig === dark.sig) {
+        errors.push({ source: 'render', message: `${context}: the page has no real light and dark themes: it paints the same in light and in dark. Put a light palette in :root custom properties (a light background, dark text), override every colour in a @media (prefers-color-scheme: dark) block with a dark palette (a dark background, light text), and set color-scheme: light dark, then call done again.` });
+      }
     }
     return errors;
   }
@@ -280,7 +296,7 @@ export class Renderer {
 export const renderCheck = (onWarn = () => {}, { dark = false } = {}) => {
   const bin = findBrowser();
   if (!bin) {
-    const warning = `no Chrome or Chromium was found on this machine, so the ${PHONE}px and dark-theme render check was skipped`;
+    const warning = 'no Chrome or Chromium was found on this machine, so the 390px/1280px light/dark render checks were skipped';
     onWarn(warning);
     return { status: 'skipped', warning, drawing: false, verify: async () => [], close: () => {} };
   }

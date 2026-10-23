@@ -1,6 +1,5 @@
-// The render check on the real CLI: the page is rendered headless at 390px in light and in dark,
-// and a page that overflows on a phone or has no dark theme fails done, so the model fixes it
-// inside the loop. The browser is the one on this machine; with none the check is skipped.
+// Real CLI/browser journey: every screen at phone/desktop sizes, light/dark; invalid layouts
+// and themes fail done and are repaired inside the engine loop. No paid model calls.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -15,6 +14,7 @@ const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const BROKEN = '<!doctype html><html><head><title>Notes</title><style>body{margin:0;font:16px/1.5 system-ui,sans-serif}.card{width:820px;padding:8px;background:#eee}</style></head><body><h1>Notes</h1><div class="card">A card far too wide for a phone.</div></body></html>';
 const FIXED = '<!doctype html><html><head><title>Notes</title><style>:root{--bg:#fff;--fg:#111}@media (prefers-color-scheme: dark){:root{--bg:#101418;--fg:#e8eaed}}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}.card{max-width:100%;padding:8px;background:#eee}</style></head><body><h1>Notes</h1><div class="card">A card that fits the phone.</div></body></html>';
 
+const MULTI = '<!doctype html><html><head><title>Notes</title><style>:root{--bg:#fff;--fg:#111}@media(prefers-color-scheme:dark){:root{--bg:#101418;--fg:#e8eaed}}body{margin:0;background:#fff;color:#111}section{box-sizing:border-box;min-height:100vh;padding:16px;background:var(--bg);color:var(--fg)}.card{min-width:0}@media(min-width:1000px){.card{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}</style></head><body><section id="home" data-oc-screen="home"><h1>Notes</h1><a href="#detail">Open note</a></section><section id="detail" data-oc-screen="detail"><h1>Launch checklist</h1><div class="card"><p>Check brief</p><p>Review screens</p></div><a href="#home">Back</a></section></body></html>';
 const DARK_ONLY = '<!doctype html><html><head><title>Notes</title><style>:root{color-scheme:dark}body{margin:0;font:16px/1.5 system-ui,sans-serif;background:#050505;color:#e8ffe8}.card{max-width:100%;padding:8px;background:#111}</style></head><body><h1>Notes</h1><div class="card">A dark page on a phone.</div></body></html>';
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -45,29 +45,33 @@ function standIn(seen, [first, second] = [BROKEN, FIXED], path = 'index.html') {
 
 const home = (dir) => ({ ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key' });
 
-test('a page that overflows at 390 or has no dark theme fails done, and the model fixes it in the loop', async (t) => {
+test('every screen must fit phone and desktop in both themes, and errors are repaired in the loop', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-render-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const seen = [], server = await standIn(seen);
-  t.after(() => server.close());
-  const env = { ...home(dir), FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
-  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-  const out = join(dir, 'notes.html');
-  const { stdout } = await run('make', 'a notes page', '--out', out);
-  const made = JSON.parse(stdout).made;
-  if (made.render_check === 'skipped') return t.skip('no Chrome or Chromium on this machine');
-  assert.equal(made.render_check, 'checked');
-  // The failure reached the model: it names the widest offending element and the missing dark theme.
-  const told = seen.slice(3).join('');
-  assert.match(told, /has_errors/);
-  assert.match(told, /px wide on a 390px phone/);
-  assert.match(told, /<div class=\\+"card\\+">/); // the body is JSON, so its quotes are escaped
-  assert.match(told, /no real light and dark themes/);
-  // The model fixed both, so the run ended with a page that fits and has a dark theme.
-  const html = readFileSync(out, 'utf8');
-  assert.match(html, /A card that fits the phone/);
-  assert.match(html, /prefers-color-scheme/);
+  const cases = [
+    [BROKEN, FIXED, /px wide on a 390px phone/, /no real light and dark themes/],
+    [MULTI.replace('</style>', '@media(min-width:1000px) and (prefers-color-scheme:dark){#detail .card{width:1600px}}</style>'), MULTI, /1280px desktop/, /dark/],
+    [MULTI.replace('</style>', '@media(min-width:1000px){#detail{display:none}}</style>'), MULTI, /screen.*detail.*1280/, /no visible layout/],
+    [MULTI.replace('</style>', '#detail{background:#fff;color:#111}</style>'), MULTI, /screen.*detail/, /no real light and dark themes/],
+    [MULTI.replace('</style>', '#detail{max-width:390px}</style>'), MULTI, /screen.*detail.*1280/, /still phone-sized/],
+  ];
+  for (const [broken, fixed, widthError, themeError] of cases) {
+    const seen = [], server = await standIn(seen, [broken, fixed]);
+    t.after(() => server.close());
+    const env = { ...home(dir), FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
+    await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+    const out = join(dir, 'notes.html');
+    const { stdout } = await run('make', 'a notes page', '--out', out);
+    if (JSON.parse(stdout).made.render_check === 'skipped') return t.skip('no Chrome or Chromium on this machine');
+    // Inspect real tool-result output sent over HTTP, not matching words in tool schemas/system instructions.
+    const told = seen.slice(3).flatMap(s => JSON.parse(s).input ?? []).filter(m => m.type === 'function_call_output').map(m => typeof m.output === 'string' ? m.output : JSON.stringify(m.output)).join('');
+    assert.match(told, /has_errors/);
+    assert.match(told, widthError);
+    assert.match(told, themeError);
+    assert.match(readFileSync(out, 'utf8'), /prefers-color-scheme/);
+    if (fixed === MULTI) assert.equal((readFileSync(out, 'utf8').match(/data-oc-screen=/g) ?? []).length, 2, 'repair keeps both screens');
+  }
 });
 
 test('with no browser on the machine the render check is skipped with one warning line', async (t) => {

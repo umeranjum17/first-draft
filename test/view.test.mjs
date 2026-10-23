@@ -39,13 +39,18 @@ const dom = (dir, url) => promisify(execFile)(CHROME, ['--headless', '--no-sandb
 // Both (the default on a wide window) is proven by journeys/studio.mjs: --dump-dom's window can be 0 wide, so it is checked there at a set width.
 test('the Studio viewport switch shows the option on the picked device only, and Play opens on it', { skip: !CHROME && 'no Chrome on PATH' }, async (t) => {
   const dir = temp(t);
-  writeFileSync(join(dir, 'a-1.html'), MOCK);
+  writeFileSync(join(dir, 'a-1.html'), SCREENS);
   const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
   t.after(v.close);
   const shows = (html) => ({ phone: /class="phone"/.test(html), desktop: /class="artboard"/.test(html), current: html.match(/<a href="#\/o\/1\/(phone|desktop)" aria-current="true">/)?.[1],
     play: [...html.matchAll(/href="#\/o\/1\/play\/(phone|desktop)"/g)].map((m) => m[1]).join() });
   assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/phone`)), { phone: true, desktop: false, current: 'phone', play: 'phone' }); // never a desktop pane under the phone
   assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/desktop`)), { phone: false, desktop: true, current: 'desktop', play: 'desktop' });
+  for (const device of ['phone', 'desktop']) {
+    const played = await dom(dir, `${v.url}?screen=home#/o/1/play/${device}`);
+    assert.match(played, /aria-current="true">home<\/button>/, 'the selected screen opens on either device');
+    assert.match(played, /\?play&amp;screen=home/, 'the real frame receives the screen route');
+  }
 });
 
 test('the canvas and Play fit one device to the stage without upscaling, and defaults to the device that fits the viewport', () => {
@@ -118,6 +123,13 @@ test('Play serves the screen bridge inside the same sandbox, and only when asked
   assert.ok(html.lastIndexOf('__firstDraft') < html.lastIndexOf('</body>'));
   assert.equal(play.headers.get('content-security-policy'), (await fetch(`${v.frames}/o/1`)).headers.get('content-security-policy'));
   assert.match(await (await fetch(`${v.frames}/o/2?play`)).text(), /One screen[\s\S]*__firstDraft/); // no screens: Play still opens it
+  const selected = await (await fetch(`${v.frames}/o/1?play&screen=home`)).text();
+  assert.match(selected, /<html[^>]*data-oc-active-screen="home"/);
+  assert.match(selected, /__firstDraft/, 'extra screen query must not remove the Play bridge');
+  assert.equal((await fetch(`${v.frames}/o/1?play&screen=bad%20id`)).status, 400);
+  const quoted = await (await fetch(`${v.frames}/o/1?screen=${encodeURIComponent('\"><script>alert(1)</script>')}`)).text();
+  assert.match(quoted, /data-oc-active-screen="&#34;&#62;&#60;script&#62;/);
+  assert.doesNotMatch(quoted, /<script>alert\(1\)<\/script>/, 'screen query cannot inject markup');
 });
 
 test('an option that is a directory answers with an error and the view keeps serving', async (t) => {

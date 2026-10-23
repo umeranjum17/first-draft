@@ -4,7 +4,7 @@ Part of the first-draft verification map. Source: `src/view/app.js` (`canvas`, `
 
 ## How to get to it (user POV)
 
-From the grid, click an option card, or open <url>#/o/1. The viewport switch opens <url>#/o/1/both (wide windows only), <url>#/o/1/desktop and <url>#/o/1/phone.
+From the grid, click an option card, or open <url>#/o/1. The viewport switch opens <url>#/o/1/both (wide windows only), <url>#/o/1/desktop and <url>#/o/1/phone. Add `?screen=<id>` before the hash to show that same screen in both frames, e.g. `<url>?screen=detail#/o/1/both`. It is initial preview state, not a modified export; the sandbox/CSP remain unchanged.
 
 ## Driving it
 
