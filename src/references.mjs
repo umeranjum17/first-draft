@@ -6,11 +6,11 @@ import { promisify } from 'node:util';
 const MAX = 5_000_000, TOTAL = 10_000_000, COUNT = 6;
 const TYPES = { '.png': 'png', '.jpg': 'jpeg', '.jpeg': 'jpeg', '.webp': 'webp' };
 const converter = () => ['magick', 'convert'].flatMap((name) => (process.env.PATH ?? '').split(delimiter).map((dir) => resolve(dir, name))).find((file) => { try { accessSync(file, constants.X_OK); return true; } catch { return false; } });
-export const referenceFlags = { ref: { type: 'string', multiple: true } };
-export const referenceHelp = 'References: --ref <local.png|jpg|webp> (repeatable, up to 6; 5 MB each, 10 MB total). Needs ImageMagick. Visual input only: not embedded unless requested.';
+export const referenceFlags = { ref: { type: 'string', multiple: true }, like: { type: 'string' }, project: { type: 'string' }, 'no-references': { type: 'boolean' } };
+export const referenceHelp = 'References: --ref <local.png|jpg|webp> (repeatable, up to 6; 5 MB each, 10 MB total). Needs ImageMagick. Visual input only: not embedded unless requested. Named comparisons (like Vercel, Apple-like, style of Linear) use your model to discover and capture public references. Or pass --like <brand-or-https-url>. Cache: <project>/.first-draft/refs (default current folder; --project changes it). --no-references disables automatic online references, not local --ref. Unclear/restrictive terms or robots refuse capture.';
 export const referenceDoctor = () => ({ label: 'reference images', status: converter() ? 'ok' : 'warn', detail: converter() ? 'PNG/JPEG/WebP validation and conversion available' : 'Install ImageMagick to use --ref; no image is silently dropped' });
 
-export async function references(paths = []) {
+export async function references(paths = [], { signal } = {}) {
   if (!paths.length) return [];
   if (paths.length > COUNT) throw new Error('--ref accepts at most 6 images');
   const bin = converter();
@@ -34,7 +34,7 @@ export async function references(paths = []) {
     if (!signature) throw new Error('--ref image bytes do not match the PNG/JPG/WebP extension');
     try {
       // Explicit raster coder + bounded resources: never interpret paths, URLs or SVG/delegates as images.
-      const call = promisify(execFile)(bin, ['-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-limit', 'disk', '0', '-limit', 'width', '4096', '-limit', 'height', '4096', `${type}:-[0]`, '-auto-orient', '-strip', 'png:-'], { encoding: 'buffer', maxBuffer: MAX, timeout: 15_000 });
+      const call = promisify(execFile)(bin, ['-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-limit', 'disk', '0', '-limit', 'width', '4096', '-limit', 'height', '4096', `${type}:-[0]`, '-auto-orient', '-strip', 'png:-'], { encoding: 'buffer', maxBuffer: MAX, timeout: 15_000, signal });
       call.child.stdin.on('error', () => {}); // Decoder rejection can close stdin before all bytes are written; execFile reports its cause.
       call.child.stdin.end(data);
       const { stdout } = await call;

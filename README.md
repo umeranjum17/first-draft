@@ -84,6 +84,24 @@ first-draft-axi make "Umer's botanical shop with a leaf illustration" --out shop
 
 The adapter contract is `detect()`, `estimate({prompt}) → {amount,unit,detail}`, and `generate({prompt,dir}) → local raster path` in `src/assets.mjs`. New providers use that same boundary; the host handles approval, image budget, optimization and embedding. No account switching or generation retries. A failed design can leave a paid asset on disk; the error is reported, not silently retried.
 
+## Real visual references
+
+```sh
+first-draft-axi make "A notes dashboard, make it like Vercel" --out notes.html
+first-draft-axi make "A mobile notes app" --like Linear --out notes.html
+first-draft-axi references --like https://example.com/ --capture
+```
+
+Named comparisons (`like Vercel`, `Apple-like`, `style of Linear`, `inspired by …`, `similar to …`) ask **your configured model**, not a built-in brand list, to identify one reference and a candidate homepage. `--like <brand-or-https-url>` makes the choice explicit and overrides the prompt; URLs skip discovery, not policy checks. Plain `references "<prompt>"` only discovers an unverified candidate without visiting it; `--capture` checks policy and gathers it. These work for mobile apps, websites, dashboards and CLI/PWA designs: the requested output surface does not change the reference boundary.
+
+Before screenshots, First Draft checks robots.txt and asks your model to review the same site's linked public terms/licence. **Unclear or restrictive permission refuses capture**; public access and robots allowance are not a licence. A successful review retains its source and an exact permission quote, explicitly as a model assessment, not legal advice. Some brands cannot be captured under this conservative policy: use a different permitted public source or local `--ref` images you may use, never log in or bypass a restriction.
+
+Chrome/Chromium captures the first viewport at **390×844 and 1280×800**. Fetches are anonymous HTTPS GETs: public DNS addresses are checked and pinned, redirects rechecked, no cookies, credentials, query strings, custom ports, logins or challenges. Limits: 32 requests, 2 MB per resource (64 KB robots), 8 MB total, 10 seconds per request, 60 seconds per capture. A polite user agent and robots crawl-delay apply. Scripts, frames and cross-origin resources are disabled, so dynamic sites or external fonts/assets may differ; the brief records omissions and CSS motion declarations, not observed interaction motion. Terms-review model calls consume your normal quota; no paid reference API or separate account is used.
+
+References are cached for 24 hours in the current project's `.first-draft/refs/<host-and-url-hash>/`, with immutable phone/desktop images and `sources.json` recording source URLs, fetch times, permission note, hashes and observed visual language (type, spacing, colour, layout, CSS motion). `--project <folder>` changes the cache's project root. The images reuse the existing native `--ref` input path; neither screenshot pixels nor source assets/text are copied into the generated HTML. Two source captures share the six-image / 10 MB model-input budget with local `--ref` images.
+
+The viewer shows the captures, Source/Permission links and visual-language notes **beside each option**. A portable `<option>.html.refs.json` sidecar keeps references available offline and through refinement/posting; keep it beside its HTML file. `--no-references` disables automatic online gathering without disabling local `--ref <local.png|jpg|webp>`. Generic follow-up changes keep the option's captured references. A failure is reported, never silently replaced with an invented brand style.
+
 ## Reference
 
 Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pinned engine and model boundary.

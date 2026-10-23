@@ -206,3 +206,22 @@ button.icon { border: 0; background: none; color: inherit; font-size: 20px; min-
 .card:active { border-color: var(--accent); }
 .link:active { color: var(--accent); }
 .pin:active { scale: 0.92; }
+
+/* Reference captures stay outside the design sandbox, beside the result, with their original source. */
+.references { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 140px)); gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); flex-shrink: 0; }
+.reference-heading { min-width: 0; overflow-wrap: anywhere; }
+.reference-heading h2 { font-size: 14px; }
+.reference-heading p, .reference-heading details { font-size: 12px; margin-top: 4px; }
+.reference-heading details { max-height: 130px; overflow: auto; }
+.reference-heading summary { cursor: pointer; }
+.reference-link { color: var(--text); text-underline-offset: 3px; }
+.reference-shot { min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; color: var(--muted); font-size: 11px; text-decoration: none; }
+.reference-shot img { display: block; width: 100%; height: 88px; object-fit: contain; background: var(--sunken); border: 1px solid var(--border); border-radius: 6px; }
+.reference-error { padding: 12px; border: 1px solid var(--error); border-radius: 10px; color: var(--error); }
+@media (max-width: 859px) {
+  .references { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+  .reference-heading { grid-column: 1 / -1; }
+  .reference-heading > p { display: inline; margin-right: 8px; }
+  .reference-heading > div { display: inline; font-size: 12px; }
+  .reference-shot img { height: 70px; }
+}
