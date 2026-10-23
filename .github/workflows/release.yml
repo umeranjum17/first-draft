@@ -29,6 +29,7 @@ jobs:
             npm install -g npm@latest
           fi
           npm --version
+      - run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
       - run: npm install
       - run: npm test
       - name: Publish if this version is not on npm
