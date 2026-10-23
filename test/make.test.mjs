@@ -553,11 +553,11 @@ test('asset CLI previews without spending, then embeds one optimized image per p
   const webp = 'UklGRjgAAABXRUJQVlA4ICwAAADQAQCdASoCAAIAAgA0JaACdLoB+AADsAD+8Oj3/yC5YXXI1/5sCua5+agAAA==';
   const bin = join(dir, 'bin'); mkdirSync(bin);
   const log = join(dir, 'calls');
-  const script = `#!${process.execPath}\nimport {appendFileSync,writeFileSync} from 'node:fs'; import {join,basename} from 'node:path';
+  const script = `#!${process.execPath}\nimport {appendFileSync,mkdirSync,writeFileSync} from 'node:fs'; import {join,basename} from 'node:path';
     const args=process.argv.slice(2), name=basename(process.argv[1]);
     appendFileSync(${JSON.stringify(log)},JSON.stringify([name,...args])+'\\n');
     if(name==='magick'){if(args[0]!=='-version')writeFileSync(args.at(-1),Buffer.from('${webp}','base64'));}
-    else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});writeFileSync(join(args[args.indexOf('--cd')+1],'asset.png'),Buffer.from('${webp}','base64'));}else console.log('codex-cli 0.159.2');}
+    else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});const thread='01a16724-50d5-76f1-af27-1ad159aec924',folder=join(process.env.HOME,'.codex/generated_images',thread);mkdirSync(folder,{recursive:true});writeFileSync(join(folder,'exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b0401.png'),Buffer.from('${webp}','base64'));console.log(JSON.stringify({type:'thread.started',thread_id:thread}));}else console.log('codex-cli 0.159.2');}
     else if(args[0]==='account')console.log('{"credits":10}');
     else if(args[1]==='cost')console.log('{"credits":0.15}');
     else console.log('[{"status":"completed","job_type":"z_image","result_url":"https://fixture.invalid/asset.png"}]');`;
@@ -588,6 +588,7 @@ test('asset CLI previews without spending, then embeds one optimized image per p
     assert.match(readFileSync(log, 'utf8'), /"-strip","-resize","1024x1024>","-quality","80"/);
     assert.equal(readdirSync(dir).filter((p) => p.startsWith(provider + '.assets-')).length, 1);
   }
+  assert.ok(existsSync(join(dir, '.codex/generated_images/01a16724-50d5-76f1-af27-1ad159aec924/exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b0401.png')), 'import never deletes the native CLI image');
   const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.filter(([name, action]) => name === 'codex' && action === 'exec').length, 1);
   assert.equal(calls.filter(([name, action, verb]) => name === 'higgsfield' && action === 'generate' && verb === 'create').length, 1);

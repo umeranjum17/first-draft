@@ -1,6 +1,7 @@
 // Providers own detect/estimate/generate; credentials stay with installed CLIs (Codex via BYOKit).
 import { execFile } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { doctor, installedCodex } from './byokit.mjs';
@@ -56,6 +57,15 @@ export const assetProviders = {
         `Use only the native image generation tool. Generate exactly ONE small square raster image, cheapest/lowest quality available, and save it as asset.png in the current directory. No shell commands, no SVG, no external services, no API keys, no retries. If image generation is unavailable, say so and stop. Image brief: ${prompt}`], { cwd: dir, env });
       writeFileSync(join(dir, 'codex-events.jsonl'), events);
       const images = readdirSync(dir, { recursive: true }).filter((p) => /\.(png|jpe?g|webp)$/i.test(p));
+      if (!images.length) {
+        const thread = events.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((e) => e.type === 'thread.started')?.thread_id;
+        // Only this native run's image folder: never follow model-suggested paths or read login files.
+        if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(thread ?? '')) {
+          const native = join(env.CODEX_HOME || join(homedir(), '.codex'), 'generated_images', thread);
+          const files = existsSync(native) ? readdirSync(native, { withFileTypes: true }).filter((e) => e.isFile() && /^exec-[0-9a-f-]{36}\.png$/i.test(e.name)) : [];
+          if (files.length === 1) { const file = join(dir, 'raw.png'); copyFileSync(join(native, files[0].name), file); return file; }
+        }
+      }
       if (images.length !== 1) throw new Error('Codex did not produce exactly one raster image; native image generation may be unavailable in codex exec');
       return join(dir, images[0]);
     },
