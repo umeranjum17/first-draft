@@ -275,6 +275,30 @@ export class Renderer {
     return pairs;
   }
 
+  // The page as a person first sees it, for the critic: the top of the whole page (or of each screen, at most three) at desktop then
+  // phone width, in light, as JPEG.
+  async capture(html) {
+    const file = join(this.dir, `page-${++this.n}.html`);
+    writeFileSync(file, html);
+    const c = this.client, shots = [];
+    for (const [width, height] of [...VIEWPORTS].reverse()) {
+      await c.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+      const loaded = c.once('Page.loadEventFired');
+      await c.send('Page.navigate', { url: `file://${file}` });
+      await loaded;
+      const screens = await this.eval(c, `[...document.querySelectorAll('[data-oc-screen]')].slice(0,3).map((e,i)=>e.id||String(i+1))`);
+      for (const screen of screens.length ? screens.keys() : [null]) {
+        await this.eval(c, `(()=>{const n=${JSON.stringify(screen)};document.querySelectorAll('[data-oc-screen]').forEach((e,i)=>e.hidden=n!==null&&i!==n);scrollTo(0,0)})()`);
+        await this.settle(c);
+        const tall = Math.min(await this.eval(c, 'document.documentElement.scrollHeight'), width === 390 ? 1700 : 1600);
+        const { data } = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 78, captureBeyondViewport: true, clip: { x: 0, y: 0, width, height: tall, scale: 1 } });
+        shots.push({ id: `${width === 390 ? 'phone' : 'desktop'}-${width}${screen === null ? '' : `-${screens[screen]}`}`, mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${data}` });
+      }
+    }
+    return shots;
+  }
+
   async settle(c) {
     await c.send('Runtime.evaluate', { expression: 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))', awaitPromise: true, returnByValue: true });
   }
@@ -381,6 +405,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, cl
     snapshot: async (doc) => {
       if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to draw the design: ${e.message}`); });
       return render.snapshot(doc);
+    },
+    // The drawn page's first screens at desktop and phone width, for the critic.
+    capture: async (html) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to show the design to the critic: ${e.message}`); });
+      return render.capture(html);
     },
     // An expression evaluated on a blank page of the same browser (logo mode parses and draws its SVG files here); a browser that cannot start is the failure.
     evaluate: async (expression) => {

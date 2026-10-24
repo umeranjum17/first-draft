@@ -22,6 +22,13 @@ const START = [{ type: 'function_call', id: 'fc-design', call_id: 'c-design', na
 const fresh = (body) => !body.includes('function_call_output'); // the conversation's first turn: the engine asks for a plan before any edit
 const plan = (res) => { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(ev({ type: 'response.output_item.added', output_index: 0, item: PLAN }) + ev({ type: 'response.output_item.done', output_index: 0, item: PLAN }) + ev({ type: 'response.completed', response: { id: 'r-plan', status: 'completed', usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } } })); };
 
+// Several options with no direction: make first asks for one planned direction per option.
+const directions = (res, body) => {
+  const count = Number(body.match(/Plan (\d) directions/)[1]);
+  const item = { type: 'function_call', id: 'fc-dirs', call_id: 'c-dirs', name: 'plan_directions', arguments: JSON.stringify({ directions: Array.from({ length: count }, (_, i) => ({ name: `Direction ${i + 1}`, learn_from: 'Bear, Notion', layout: `Layout ${i + 1}.`, type: 'Inter 15/24.', palette: '#fafafa, #111.', signature: `Detail ${i + 1}.` })) }) };
+  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item }) + ev({ type: 'response.completed', response: { id: 'r-dirs', status: 'completed', usage: { input_tokens: 5, output_tokens: 6, total_tokens: 11 } } }));
+};
 // A local provider drives the actual upstream edit -> done -> final tool loop.
 function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = PAGE, extra = null, pre = null) {
   const full = 'The design is ready.';
@@ -29,6 +36,7 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (body.includes('"plan_directions"')) return directions(res, body);
       if (fresh(body)) return plan(res);
       seen.push({ url: req.url, auth: req.headers.authorization, session: req.headers['x-opencode-session'], body: JSON.parse(body) });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -248,6 +256,7 @@ function guesser(seen, patching = false, page = PAGE) {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (body.includes('"plan_directions"')) return directions(res, body);
       if (fresh(body)) return plan(res);
       seen.push(JSON.parse(body));
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -322,7 +331,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.equal(seen.length, 0, 'doctor makes no paid call');
 
   const { stdout } = await run('make', 'a sign-in page for a notes app', '--out', join(dir, 'sign-in.html'), '--count', '2');
-  assert.match(stdout, /"tokens_out":132/);
+  assert.match(stdout, /"tokens_out":138/); // two options of 66 and the planned directions
   const blocked = JSON.parse(stdout).blocked_remote;
   assert.ok(blocked.includes('https://example.com/submit'));
   assert.ok(blocked.includes('https://example.com/image.png'));
@@ -438,7 +447,7 @@ test('the package ships each first-draft method skill in the engine templates', 
   for (const f of own) assert.ok(shipped.has(`dist/templates/skills/${f}`), `${f} ships in the package`);
 });
 
-test('a named style is the whole direction of an option; several options take different styles; the styles are listed', async (t) => {
+test('a named style is the whole direction of an option; several options take directions planned for the brief; the styles are listed', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [], server = await standIn(seen, null);
@@ -453,9 +462,10 @@ test('a named style is the whole direction of an option; several options take di
   await run('make', 'a notes page', '--out', join(dir, 'b.html'), '--direction', 'warm and playful');
   assert.match(JSON.stringify(seen[0].body), /Design direction: warm and playful/);
   seen.length = 0;
-  await run('make', 'a notes page', '--out', join(dir, 'c.html'), '--count', '2');
+  const made = JSON.parse((await run('make', 'a notes page', '--out', join(dir, 'c.html'), '--count', '2')).stdout).made;
   const sent = seen.filter((c) => /Design direction/.test(JSON.stringify(c.body.input))).map((c) => JSON.stringify(c.body.input).match(/Design direction: ([^.]+)\./)[1]);
-  assert.equal(new Set(sent).size, 2, 'each option takes a different style');
+  assert.deepEqual([...new Set(sent)], ['Direction 1', 'Direction 2'], 'each option takes its own direction, planned for the brief');
+  assert.deepEqual(made.files.map((f) => f.direction), ['Direction 1', 'Direction 2'], 'the make JSON names each option\'s direction');
 });
 
 test('a prompt that asks for a landing page carries the landing-page brief, another prompt does not', async (t) => {

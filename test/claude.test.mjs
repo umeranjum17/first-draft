@@ -34,7 +34,7 @@ if (args.includes('auth')) {
   const images = envelope.message.content.filter(c => c.type === 'image');
   if (images.length !== 3 || images.some(c => c.source.media_type !== 'image/png' || !Buffer.from(c.source.data, 'base64').subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))) throw Error('reference images were not sent natively');
   if (!args[args.indexOf('--system-prompt') + 1].includes('visual guidance only')) throw Error('reference policy missing');
-  if (!args[args.indexOf('--system-prompt') + 1].includes('small tool-call batches')) throw Error('incremental reply budget missing');
+  if (!args[args.indexOf('--system-prompt') + 1].includes('Write the complete, finished design in your first write')) throw Error('reply budget missing');
   if (!tools.length) throw Error('missing engine tools');
   const results = messages.filter(m => m.role === 'toolResult');
   const call = (name, a) => ({ name, arguments: JSON.stringify(a) });
