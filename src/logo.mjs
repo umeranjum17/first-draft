@@ -263,7 +263,7 @@ export const sheetErrors = (html, { idea } = {}) => {
 };
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // The kind of mark, as a small label over the idea on the sheet.
-const KIND_LABELS = { wordmark: 'Wordmark-led', abstract: 'Abstract mark', symbol: 'Symbol', 'negative-space': 'Negative space', letter: 'Lettermark', 'symbol+letter': 'Symbol and letter' };
+export const KIND_LABELS = { wordmark: 'Wordmark-led', abstract: 'Abstract mark', symbol: 'Symbol', 'negative-space': 'Negative space', letter: 'Lettermark', 'symbol+letter': 'Symbol and letter' };
 // The sheet with the host's text in its slots, each between markers so a refine can empty them again.
 export const fillSheet = (html, { idea, kind, palette }) => {
   const swatches = (set) => `<div style="background:${palette.contrast[set].ground};color:${set === 'light' ? '#1b1b1a' : '#f2f1ee'};border:1px solid rgba(128,128,128,.35);border-radius:12px;padding:14px;display:grid;gap:10px;min-width:0">

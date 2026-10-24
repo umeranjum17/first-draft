@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { basename, join, resolve } from 'node:path';
-import { SIZES, SVGS, logoDir } from '../src/logo.mjs';
+import { KIND_LABELS, SIZES, SVGS, logoDir } from '../src/logo.mjs';
 import { designFiles } from '../src/view.mjs';
 const root = new URL('..', import.meta.url).pathname, source = process.env.FD_LOGO_SOURCE, out = process.env.DONE_DONE_EVIDENCE_ROOT;
 if (!source || !out) throw Error('Set FD_LOGO_SOURCE to a retained real logo output (the --out path or its folder); run through done-done');
@@ -43,7 +43,10 @@ const options = files.map((file, i) => {
   const sheet = readFileSync(file, 'utf8');
   assert.ok(sheet.includes('<!--logo:idea-->') && sheet.includes('<!--logo:palette-->'), `${file} shows its idea and palette`);
   assert.equal(sheet.includes('Did not pass the self-critique.'), !logo.passed, `${file} says whether its mark passed the self-critique`);
-  return { n: i + 1, file, folder, logo, sha256: hash(readFileSync(file)) };
+  // A run whose concepts come from territories (logo.json concept.territory) labels each sheet with its kind of mark over the idea.
+  const labelled = !!logo.concept.territory;
+  if (labelled) assert.match(sheet, new RegExp(`<!--logo:idea--><small[^>]*>${KIND_LABELS[logo.concept.kind]}</small>`), `${file} labels its kind of mark over the idea`);
+  return { n: i + 1, file, folder, logo, labelled, sha256: hash(readFileSync(file)) };
 });
 writeFileSync(join(support, 'source.json'), JSON.stringify({ source: resolve(source), retained: true, options: options.map(({ n, file, logo, sha256 }) => ({ n, file, sha256, model: logo.model, concept: logo.concept?.name, idea: logo.concept?.idea, palette: logo.palette, critique: logo.critique, checks: logo.checks })) }, null, 2));
 
@@ -103,10 +106,10 @@ try {
   writeFileSync(join(support, 'metrics.json'), JSON.stringify(metrics, null, 2));
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: run('git', ['-C', root, 'rev-parse', 'HEAD']).trim() },
     start: `Retained real logo run: ${options.length} options made by ${options[0].logo.agent} / ${options[0].logo.model}; no model call during this run.`,
-    steps: ['Check each option\'s .logo folder: the 9 SVG files, palette.json, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, the critic\'s boards, and logo.json with the concept, the explored concepts, a kept critique and the palette; and that each sheet carries its idea and palette.',
+    steps: [`Check each option's .logo folder: the 9 SVG files, palette.json, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, the critic's boards, and logo.json with the concept, the explored concepts, a kept critique and the palette; and that each sheet carries its idea and palette${options.every((o) => o.labelled) ? ', with its kind label over the idea' : ''}.`,
       'Start the real CLI viewer on a private loopback port with an isolated configuration.',
       'Open the option picker and each option\'s Studio in owned browsers at phone 360, 390 and 445 and desktop 1280 and 1440, each in light and dark, and capture each whole viewport.',
       'Open the explored concepts with the board the critic saw, and per option its concept, palette and critique with its board, and capture each page whole.',
       'Open every icon PNG at its real size and every SVG file alone on the tile it is for (light files on white, -dark files on near-black, the icon on both), and capture each page whole.'],
-    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its idea and palette, in the Studio at phone 360, 390 and 445 and desktop 1280 and 1440, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
+    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its ${options.every((o) => o.labelled) ? 'kind label, ' : ''}idea and palette, in the Studio at phone 360, 390 and 445 and desktop 1280 and 1440, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
 } finally { view?.kill(); rmSync(dir, { recursive: true, force: true }); }
