@@ -1,7 +1,7 @@
 // Nonpaid recapture of a retained real `logo` run (FD_LOGO_SOURCE: the --out path given to logo, or its folder); no model call. Run through done-done.
 // It checks each option's .logo/ folder (9 SVGs, palette.json, the icon PNGs at the size their name says, favicon.ico with the 16/32/48 PNGs,
 // the critic's boards, logo.json with the concept, the explored concepts, the critique and the palette) and that each sheet carries its idea and palette,
-// then captures the real viewer whole: the option picker and each option's Studio at 390 and 1280, light and dark (picker-<width>-<theme>.png,
+// then captures the real viewer whole: the option picker and each option's Studio at phone 360, 390 and 445 and desktop 1280 and 1440, light and dark (picker-<width>-<theme>.png,
 // studio-<n>-<width>-<theme>.png), and, per option, the icon set with every PNG at its real size (icons-<n>.png) and every SVG file alone
 // on the tile it is for, light files on white and -dark files on near-black (svgs-<n>.png); the explored concepts with the board the critic saw
 // (explored.png), and per option its concept, palette and final critique with its board (critique-<n>.png). Source hashes, the evidence
@@ -88,8 +88,9 @@ try {
       }
     } finally { browser('stop'); }
   };
-  for (const theme of ['light', 'dark']) for (const width of [390, 1280]) {
-    session(`${theme}-${width}`, width, width === 390 ? 844 : 800, theme, [[`picker-${width}-${theme}.png`, `${url}#/`], ...options.map((o) => [`studio-${o.n}-${width}-${theme}.png`, `${url}#/o/${o.n}`])]);
+  // Phone and desktop frames a person meets: 360x800, 390x844, 445x965, 1280x800 and 1440x900.
+  for (const theme of ['light', 'dark']) for (const [width, height] of [[360, 800], [390, 844], [445, 965], [1280, 800], [1440, 900]]) {
+    session(`${theme}-${width}`, width, height, theme, [[`picker-${width}-${theme}.png`, `${url}#/`], ...options.map((o) => [`studio-${o.n}-${width}-${theme}.png`, `${url}#/o/${o.n}`])]);
   }
   session('sheets', 1280, 800, 'light', [['explored.png', `file://${join(support, 'explored.html')}`, true], ...options.flatMap((o) => [[`critique-${o.n}.png`, `file://${join(support, `critique-${o.n}.html`)}`, true], [`icons-${o.n}.png`, `file://${join(support, `icons-${o.n}.html`)}`, true], [`svgs-${o.n}.png`, `file://${join(support, `svgs-${o.n}.html`)}`, true]])]);
   writeFileSync(join(support, 'metrics.json'), JSON.stringify(metrics, null, 2));
@@ -97,8 +98,8 @@ try {
     start: `Retained real logo run: ${options.length} options made by ${options[0].logo.agent} / ${options[0].logo.model}; no model call during this run.`,
     steps: ['Check each option\'s .logo folder: the 9 SVG files, palette.json, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, the critic\'s boards, and logo.json with the concept, the explored concepts, a kept critique and the palette; and that each sheet carries its idea and palette.',
       'Start the real CLI viewer on a private loopback port with an isolated configuration.',
-      'Open the option picker and each option\'s Studio in owned browsers at phone 390 and desktop 1280, each in light and dark, and capture each whole viewport.',
+      'Open the option picker and each option\'s Studio in owned browsers at phone 360, 390 and 445 and desktop 1280 and 1440, each in light and dark, and capture each whole viewport.',
       'Open the explored concepts with the board the critic saw, and per option its concept, palette and critique with its board, and capture each page whole.',
       'Open every icon PNG at its real size and every SVG file alone on the tile it is for (light files on white, -dark files on near-black, the icon on both), and capture each page whole.'],
-    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its idea and palette, in the Studio at phone 390 and desktop 1280, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
+    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its idea and palette, in the Studio at phone 360, 390 and 445 and desktop 1280 and 1440, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
 } finally { view?.kill(); rmSync(dir, { recursive: true, force: true }); }
