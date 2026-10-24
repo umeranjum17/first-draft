@@ -94,6 +94,15 @@ for first-draft from a study of public motionsites.ai examples with no text, cod
 or pixels copied. Its description asks the engine to load it only when a brief asks for
 motion; that is a model instruction, not a host check.
 
+After the engine runs, make's critic (`src/critic.mjs`) makes bounded calls of its own on the same route and model, as the
+logo critic does: one plain page for the brief in one prompt (kept as `<out>.critic/plain.html`), then for each option one
+review that sees the option and the plain page drawn at 1280 and 390 (`render-check.mjs` `shoot`) and scores both 1 to 10
+against the best real products of the kind (Linear, Stripe, Vercel, Notion, Raycast class, as the model knows them, and the
+person's reference images). An option under 9, or under the plain page, is revised by the engine (the refine path) with the
+critic's gaps and fixes, twice at most, and the best-scored version is written; every option's score is in the output. It is
+the same model judging against references, not an independent judge, and it needs a browser and a model that takes images
+(`--no-critic` turns it off; the output then says no option was scored).
+
 `doctor` loads the actual built engine and prompt sections, validates plan-key
 and api-key model metadata, and checks the selected route locally. Installed-CLI readiness
 uses BYOKit's native status probe, never a paid model request. It cannot promise

@@ -299,6 +299,26 @@ export class Renderer {
     } finally { for (const stop of off) stop(); }
   }
 
+  // The page as a person first sees it, for the critic: light theme, at 1280x800 and 390x844, down to `tall` px of the page each.
+  async shoot(html, tall) {
+    const file = join(this.dir, `shot-${++this.n}.html`);
+    writeFileSync(file, html);
+    const c = this.client, shots = [];
+    for (const [width, height] of VIEWPORTS.toReversed()) {
+      await c.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+      const loaded = c.once('Page.loadEventFired');
+      await c.send('Page.navigate', { url: `file://${file}` });
+      await loaded;
+      await this.eval(c, 'document.fonts.ready.then(() => 1)');
+      await this.settle(c);
+      const h = Math.min(tall, await this.eval(c, 'document.documentElement.scrollHeight'));
+      const { data } = await c.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width, height: Math.max(h, height), scale: 1 } });
+      shots.push({ width, dataUrl: `data:image/png;base64,${data}` });
+    }
+    return shots;
+  }
+
   // The check itself: the errors done must report, so the model can fix the page in the loop.
   async check(html, redesignPages) {
     this.redesign = Boolean(redesignPages);
@@ -389,6 +409,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, cl
       await render.client.send('Page.navigate', { url: 'about:blank' });
       await loaded;
       return render.eval(render.client, expression);
+    },
+    // Screenshots of a page at 1280 and 390 (the critic's eyes); a browser that cannot start is the failure.
+    shoot: async (html, tall = 2400) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to show the critic the design: ${e.message}`); });
+      return render.shoot(html, tall);
     },
     close: () => render.close(),
   };
