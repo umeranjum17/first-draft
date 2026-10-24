@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { clarityPage } from './clarity.mjs';
 
 const VIEWPORTS = [[390, 844], [1280, 800]];
 const DARK_BELOW = 0.18; // a page background lighter than this (0 black, 1 white) is a light page
@@ -187,7 +188,7 @@ const coveredText = () => {
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
-  constructor(bin, onWarn, dark) { this.dark = dark; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
+  constructor(bin, onWarn, dark, clarity) { this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
@@ -239,7 +240,8 @@ export class Renderer {
     const layout = screen === null ? null : await this.eval(c, `(()=>{const e=document.querySelectorAll('[data-oc-screen]')[${screen}],r=e.getBoundingClientRect();return {width:r.width,height:r.height,visible:getComputedStyle(e).visibility!=='hidden'}})()`);
     const visible = screen === null || (layout.width > 0 && layout.height > 0 && layout.visible);
     const covered = this.redesign && screen !== null ? await this.eval(c, `(${coveredText.toString()})()`) : [];
-    return { measured, sig, lightness, visible, covered, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    const clarity = this.clarity && screen === null ? await this.eval(c, `(${clarityPage.toString()})(${this.clarity.flash})`) : []; // the clarity page is the whole page, not one screen
+    return { measured, sig, lightness, visible, covered, clarity, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -326,12 +328,14 @@ export class Renderer {
       }).toString()})(${JSON.stringify(redesignPages)})`);
       errors.push(...findings.map(message=>({source:'redesign',message})));
     }
+    const said = new Set(); // the same clarity finding in the other theme is one finding
     for (const { width, height, screen, light, dark } of shots) {
       const context = `${screen === null ? 'the page' : `screen ${JSON.stringify(screen)}`} at ${width}x${height}`;
       for (const [theme, shot] of Object.entries({ light, dark })) {
         if (!shot.visible) errors.push({ source: 'render', message: `${context} in ${theme} has no visible layout. Each screen must work independently on phone and desktop. Then call done again.` });
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
+        for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
         if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
         if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;
@@ -352,14 +356,15 @@ export class Renderer {
 
 // The render check for one run: the browser starts with the first done and stops with the run.
 // dark: the named style is dark-first, so the page must be dark in both renders instead of different in each.
-export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages } = {}) => {
+// clarity: { flash } when the brief asks for a company or product page (clarity.mjs); flash waives the colour and motion checks.
+export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity } = {}) => {
   const bin = findBrowser();
   if (!bin) {
     const warning = 'no Chrome or Chromium was found on this machine, so the 390px/1280px light/dark render checks were skipped';
     onWarn(warning);
     return { status: 'skipped', warning, drawing: false, verify: async () => [], close: () => {} };
   }
-  const render = new Renderer(bin, onWarn, dark);
+  const render = new Renderer(bin, onWarn, dark, clarity);
   return {
     drawing: true, // this machine can draw an App.jsx into static HTML
     get status() { return render.state === 'ready' ? 'checked' : 'skipped'; },

@@ -27,13 +27,17 @@ requirement, `tweaks` and the UI-kit tools, and with `--assets` `generate_image_
 missing provider field our glue offers to the model at the transport boundary). The workspace is in memory and is seeded
 with `frames/*.jsx` and `skills/*.jsx` (the design starters) as upstream's
 `runtime-fs.ts` seeds it; `scaffold` copies into a temporary folder and the file
-joins the workspace through `onScaffolded`. Two method skills are first-draft's own:
+joins the workspace through `onScaffolded`. Three method skills are first-draft's own:
 `templates/skills/interaction-motion.md` (press, hover, focus and entrance motion in
 CSS, reduced motion and worst-case data), written from the ideas in Emil Kowalski's
-MIT skills (https://github.com/emilkowalski/skills) with no text copied, and
+MIT skills (https://github.com/emilkowalski/skills) with no text copied,
 `templates/skills/logo-system.md` (refine the given concept, one idea per mark, a grid,
 optical balance, letters drawn as paths, detail that survives at 16 px, a palette with
-a reason, the icon's safe zone), written for first-draft; the build adds them to the
+a reason, the icon's safe zone) and
+`templates/skills/clarity-over-flash.md` (a company or product page that passes the
+5-second test: one picture, one headline, one support line, one primary action, proof
+near the top, restraint unless the brief asks for flash, and a self-check whose lines
+say whether code or a reviewer decides them; `done` runs the code ones), both written for first-draft; the build adds them to the
 engine's `skills/`, so the same `skill` tool loads them. `logo` runs the same engine with
 a logo export contract: the engine writes `logo/*.svg`, `logo/palette.json` and a brand
 sheet `index.html`, and `done`'s runtime check (`src/logo.mjs`) parses each SVG against
@@ -68,7 +72,7 @@ host and their latin faces embedded as `data:` URIs (`src/fonts.mjs`); images ar
 inline SVG, CSS or `data:` URIs. That static page is what the board sees. The host
 checks the complete file and every screen independently at 390x844 and 1280x800,
 in light and dark, for overflow, visibility and themes. Desktop screen containers
-must exceed phone width; this structural check is not a visual-quality guarantee. With no browser the contract asks the engine for
+must exceed phone width; this structural check is not a visual-quality guarantee. A brief for a landing, home, marketing or company page (`src/clarity.mjs`) also gets the clarity rubric in the prompt, and the same check runs the eight `[host]` lines of `clarity-over-flash` on the page (one hero h1, one primary button, a picture, proof within two screens, one accent hue, nothing moving on its own); a brief that asks for a loud look keeps the structure lines and drops the colour and motion ones. The four `[model]` lines stay instructions to the engine. With no browser the contract asks the engine for
 script-free `index.html` instead, and a page with script is refused. The engine ends
 a run when the model stops or after three failed `done` rounds, even when no version
 has passed `done`; upstream's app then waits for the user. make instead sends `done`'s
