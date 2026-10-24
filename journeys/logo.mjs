@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { basename, join, resolve } from 'node:path';
-import { SIZES, SVGS, logoDir } from '../src/logo.mjs';
+import { KIND_LABELS, SIZES, SVGS, logoDir } from '../src/logo.mjs';
 import { designFiles } from '../src/view.mjs';
 const root = new URL('..', import.meta.url).pathname, source = process.env.FD_LOGO_SOURCE, out = process.env.DONE_DONE_EVIDENCE_ROOT;
 if (!source || !out) throw Error('Set FD_LOGO_SOURCE to a retained real logo output (the --out path or its folder); run through done-done');
@@ -43,7 +43,10 @@ const options = files.map((file, i) => {
   const sheet = readFileSync(file, 'utf8');
   assert.ok(sheet.includes('<!--logo:idea-->') && sheet.includes('<!--logo:palette-->'), `${file} shows its idea and palette`);
   assert.equal(sheet.includes('Did not pass the self-critique.'), !logo.passed, `${file} says whether its mark passed the self-critique`);
-  return { n: i + 1, file, folder, logo, sha256: hash(readFileSync(file)) };
+  // A run whose concepts come from territories (logo.json concept.territory) labels each sheet with its kind of mark over the idea.
+  const labelled = !!logo.concept.territory;
+  if (labelled) assert.match(sheet, new RegExp(`<!--logo:idea--><small[^>]*>${KIND_LABELS[logo.concept.kind]}</small>`), `${file} labels its kind of mark over the idea`);
+  return { n: i + 1, file, folder, logo, labelled, sha256: hash(readFileSync(file)) };
 });
 writeFileSync(join(support, 'source.json'), JSON.stringify({ source: resolve(source), retained: true, options: options.map(({ n, file, logo, sha256 }) => ({ n, file, sha256, model: logo.model, concept: logo.concept?.name, idea: logo.concept?.idea, palette: logo.palette, critique: logo.critique, checks: logo.checks })) }, null, 2));
 
@@ -55,14 +58,14 @@ const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 let view;
 try {
   const explored = options[0].logo.explored;
-  writeFileSync(join(support, 'explored.html'), page('Explored concepts', `<h1>${explored.length} concepts explored for "${esc(options[0].logo.brief)}"</h1><p>Each concept's one-line idea, kind, the critic's reading at 32 and 16 px, its verdict and what the selection did with it; below, the board the critic saw (${basename(options[0].folder)}/concepts.png).</p>
-<table style="border-collapse:collapse;width:100%;font-size:13px;margin-bottom:20px">${['#', 'Round', 'Concept', 'Kind', 'Idea', 'Palette', 'Critic sees', 'Verdict', 'Flaws', 'Status'].map((h) => `<th style="text-align:left;border-bottom:2px solid #999;padding:4px">${h}</th>`).join('')}${explored.map((k) => `<tr>${[k.id, k.round ?? 1, k.name, k.kind, k.idea, k.palette, k.reads_as, k.verdict && `${k.verdict} ${k.score ?? ''}`, (k.flaws ?? []).join('; '), k.status].map((v) => `<td style="vertical-align:top;border-bottom:1px solid #ccc;padding:4px">${esc(v)}</td>`).join('')}</tr>`).join('')}</table>
+  writeFileSync(join(support, 'explored.html'), page('Explored concepts', `<h1>${explored.length} concepts explored for "${esc(options[0].logo.brief)}"</h1><p>Each concept's one-line idea, kind, where in the brief it comes from, its base shape, the critic's reading at 32 and 16 px, its verdict and what the selection did with it; below, the board the critic saw (${basename(options[0].folder)}/concepts.png).</p>
+<table style="border-collapse:collapse;width:100%;font-size:13px;margin-bottom:20px">${['#', 'Round', 'Concept', 'Kind', 'From the brief', 'Idea', 'Base shape', 'Palette', 'Critic sees', 'Verdict', 'Flaws', 'Status'].map((h) => `<th style="text-align:left;border-bottom:2px solid #999;padding:4px">${h}</th>`).join('')}${explored.map((k) => `<tr>${[k.id, k.round ?? 1, k.name, k.kind, k.from ?? '', k.idea, k.base ? `${k.base}${k.base_seen && k.base_seen !== k.base ? ` (critic: ${k.base_seen})` : ''}` : '', k.palette, k.reads_as, k.verdict && `${k.verdict} ${k.score ?? ''}`, (k.flaws ?? []).join('; '), k.status].map((v) => `<td style="vertical-align:top;border-bottom:1px solid #ccc;padding:4px">${esc(v)}</td>`).join('')}</tr>`).join('')}</table>
 <img src="file://${options[0].folder}/concepts.png" alt="The concept sketches as the critic saw them" style="max-width:100%">${existsSync(join(options[0].folder, 'concepts-round2.png')) ? `<p>Second round (${esc(options[0].logo.second_round?.reason)}):</p><img src="file://${options[0].folder}/concepts-round2.png" alt="The second round's sketches as the critic saw them" style="max-width:100%">` : ''}`));
   for (const o of options) {
     const swatches = (set) => ['primary', 'accent', 'neutral'].map((role) => `<span style="display:inline-block;width:22px;height:22px;border-radius:4px;vertical-align:middle;background:${o.logo.palette[set][role]}"></span> ${role} ${o.logo.palette[set][role]} (${o.logo.palette.contrast[set][role]}:1)`).join(' &nbsp; ');
     writeFileSync(join(support, `critique-${o.n}.html`), page(`${label(o)} critique`, `<h1>${esc(label(o))} (${esc(o.logo.concept.kind)})</h1><p>${esc(o.logo.concept.idea)}</p><p><b>${o.logo.passed ? 'Passed the self-critique.' : 'Did not pass the self-critique: shown as the best attempt.'}</b></p>
 <p><b>Palette:</b> ${esc(o.logo.palette.reason)}<br>light: ${swatches('light')}<br>dark: ${swatches('dark')}</p>
-<ol>${o.logo.critique.map((c) => `<li>${esc(c.round)} look: <b>${esc(c.verdict)}</b> (score ${c.score}); a stranger sees "${esc(c.reads_as)}"${c.flaws.length ? `; ${esc(c.flaws.join('; '))}` : ''}${c.fix ? `. ${esc(c.fix)}` : ''}</li>`).join('')}</ol>
+<ol>${o.logo.critique.map((c) => `<li>${esc(c.round)} look: <b>${esc(c.verdict)}</b> (score ${c.score} of 10 beside the best of its class${o.logo.baseline && typeof o.logo.baseline === 'string' ? ' and the baseline' : ''}${c.compared ? `: ${esc(c.compared)}` : ''}); a stranger sees "${esc(c.reads_as)}"${c.flaws.length ? `; ${esc(c.flaws.join('; '))}` : ''}${c.fix ? `. ${esc(c.fix)}` : ''}</li>`).join('')}</ol>
 <p><b>Image first:</b> ${o.logo.exploration?.image ? `${esc(o.logo.exploration.provider)} made this raster of the concept (${o.logo.exploration.seconds} s), which the engine redrew as SVG: <br><img src="file://${o.folder}/exploration.webp" alt="The image model's exploration of the concept" style="max-width:240px"><br>${esc(o.logo.exploration.prompt)}` : esc(o.logo.exploration?.error ?? o.logo.exploration ?? 'no image (this run is from before image-first exploration)')}</p>
 <p><b>Time:</b> ${esc(JSON.stringify(o.logo.timing ?? {}))}${o.logo.second_round ? `<br><b>Second round:</b> ${esc(JSON.stringify(o.logo.second_round))}` : ''}</p>
 <p>16 px detail of icon.svg: ${JSON.stringify(o.logo.checks.detail_16['icon.svg'])}</p>
@@ -103,10 +106,10 @@ try {
   writeFileSync(join(support, 'metrics.json'), JSON.stringify(metrics, null, 2));
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: run('git', ['-C', root, 'rev-parse', 'HEAD']).trim() },
     start: `Retained real logo run: ${options.length} options made by ${options[0].logo.agent} / ${options[0].logo.model}; no model call during this run.`,
-    steps: ['Check each option\'s .logo folder: the 9 SVG files, palette.json, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, the critic\'s boards, and logo.json with the concept, the explored concepts, a kept critique and the palette; and that each sheet carries its idea and palette.',
+    steps: [`Check each option's .logo folder: the 9 SVG files, palette.json, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, the critic's boards, and logo.json with the concept, the explored concepts, a kept critique and the palette; and that each sheet carries its idea and palette${options.every((o) => o.labelled) ? ', with its kind label over the idea' : ''}.`,
       'Start the real CLI viewer on a private loopback port with an isolated configuration.',
       'Open the option picker and each option\'s Studio in owned browsers at phone 360, 390 and 445 and desktop 1280 and 1440, each in light and dark, and capture each whole viewport.',
       'Open the explored concepts with the board the critic saw, and per option its concept, palette and critique with its board, and capture each page whole.',
       'Open every icon PNG at its real size and every SVG file alone on the tile it is for (light files on white, -dark files on near-black, the icon on both), and capture each page whole.'],
-    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its idea and palette, in the Studio at phone 360, 390 and 445 and desktop 1280 and 1440, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
+    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its ${options.every((o) => o.labelled) ? 'kind label, ' : ''}idea and palette, in the Studio at phone 360, 390 and 445 and desktop 1280 and 1440, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
 } finally { view?.kill(); rmSync(dir, { recursive: true, force: true }); }

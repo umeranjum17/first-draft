@@ -143,7 +143,7 @@ commands[11]:
     --model <id>       override the configured model for this run only (same BYOKit route)
     --out <file.html>  output file; multiple options add -1, -2, etc.; {i} is replaced by the option number
     --out-dir <folder> alternative to --out; writes option-1.html, option-2.html, etc.
-  logo "<brief>" (--out <file.html> | --out-dir <folder>) [--options 1-5] [--direction <kind>] [--ref <image>] [--explore auto|none|codex|higgsfield] [--model <id>]   explore 6-8 rough concepts, each with a palette of its own, critique them at 16 and 32 px and refine the best into logo options (drawn in parallel, three at a time; image-first when an image provider is ready; one more round from the critic's advice if it drops every mark): each is a brand sheet (file.html) with its one-line idea and palette, and a file.logo/ folder with mark, wordmark and two lockups as SVG, each with a -dark twin, icon.svg, palette.json, the app icon as PNG at 16, 32, 48, 180, 192, 512 and 1024 px, favicon.ico and logo.json; each finished mark is critiqued again and redone or dropped; --ref images are the critic's only references (no site is fetched); needs Chrome or Chromium and a model that takes images
+  logo "<brief>" (--out <file.html> | --out-dir <folder>) [--options 1-5] [--direction <kind>] [--ref <image>] [--explore auto|none|codex|higgsfield] [--model <id>]   explore 9 rough concepts from the brief's metaphors (wordmark-led, abstract and symbol, three calls at once), each with a palette and a base shape of its own, critique them at 16 and 32 px (an initial dressed as an object is dropped unless the brief asks for a letter) and refine the best into logo options (a wordmark-led and an abstract one among them, never two of one base shape; drawn in parallel, three at a time, at most two engine runs each; image-first when an image provider is ready; one more round from the critic's advice if it drops every mark): each is a brand sheet (file.html) with its one-line idea and palette, and a file.logo/ folder with mark, wordmark and two lockups as SVG, each with a -dark twin, icon.svg, palette.json, the app icon as PNG at 16, 32, 48, 180, 192, 512 and 1024 px, favicon.ico and logo.json; each finished mark is critiqued again and redone or dropped; --ref images are the critic's only references (no site is fetched); needs Chrome or Chromium and a model that takes images
   styles [--logo]                     list the named design styles that make --direction <id> takes (or write your own direction in words); --logo lists the logo kinds logo --direction takes
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
@@ -249,6 +249,12 @@ if (command === 'references') {
     try { drawn = await drawLogos({ brief: prompt, direction: values.direction && logoDirection(values.direction), count, references: refs.images, explore: exploration.picture, make, ...c }); }
     catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the logo: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     tokens_in += drawn.tokens_in; tokens_out += drawn.tokens_out;
+    // The baseline the critic compared every finished mark with stays beside the options (not one of them) for review.
+    if (drawn.baseline.made) {
+      const file = join(resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.baseline', 'baseline.html');
+      try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, drawn.baseline.made.html); drawn.baseline = { file, logo_dir: writeLogo(file, drawn.baseline.made.logo, { brief: prompt, baseline: 'the plain output of the same model on the same brief, without the concept step; the critic compared every finished mark with it', agent: c.agent, model: c.model }).dir }; }
+      catch (e) { fail('OUTPUT_FAILED', `cannot write ${file}: ${e.message}`); }
+    }
   }
   const png = (url) => Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
   for (let i = 0; i < count; i++) {
@@ -268,7 +274,7 @@ if (command === 'references') {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, made.html);
       writeOptionReferences(out,refs.metadata);
-      const conceptOf = ({ id, round, kind, name, idea, shape, avoid, palette, sketch }) => ({ id, round, kind, name, idea, shape, avoid, palette, sketch });
+      const conceptOf = ({ id, round, territory, kind, name, from, idea, base, base_seen, shape, avoid, palette, sketch }) => ({ id, round, territory, kind, name, from, idea, base, base_seen, shape, avoid, palette, sketch });
       const picture = (p) => p?.error ? { provider: p.provider, error: p.error, seconds: p.seconds } : p && { provider: p.provider, prompt: p.prompt, image: 'exploration.webp', seconds: p.seconds };
       // Every attempt the critique did not keep as this option stays for review in <option>.dropped/, outside the options the view lists.
       if (logo) for (const a of option.others) {
@@ -277,7 +283,7 @@ if (command === 'references') {
         writeLogo(file, a.made.logo, { brief: prompt, dropped: true, concept: conceptOf(a.concept), critique: [a.verdict], exploration: picture(a.picture) ?? exploration.off, agent: c.agent, model: c.model }, { 'critique.png': png(a.board), ...(a.picture?.webp && { 'exploration.webp': a.picture.webp }) });
       }
       if (logo) written = writeLogo(out, made.logo, { brief: prompt, direction, concept: conceptOf(option.concept), passed: option.passed,
-        critique: option.critiques, explored: conceptSummary(drawn), exploration: picture(option.picture) ?? exploration.off, timing: { ...drawn.timing, option_s: option.seconds },
+        critique: option.critiques, explored: conceptSummary(drawn), baseline: drawn.baseline.file ?? { error: drawn.baseline.error }, exploration: picture(option.picture) ?? exploration.off, timing: { ...drawn.timing, option_s: option.seconds },
         ...(drawn.second_round && { second_round: drawn.second_round }), critic: 'the same model, against written principles and the person\'s --ref images; not an independent judgement or trademark clearance', agent: c.agent, model: c.model },
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
@@ -289,13 +295,13 @@ if (command === 'references') {
   }
   if (logo && !files.length) fail('MAKE_FAILED', `the concept critique left no concept to draw: ${drawn.concepts.map((k) => `${k.name} (${k.verdict}; ${(k.flaws ?? []).join('; ')})`).join(', ')}`, ['Run logo again, or name a --direction in your own words']);
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check },
-    ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, ...(drawn.second_round && { second_round: drawn.second_round }),
+    ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, baseline: drawn.baseline.file ? { file: drawn.baseline.file, logo_dir: drawn.baseline.logo_dir } : { error: drawn.baseline.error }, ...(drawn.kinds_missing && { kinds_missing: drawn.kinds_missing }), ...(drawn.second_round && { second_round: drawn.second_round }),
       exploration: exploration.provider ? { provider: exploration.provider, images: drawn.options.filter((o) => o.made).map((o) => o.picture?.error ? { error: o.picture.error } : o.picture && { concept: o.concept.name, seconds: o.picture.seconds }) } : { off: exploration.off }, timing: drawn.timing }),
     ...(inventory && { redesign: { sources: resolve(values.out, 'sources', 'sources.json'), screens: inventory.pages.map(p=>({id:p.id,title:p.title})), pending: inventory.pending, limitations: inventory.limitations } }),
     ...(refs.metadata && { references:{name:refs.metadata.name,url:refs.metadata.url,fetched_at:refs.metadata.fetched_at} }),
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
-    help: [...(logo && files.some((f) => !f.passed) ? [`${files.filter((f) => !f.passed).length} option(s) did not pass the self-critique: each is its best attempt, flagged in its sheet and logo.json (passed: false)`] : []), ...(logo && files.length < count ? [`${files.length} of ${count} options were made: the concept critique kept ${drawn.concepts.filter((k) => k.status !== 'dropped').length} concept(s) to draw; concepts says why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
+    help: [...(logo && files.some((f) => !f.passed) ? [`${files.filter((f) => !f.passed).length} option(s) did not pass the self-critique: each is its best attempt, flagged in its sheet and logo.json (passed: false)`] : []), ...(drawn?.kinds_missing ? [`No ${drawn.kinds_missing.join(' or ')} concept survived the critique, so the options lack that kind; concepts says why`] : []), ...(logo && files.length < count ? [`${files.length} of ${count} options were made: the concept critique kept ${drawn.concepts.filter((k) => k.status !== 'dropped').length} concept(s) to draw; concepts says why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
       `See them on the tailnet: first-draft-axi view ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath}`,
       `Post them for review: first-draft-axi post ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath} --title "<question>" --recommend a`] }));} else if (command === 'post') {
   const { values, positionals } = flags(rest, { title: { type: 'string' }, recommend: { type: 'string' }, evidence: { type: 'boolean' }, media: { type: 'string', multiple: true }, option: { type: 'string', multiple: true }, tradeoff: { type: 'string' }, key: { type: 'string' }, board: { type: 'string' }, host: { type: 'string' }, port: { type: 'string' } });
