@@ -31,13 +31,17 @@ joins the workspace through `onScaffolded`. Two method skills are first-draft's 
 `templates/skills/interaction-motion.md` (press, hover, focus and entrance motion in
 CSS, reduced motion and worst-case data), written from the ideas in Emil Kowalski's
 MIT skills (https://github.com/emilkowalski/skills) with no text copied, and
-`templates/skills/logo-system.md` (one idea per mark, a grid, optical balance, letters
-drawn as paths, a mark that reads at 16 px, the icon's safe zone), written for
-first-draft; the build adds them to the engine's `skills/`, so the same `skill` tool
-loads them. `logo` runs the same engine with a logo export contract: the engine writes
-`logo/*.svg` and a brand sheet `index.html`, and `done`'s runtime check
-(`src/logo.mjs`) parses each SVG against an allow-list and draws the icon in the same
-headless browser before the sheet's usual render check. The host's export contract, added after
+`templates/skills/logo-system.md` (refine the given concept, one idea per mark, a grid,
+optical balance, letters drawn as paths, detail that survives at 16 px, a palette with
+a reason, the icon's safe zone), written for first-draft; the build adds them to the
+engine's `skills/`, so the same `skill` tool loads them. `logo` runs the same engine with
+a logo export contract: the engine writes `logo/*.svg`, `logo/palette.json` and a brand
+sheet `index.html`, and `done`'s runtime check (`src/logo.mjs`) parses each SVG against
+an allow-list, checks the palette and draws the icon in the same headless browser,
+measuring its detail at 16 px, before the sheet's usual render check. Around the engine
+runs, `src/logo-concepts.mjs` makes two bounded calls of its own on the same route and
+model, as the redesign review does: one that proposes 6 to 8 rough concepts and one that
+critiques marks drawn at 16 and 32 px (for the sketches, then for each finished option). The host's export contract, added after
 the engine's prompt, keeps only what the board needs (see below). Core uses
 providers' model/reasoning/error helpers and shared's schemas, artifact and design
 validation. `scripts/build.mjs` bundles those packages and the runtime (its `?raw`

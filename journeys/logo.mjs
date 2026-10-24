@@ -1,8 +1,11 @@
 // Nonpaid recapture of a retained real `logo` run (FD_LOGO_SOURCE: the --out path given to logo, or its folder); no model call. Run through done-done.
-// It checks each option's .logo/ folder (9 SVGs, the icon PNGs at the size their name says, favicon.ico with the 16/32/48 PNGs, logo.json),
+// It checks each option's .logo/ folder (9 SVGs, palette.json, the icon PNGs at the size their name says, favicon.ico with the 16/32/48 PNGs,
+// the critic's boards, logo.json with the concept, the explored concepts, the critique and the palette) and that each sheet carries its idea and palette,
 // then captures the real viewer whole: the option picker and each option's Studio at 390 and 1280, light and dark (picker-<width>-<theme>.png,
 // studio-<n>-<width>-<theme>.png), and, per option, the icon set with every PNG at its real size (icons-<n>.png) and every SVG file alone
-// on the tile it is for, light files on white and -dark files on near-black (svgs-<n>.png). Source hashes, the evidence pages and measurements go to the sibling -support folder.
+// on the tile it is for, light files on white and -dark files on near-black (svgs-<n>.png); the explored concepts with the board the critic saw
+// (explored.png), and per option its concept, palette and final critique with its board (critique-<n>.png). Source hashes, the evidence
+// pages and measurements go to the sibling -support folder.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -31,17 +34,32 @@ const options = files.map((file, i) => {
   assert.deepEqual([ico.readUInt16LE(2), ico.readUInt16LE(4)], [1, 3], 'favicon.ico holds three icons');
   [16, 32, 48].forEach((n, k) => { const at = ico.readUInt32LE(18 + 16 * k), len = ico.readUInt32LE(14 + 16 * k); assert.deepEqual(ico.subarray(at, at + len), readFileSync(join(folder, `icon-${n}.png`))); });
   assert.equal(logo.checks.icon.full_bleed, true);
+  assert.ok(logo.concept?.idea && logo.explored?.length >= 6 && logo.critique?.at(-1)?.verdict === 'keep' && logo.palette?.reason, `${folder}/logo.json has the concept, the explored concepts, a kept critique and the palette`);
+  for (const name of ['palette.json', 'concepts.png', 'critique.png']) assert.ok(existsSync(join(folder, name)), `${folder}/${name}`);
+  const sheet = readFileSync(file, 'utf8');
+  assert.ok(sheet.includes('<!--logo:idea-->') && sheet.includes('<!--logo:palette-->'), `${file} shows its idea and palette`);
   return { n: i + 1, file, folder, logo, sha256: hash(readFileSync(file)) };
 });
-writeFileSync(join(support, 'source.json'), JSON.stringify({ source: resolve(source), retained: true, options: options.map(({ n, file, logo, sha256 }) => ({ n, file, sha256, model: logo.model, direction: logo.direction, checks: logo.checks })) }, null, 2));
+writeFileSync(join(support, 'source.json'), JSON.stringify({ source: resolve(source), retained: true, options: options.map(({ n, file, logo, sha256 }) => ({ n, file, sha256, model: logo.model, concept: logo.concept?.name, idea: logo.concept?.idea, palette: logo.palette, critique: logo.critique, checks: logo.checks })) }, null, 2));
 
 const page = (title, body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title><style>body{margin:0;padding:24px;background:#f2f1ee;color:#1b1b1a;font:15px/1.4 system-ui,sans-serif}h1{font-size:20px;margin:0 0 4px}p{margin:0 0 20px;color:#55554f}
 .row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-end}figure{margin:0}figcaption{margin-top:6px;font-size:13px;color:#55554f}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .tile{box-sizing:border-box;height:160px;padding:20px;border:1px solid #d9d7d0}.tile img{display:block;width:100%;height:100%;object-fit:contain}.white{background:#fff}.black{background:#121212;border-color:#121212}</style></head><body>${body}</body></html>`;
-const label = (o) => `Option ${o.n}${o.logo.direction ? `: ${o.logo.direction.split(':')[0]}` : ''}`;
+const label = (o) => `Option ${o.n}: ${o.logo.concept.name}`;
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 let view;
 try {
+  const explored = options[0].logo.explored;
+  writeFileSync(join(support, 'explored.html'), page('Explored concepts', `<h1>${explored.length} concepts explored for "${esc(options[0].logo.brief)}"</h1><p>Each concept's one-line idea, kind, the critic's reading at 32 and 16 px, its verdict and what the selection did with it; below, the board the critic saw (${basename(options[0].folder)}/concepts.png).</p>
+<table style="border-collapse:collapse;width:100%;font-size:13px;margin-bottom:20px">${['#', 'Concept', 'Kind', 'Idea', 'Critic sees', 'Verdict', 'Flaws', 'Status'].map((h) => `<th style="text-align:left;border-bottom:2px solid #999;padding:4px">${h}</th>`).join('')}${explored.map((k) => `<tr>${[k.id, k.name, k.kind, k.idea, k.reads_as, k.verdict && `${k.verdict} ${k.score ?? ''}`, (k.flaws ?? []).join('; '), k.status].map((v) => `<td style="vertical-align:top;border-bottom:1px solid #ccc;padding:4px">${esc(v)}</td>`).join('')}</tr>`).join('')}</table>
+<img src="file://${options[0].folder}/concepts.png" alt="The concept sketches as the critic saw them" style="max-width:100%">`));
   for (const o of options) {
+    const swatches = (set) => ['primary', 'accent', 'neutral'].map((role) => `<span style="display:inline-block;width:22px;height:22px;border-radius:4px;vertical-align:middle;background:${o.logo.palette[set][role]}"></span> ${role} ${o.logo.palette[set][role]} (${o.logo.palette.contrast[set][role]}:1)`).join(' &nbsp; ');
+    writeFileSync(join(support, `critique-${o.n}.html`), page(`${label(o)} critique`, `<h1>${esc(label(o))} (${esc(o.logo.concept.kind)})</h1><p>${esc(o.logo.concept.idea)}</p>
+<p><b>Palette:</b> ${esc(o.logo.palette.reason)}<br>light: ${swatches('light')}<br>dark: ${swatches('dark')}</p>
+<ol>${o.logo.critique.map((c) => `<li>${esc(c.round)} look: <b>${esc(c.verdict)}</b> (score ${c.score}); a stranger sees "${esc(c.reads_as)}"${c.flaws.length ? `; ${esc(c.flaws.join('; '))}` : ''}${c.fix ? `. ${esc(c.fix)}` : ''}</li>`).join('')}</ol>
+<p>16 px detail of icon.svg: ${JSON.stringify(o.logo.checks.detail_16['icon.svg'])}</p>
+<img src="file://${o.folder}/critique.png" alt="The finished mark and icon as the critic saw them" style="max-width:100%">`));
     writeFileSync(join(support, `icons-${o.n}.html`), page(`${label(o)} icon set`, `<h1>${label(o)}: the app icon set</h1><p>Every PNG from ${basename(o.folder)}/ at its real size, drawn by Chrome from icon.svg; favicon.ico holds the 16, 32 and 48 px files.</p>
 <div class="row">${SIZES.map((n) => `<figure><img src="file://${o.folder}/icon-${n}.png" width="${n}" height="${n}" alt="${n} px"><figcaption>icon-${n}.png, ${n} px</figcaption></figure>`).join('')}</div>`));
     writeFileSync(join(support, `svgs-${o.n}.html`), page(`${label(o)} SVG files`, `<h1>${label(o)}: the SVG files</h1><p>Each file from ${basename(o.folder)}/ alone: the light files on white, the -dark files on near-black, the icon on both.</p>
@@ -72,13 +90,14 @@ try {
   for (const theme of ['light', 'dark']) for (const width of [390, 1280]) {
     session(`${theme}-${width}`, width, width === 390 ? 844 : 800, theme, [[`picker-${width}-${theme}.png`, `${url}#/`], ...options.map((o) => [`studio-${o.n}-${width}-${theme}.png`, `${url}#/o/${o.n}`])]);
   }
-  session('sheets', 1280, 800, 'light', options.flatMap((o) => [[`icons-${o.n}.png`, `file://${join(support, `icons-${o.n}.html`)}`, true], [`svgs-${o.n}.png`, `file://${join(support, `svgs-${o.n}.html`)}`, true]]));
+  session('sheets', 1280, 800, 'light', [['explored.png', `file://${join(support, 'explored.html')}`, true], ...options.flatMap((o) => [[`critique-${o.n}.png`, `file://${join(support, `critique-${o.n}.html`)}`, true], [`icons-${o.n}.png`, `file://${join(support, `icons-${o.n}.html`)}`, true], [`svgs-${o.n}.png`, `file://${join(support, `svgs-${o.n}.html`)}`, true]])]);
   writeFileSync(join(support, 'metrics.json'), JSON.stringify(metrics, null, 2));
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: run('git', ['-C', root, 'rev-parse', 'HEAD']).trim() },
     start: `Retained real logo run: ${options.length} options made by ${options[0].logo.agent} / ${options[0].logo.model}; no model call during this run.`,
-    steps: ['Check each option\'s .logo folder: the 9 SVG files, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, and logo.json.',
+    steps: ['Check each option\'s .logo folder: the 9 SVG files, palette.json, the icon PNGs at the size each name says, favicon.ico holding the 16, 32 and 48 px PNGs, the critic\'s boards, and logo.json with the concept, the explored concepts, a kept critique and the palette; and that each sheet carries its idea and palette.',
       'Start the real CLI viewer on a private loopback port with an isolated configuration.',
       'Open the option picker and each option\'s Studio in owned browsers at phone 390 and desktop 1280, each in light and dark, and capture each whole viewport.',
+      'Open the explored concepts with the board the critic saw, and per option its concept, palette and critique with its board, and capture each page whole.',
       'Open every icon PNG at its real size and every SVG file alone on the tile it is for (light files on white, -dark files on near-black, the icon on both), and capture each page whole.'],
-    result: `The first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet in the Studio at phone 390 and desktop 1280, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
+    result: `${explored.length} concepts were explored and critiqued; the first-draft viewer shows ${options.length} logo options in the picker and each option's brand sheet, with its idea and palette, in the Studio at phone 390 and desktop 1280, light and dark; each option's icon set renders at 16 to 1024 px and each of its 9 SVG files reads alone on the tile it is for.` }, null, 2));
 } finally { view?.kill(); rmSync(dir, { recursive: true, force: true }); }
