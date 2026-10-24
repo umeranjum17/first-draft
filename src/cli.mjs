@@ -196,7 +196,8 @@ if (command === 'references') {
   const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
   const images = await readReferences(values.ref, values.model);
   let assetSession;
-  try { assetSession = await prepareAssets(values, prompt, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
+  if (redesign && (values.assets || values['allow-asset-spend'])) fail('USAGE', 'redesign does not generate images; use make --assets', [assetHelp]);
+  try { assetSession = await prepareAssets(values, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
   if (assetSession) {
     if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
     process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
@@ -222,7 +223,7 @@ if (command === 'references') {
     const numbered = outPath.includes('{i}') ? outPath.replaceAll('{i}', String(i + 1)) : count > 1 ? outPath.slice(0, -extname(outPath).length || undefined) + `-${i + 1}` + extname(outPath) : outPath;
     let made;
     try {
-      const assets = assetSession ? await assetSession.generate(numbered) : [];
+      const assets = assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) };
       made = await (redesign ? makeRedesign : make)({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction:values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
@@ -231,7 +232,7 @@ if (command === 'references') {
       writeFileSync(out, made.html);
       writeOptionReferences(out,refs.metadata);
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
-    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(made.redesign_check && {self_check:made.redesign_check}) });
+    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}) });
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
     made.remote.forEach((r) => blocked.add(r));

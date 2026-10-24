@@ -16,16 +16,12 @@ journeys:
     core: true
     timeout: 120m
   assets-recapture:
-    command: node journeys/assets.mjs higgsfield --capture-only
+    command: node journeys/assets.mjs --capture-only
     timeout: 10m
-  assets-higgsfield:
-    command: node journeys/assets.mjs higgsfield
-    spends: one Z Image plus design-model turns; previews credits first
-    timeout: 30m
-  assets-codex:
-    command: node journeys/assets.mjs codex
-    spends: one native Codex image plus design-model turns; subscription quota and overage unknown
-    timeout: 30m
+  assets:
+    command: node journeys/assets.mjs
+    spends: up to three images the design agent chooses (Higgsfield credits, Codex subscription quota with unknown overage) plus design-model turns; previews cost first
+    timeout: 40m
   render-check:
     command: bash journeys/render-check.sh
     timeout: 40m
