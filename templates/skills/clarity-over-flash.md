@@ -72,15 +72,16 @@ one primary action.
 
 ## Self-Check Before Done
 
-Answer each yes or no. `[host]` lines are checks code can run on the
-exported page at 390x844 and 1280x800; `[model]` lines need a reviewer to
-look at it. Checks 7, 8 and 12 are waived when flash was asked for; the rest
-always apply.
+Answer each yes or no. `[host]` lines are checks code runs on the drawn
+page at 390x844 and 1280x800: `done` runs them for a company or product page
+and names what to fix, so repair the page and call `done` again. `[model]`
+lines need a reviewer to look at it. Checks 7, 8 and 12 are waived when flash
+was asked for; the rest always apply.
 
 1. `[host]` Exactly one `h1`, inside `[data-section="hero"]`, of at most 10
    words.
 2. `[host]` The `h1` has at most one inner element whose colour differs from
-   its own.
+   its own, and no gradient, outlined or clipped text.
 3. `[host]` The hero has at most one paragraph of body text, of at most 30
    words.
 4. `[host]` The hero has exactly one `[data-cta="primary"]`, at most one
