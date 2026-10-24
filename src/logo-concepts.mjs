@@ -72,7 +72,7 @@ const CRITIQUE = { name: 'critique_marks', description: 'The critique of every m
     fix: { type: 'string', maxLength: 800, description: 'redo: exactly what to change in the drawing; drop: why the idea cannot work; keep: empty or a note' } } } } } } };
 
 // One structured call on the person's own route and model; an answer that does not fit is sent back once with what is wrong.
-async function ask(c, { system, user, tool, images = [] }, problemsOf) {
+export async function ask(c, { system, user, tool, images = [] }, problemsOf) {
   let tokens_in = 0, tokens_out = 0, problems = [];
   for (let round = 0; round < 2; round++) {
     const answer = await respond({ route: routeOf(c.agent), model: c.model, timeoutMs: c.timeoutMs, maxTokens: 16000, singleCall: true, images, signal: AbortSignal.timeout(c.timeoutMs ?? 600_000),

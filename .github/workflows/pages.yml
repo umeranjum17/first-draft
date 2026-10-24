@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: node scripts/check-samples.mjs
       - run: node scripts/landing-version.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
