@@ -44,8 +44,11 @@ sheet `index.html`, and `done`'s runtime check (`src/logo.mjs`) parses each SVG 
 an allow-list, checks the palette and draws the icon in the same headless browser,
 measuring its detail at 16 px, before the sheet's usual render check. Around the engine
 runs, `src/logo-concepts.mjs` makes two bounded calls of its own on the same route and
-model, as the redesign review does: one that proposes 6 to 8 rough concepts and one that
-critiques marks drawn at 16 and 32 px (for the sketches, then for each finished option). Each concept carries a palette
+model, as the redesign review does: one that proposes three rough concepts in a territory
+(wordmark-led, abstract and symbol, the three calls at once, each metaphor from the brief, never
+from the name's initials) and one that critiques marks drawn at 16 and 32 px (each territory's
+sketches, then each finished option). The options cover a wordmark-led and an abstract concept,
+never two of one base shape, and each takes at most two engine runs. Each concept carries a palette
 chosen with its idea, which the host writes to `logo/palette.json` and `done` refuses to see changed. The options are drawn in
 parallel, three at a time; the engine reaches the model through one global provider, so `src/make.mjs` gives each run an
 address of its own (`model.baseUrl`) that the provider uses to hand the call to that run. When the critic drops every drawn

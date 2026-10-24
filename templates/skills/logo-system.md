@@ -24,10 +24,13 @@ user_invocable: true
 
 ## Start From The Concept
 
-The host has already explored 6 to 8 rough concepts, had a critic look at
-their sketches at 16 and 32 px, and handed you one: its idea in one line, how
-it is built, what it must not read as, what the critic saw, and the rough
-sketch it started as. Refine that concept; do not swap it for another. The
+The host has already explored nine rough concepts (wordmark-led, abstract and
+symbol, each from a metaphor in the brief), had a critic look at their sketches
+at 16 and 32 px, and handed you one: its idea in one line, where in the brief it
+comes from, how it is built, what it must not read as, what the critic saw, and
+the rough sketch it started as. A wordmark-led concept starts from the name:
+draw its letters first; the mark and the icon are their one detail alone, never
+the initial dressed as an object. Refine that concept; do not swap it for another. The
 sketch is a starting point, not a drawing to keep: rebuild it on the grid. When an
 image is attached, an image model drew a raster exploration of the concept: read how
 it composes and shapes the idea, keep what works, and redraw it as clean geometry.
