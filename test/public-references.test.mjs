@@ -64,7 +64,7 @@ else {
   if(!q.screen.links.some(l=>l.target&&l.target!==q.screen.id))html=html.replace(/<a href="#[^"]+">([\\s\\S]*?)<\\/a>/g,'$1');
   if(!q.previous_attempts&&!process.env.FD_REVIEW_ALWAYS_FAIL&&!process.env.FD_EXTRA_SCREEN&&q.screen.id==='screen-1'&&q.attempt>1){if(!q.feedback.some(f=>f.includes('clipped text'))||!q.feedback.some(f=>f.includes('Redesign semantic metrics')))throw Error('layout and semantic feedback were not aggregated');if(q.attempt===3&&!q.feedback.some(f=>f.includes('Remove diagnostic provenance notes')))throw Error('third attempt lost second-attempt feedback');if(q.attempt===2)html=html.replace('</section>','<p>(title cut off in source)</p></section>');}
   if(process.env.FD_EXTRA_SCREEN)html+='<section data-oc-screen id="extra">Extra screen</section>';
-  calls=[call('write_redesign_screen',{id:q.screen.id,html})];
+  calls=[call('write_redesign_screen',process.env.FD_SPLIT_SCREEN&&q.part===1?{id:q.screen.id,html:html.slice(0,40),complete:false}:{id:q.screen.id,html:html.slice(q.written_so_far?.length??0),complete:true})];
  }
  else if(tools.some(t=>t.name==='assess_reference_redesign')){if(!args[args.indexOf('--system-prompt')+1].includes('optional and not penalized'))throw Error('visual caption rubric missing');calls=[call('assess_reference_redesign',{verdict:'pass',checks:['reference-craft','metrics','coherence','content','responsive'].map((name,i)=>({name,passed:!(process.env.FD_VISUAL_BAD&&i===0),detail:'Fixture transport check only'}))})];}
  else if(tools.some(t=>t.name==='assess_redesign')) {
@@ -123,8 +123,8 @@ else {
   await run('redesign',sourceDir,'Clearer projects','--no-references','--out',join(project,'local-redesign'));
   assert.equal(JSON.parse(readFileSync(join(project,'local-redesign/sources/sources.json'))).pages[0].url,'/index.html');
   const aliasDir=join(project,'alias-export');mkdirSync(aliasDir);for(const f of ['index.html','again.html'])writeFileSync(join(aliasDir,f),'<title>Umer tickets</title><h1>Tickets</h1><a href="again.html">Tickets</a>');
-  const aliased=JSON.parse((await run('redesign',aliasDir,'Clearer','--no-references','--out',join(project,'alias-redesign'))).stdout).made.files[0];
-  assert.deepEqual(aliased.self_check.screen_attempts.map(p=>[p.id,p.alias_of,p.attempts]),[['screen-1',undefined,3],['screen-2','screen-1',0]]);assert.equal(aliased.tools.write_redesign_screen,3,'an equivalent entry reuses accepted markup without another writer response');
+  env.FD_SPLIT_SCREEN='1';const aliased=JSON.parse((await run('redesign',aliasDir,'Clearer','--no-references','--out',join(project,'alias-redesign'))).stdout).made.files[0];delete env.FD_SPLIT_SCREEN;
+  assert.deepEqual(aliased.self_check.screen_attempts.map(p=>[p.id,p.alias_of,p.attempts,p.parts]),[['screen-1',undefined,3,2],['screen-2','screen-1',0,undefined]]);assert.equal(aliased.tools.write_redesign_screen,6,'each attempt is written in two capped parts and the equivalent entry reuses accepted markup without another writer response');
   const [one,two]=readFileSync(aliased.file,'utf8').match(/<section[\s\S]*?<\/section>/g);assert.equal(two,one.replace('id="screen-1"','id="screen-2"'));assert.deepEqual(aliased.self_check.semantic.map(c=>c.name),['metrics','tokens','content']);
   await assert.rejects(run('redesign',origin+'/product.html','Clearer','--out',redesignOut,'--max-pages','13'),e=>/max-pages/.test(e.stdout));
   await assert.rejects(run('redesign',origin+'/login','Clearer','--no-references','--out',redesignOut),e=>/Login/.test(e.stdout));
