@@ -4,7 +4,7 @@
 
 For developers and coding agents: pick a design **before writing app code**.
 
-<a href="https://umeranjum17.github.io/first-draft/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/studio-dark.webp"><img src="docs/media/studio.webp" alt="The first-draft Studio: a notes app's first option at desktop and phone width side by side, with two comments pinned beside the frames, and the options, comments and brief composer in the panel"></picture></a>
+<a href="https://umeranjum17.github.io/first-draft/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/studio-dark.webp"><img src="docs/media/studio.webp" alt="The first-draft Studio in a 1920px-wide window, where it opens on Both: a notes app's first option at desktop and phone width side by side, with two comments pinned beside the frames, and the options, comments and brief composer in the panel"></picture></a>
 
 ### Start in three steps
 
