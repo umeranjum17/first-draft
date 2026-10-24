@@ -200,7 +200,8 @@ export class Renderer {
     this.proc.on('error', e => { exited = true; spawnError = e; });
     const portFile = join(this.dir, 'DevToolsActivePort');
     let port = 0;
-    for (let i = 0; i < 150 && !port; i++) {
+    // A cold Chrome on a loaded machine (CI running several test files, each with its own browser) can take well over 15 s to open its port.
+    for (let i = 0; i < 450 && !port; i++) {
       await new Promise((r) => setTimeout(r, 100));
       if (exited) throw startupFailure('the browser exited before it was ready');
       if (existsSync(portFile)) port = Number(readFileSync(portFile, 'utf8').split('\n')[0]);

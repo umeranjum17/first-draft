@@ -14,4 +14,4 @@ The repo's maintained verification map; a proof that drives one entry point is i
 - [Make with a named design style](make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>`
 - [Make render check at 390 and in dark](make-render-check-390-and-dark.md): Run `first-draft-axi make` with Chrome or Chromium installed
 - [Make on the full engine: App.jsx drawn into a static page](make-on-the-full-engine.md): Run `first-draft-axi make` with Chrome or Chromium installed; the output names each file's source, turns and tools
-- [Logo mode: brand sheets with checked SVG files and the app icon set](logo-mode.md): Run `first-draft-axi logo "<brief>" --out tea.html`; `test/logo.test.mjs`; `FD_LOGO_SOURCE=<out path> done-done run logo-recapture` (`journeys/logo.mjs`)
+- [Logo mode: concepts, self-critique, brand sheets with idea and palette, checked SVG files and the app icon set](logo-mode.md): Run `first-draft-axi logo "<brief>" --out tea.html`; `test/logo.test.mjs`; `FD_LOGO_SOURCE=<out path> done-done run logo-recapture` (`journeys/logo.mjs`)
