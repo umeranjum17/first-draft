@@ -25,7 +25,7 @@ export const LOGO_CONTRACT = `Host export contract (first-draft logo mode; overr
 - logo/mark.svg: the symbol alone, square viewBox. logo/wordmark.svg: the name alone. logo/lockup-horizontal.svg: the mark beside the name. logo/lockup-stacked.svg: the mark above the name.
 - A -dark twin of each for dark backgrounds: logo/mark-dark.svg, logo/wordmark-dark.svg, logo/lockup-horizontal-dark.svg, logo/lockup-stacked-dark.svg (same geometry, colours that read on near-black). The others read on white.
 - logo/icon.svg: the app icon. Square viewBox, one flat background colour over the whole square (no transparent corners, no rounded outer corners: the platform masks it), the mark inside the central circle whose diameter is 80% of the side, and still readable at 16 px: every part, gap and cut of it survives at 16 px.
-- logo/palette.json: the option's palette, {"reason": "one line on why these colours fit the brief", "light": {"primary": "#rrggbb", "accent": "#rrggbb", "neutral": "#rrggbb"}, "dark": {"primary": ..., "accent": ..., "neutral": ...}}. primary is the brand colour, accent the second colour, neutral the ink for type and quiet parts (a warm charcoal, not a paper colour). Each light colour reads on white at 3:1 or more and each dark colour on near-black #121212 at 3:1 or more. Every colour in the files comes from it: the light files from light, the -dark files from dark, icon.svg from either.
+- logo/palette.json: the option's palette, {"reason": "one line on why these colours fit the concept", "light": {"primary": "#rrggbb", "accent": "#rrggbb", "neutral": "#rrggbb"}, "dark": {"primary": ..., "accent": ..., "neutral": ...}}. The host has already written it from the concept's idea when the brief names one: view it first, draw with exactly its colours and do not change it (done refuses a changed palette). Otherwise write it: primary is the brand colour, accent the second colour, neutral the ink for type and quiet parts, each light colour reading on white at 3:1 or more and each dark colour on near-black #121212 at 3:1 or more. Every colour in the files comes from it: the light files from light, the -dark files from dark, icon.svg from either.
 Every SVG has a viewBox, is 20 KB or less, and uses only svg, g, path, circle, ellipse, rect, line, polyline, polygon, defs, linearGradient, radialGradient, stop, clipPath, mask, use, symbol, title, desc and style, with colours written as #rrggbb. No <text> or <tspan>: draw every letter as a path, so the logo carries no font. No <image>, foreignObject, script, filter, event handler, or link or url() outside the file.
 Then write index.html, the brand sheet: one complete self-contained HTML5 document with inline CSS and no script. It presents this option. Its first screen holds the name, an empty <p data-logo="idea"></p> under it, and the mark large beside an empty <div data-logo="palette"></div>: the host writes the concept's one-line idea and the palette with its reason and measured contrast into those two elements, so leave them empty and give them room. Below come the wordmark, both lockups on a light tile and their -dark twins on a near-black tile, the app icon at its real sizes, and the icon in context (a phone home-screen tile with the name under it, and a browser tab with the favicon and the name). Show every logo file as <img src="logo/NAME.svg" alt="..."> and never paste SVG markup into the page: the host embeds the files, so the sheet always shows the real files. The host draws logo/icon.svg in Chrome as logo/icon-16.png, logo/icon-32.png, logo/icon-48.png, logo/icon-180.png, logo/icon-192.png, logo/icon-512.png and logo/icon-1024.png; show logo/icon-16.png and logo/icon-32.png at their real sizes (<img src="logo/icon-16.png" width="16" height="16" alt="...">) and use the PNGs, not icon.svg, in the home-screen tile and the tab.
 done(path="index.html") checks every SVG, the palette, the icon at 16 px (its detail included), its safe zone, each light and dark file on its tile, and the sheet; each error names the file to fix.`;
@@ -176,7 +176,7 @@ const GROUND = { light: '#ffffff', dark: '#121212' }, ROLES = ['primary', 'accen
 const luminance = (hex) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
 const ratio = (a, b) => Math.round(((Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05)) * 10) / 10;
 const hex6 = (c) => (c.length === 4 ? `#${[...c.slice(1)].map((d) => d + d).join('')}` : c).toLowerCase();
-const readPalette = (text) => {
+export const readPalette = (text) => {
   let p;
   try { p = JSON.parse(text); } catch (e) { return { problems: [`is not JSON (${e.message})`] }; }
   const problems = [];
@@ -193,7 +193,7 @@ const readPalette = (text) => {
 
 // done's logo findings for the workspace's logo files ({ name: text }, palette.json included), and what passed: the files, the palette,
 // the icon PNGs and the check numbers.
-export async function checkLogo(files, evaluate) {
+export async function checkLogo(files, evaluate, expected) {
   const errors = [], say = (file, message) => errors.push({ source: 'logo', message: `logo/${file}: ${message}. Fix the file, then call done again.` });
   const svgs = {};
   for (const name of FILES) {
@@ -206,6 +206,8 @@ export async function checkLogo(files, evaluate) {
   for (const [name, found] of Object.entries(await evaluate(`(${audit})(${JSON.stringify(svgs)})`))) for (const f of found) say(name, f);
   const { problems, palette } = readPalette(files['palette.json']);
   for (const p of problems) say('palette.json', p);
+  // A concept's palette follows its idea and is the host's to set: a changed colour or reason is refused.
+  if (palette && expected && ['reason', 'light', 'dark'].some((k) => JSON.stringify(palette[k]) !== JSON.stringify(expected[k]))) say('palette.json', `is not this concept's palette; the host wrote it from the idea and it must stay exactly ${JSON.stringify({ reason: expected.reason, light: expected.light, dark: expected.dark })}`);
   // The files are drawn in the palette's colours: the light files in its light set, the -dark files in its dark set, the icon in either.
   if (palette) for (const [name, text] of Object.entries(svgs)) {
     const sets = name === 'icon.svg' ? ['light', 'dark'] : [name.endsWith('-dark.svg') ? 'dark' : 'light'], allowed = new Set(sets.flatMap((set) => Object.values(palette[set])));

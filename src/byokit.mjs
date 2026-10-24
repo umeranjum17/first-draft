@@ -18,15 +18,16 @@ async function installed(route) {
   cli.set(route, value);
   return value;
 }
-async function launch(route) {
-  if (launched.has(route)) return launched.get(route);
-  const { bin, accounts } = await installed(route);
-  const account = await accounts.launch(`installed-${route}`);
-  if (!account.ok) throw new Error(account.message);
-  if (route === 'claude' && account.account.method !== 'subscription') throw new Error('Claude must be signed in with a Claude subscription, not an API key or another billing route');
-  const value = { bin, account };
-  launched.set(route, value);
-  return value;
+// One launch per route, shared by calls that overlap (logo draws its options in parallel); a failed launch is tried again by the next call.
+function launch(route) {
+  if (!launched.has(route)) launched.set(route, (async () => {
+    const { bin, accounts } = await installed(route);
+    const account = await accounts.launch(`installed-${route}`);
+    if (!account.ok) throw new Error(account.message);
+    if (route === 'claude' && account.account.method !== 'subscription') throw new Error('Claude must be signed in with a Claude subscription, not an API key or another billing route');
+    return { bin, account };
+  })().catch((e) => { launched.delete(route); throw e; }));
+  return launched.get(route);
 }
 export const installedCodex = () => launch('codex'); // Asset adapter reuses BYOKit's installed account by path.
 const MEMBER = 'first-draft';

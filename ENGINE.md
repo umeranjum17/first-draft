@@ -41,7 +41,12 @@ an allow-list, checks the palette and draws the icon in the same headless browse
 measuring its detail at 16 px, before the sheet's usual render check. Around the engine
 runs, `src/logo-concepts.mjs` makes two bounded calls of its own on the same route and
 model, as the redesign review does: one that proposes 6 to 8 rough concepts and one that
-critiques marks drawn at 16 and 32 px (for the sketches, then for each finished option). The host's export contract, added after
+critiques marks drawn at 16 and 32 px (for the sketches, then for each finished option). Each concept carries a palette
+chosen with its idea, which the host writes to `logo/palette.json` and `done` refuses to see changed. The options are drawn in
+parallel, three at a time; the engine reaches the model through one global provider, so `src/make.mjs` gives each run an
+address of its own (`model.baseUrl`) that the provider uses to hand the call to that run. When the critic drops every drawn
+mark, one second round explores new concepts from its reasons and advice. With an image provider ready, `src/logo-images.mjs`
+first has it show each concept as a raster (through `src/assets.mjs`), which the engine takes as a reference image. The host's export contract, added after
 the engine's prompt, keeps only what the board needs (see below). Core uses
 providers' model/reasoning/error helpers and shared's schemas, artifact and design
 validation. `scripts/build.mjs` bundles those packages and the runtime (its `?raw`
