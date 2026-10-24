@@ -16,10 +16,14 @@ export function pageFor(option, mode) {
 }
 
 // The canvas shows the device the route names, else the one that fits the viewport: on a wide screen (860px and up, where the
-// Studio has its column) 'both', the desktop and the phone side by side; under that one device, and 'both' falls back to it.
+// Studio has its panel) 'both', the desktop and the phone side by side, when `roomy` (Both fits large, BOTH_MIN), else 'desktop';
+// under 860px one device, and 'both' falls back to it.
 export const WIDE = 860;
-export const deviceFor = (device, viewportWidth) => (device === 'both' && viewportWidth < WIDE ? undefined : device)
-  ?? (viewportWidth < 760 ? 'phone' : viewportWidth < WIDE ? 'desktop' : 'both');
+export const deviceFor = (device, viewportWidth, roomy = true) => (device === 'both' && viewportWidth < WIDE ? undefined : device)
+  ?? (viewportWidth < 760 ? 'phone' : viewportWidth < WIDE || !roomy ? 'desktop' : 'both');
+// Both opens by default only where it can be drawn at this scale or more; on a smaller canvas (1280 or 1440 wide with the panel
+// open) the Studio opens on Desktop, which fills the width, and Both is one click away.
+export const BOTH_MIN = 0.83;
 // Fit to space: each device is drawn at the largest scale that fits the stage, larger than its true size on a big stage,
 // with PADDING around it (the stage's edge to the frame, both sides together).
 const PADDING = 24;

@@ -112,15 +112,16 @@ try {
   const box = (selector) => evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height,left:b.left,right:b.right,width:b.width}})()`);
   // No pin covers a frame's screen: each sits in the margin beside it, level with its point.
   const pinsClear = () => evaluate("(()=>{const hit=(a,b)=>a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1;const screens=[...document.querySelectorAll('.artboard,.phone-screen')].map(e=>e.getBoundingClientRect());return [...document.querySelectorAll('.pin')].filter(p=>p.getClientRects().length).every(p=>screens.every(s=>!hit(p.getBoundingClientRect(),s)))})()");
-  // Fit to space: what the canvas shows (the frames and the comment pins beside them) sits inside it and covers at least 85% of the
-  // canvas on its limiting side (the side it reaches first as it grows). Returns that cover.
+  // Fit to space: the frames sit inside the canvas and cover at least 85% of the canvas available to them on its limiting side (the
+  // side they reach first as they grow). The canvas available to the frames is the canvas less the comment-pin margins beside the
+  // frames (canvas.js PIN_GUTTER, 24px each side) when pins show there; no other allowance. Returns that cover.
   const fills = async (selector, what) => {
-    const a = await evaluate(`(()=>{const r=[document.querySelector(${JSON.stringify(selector)}),...document.querySelectorAll('.pin')].filter(e=>e?.getClientRects().length).map(e=>e.getBoundingClientRect());
-      const b={left:Math.min(...r.map(x=>x.left)),right:Math.max(...r.map(x=>x.right)),top:Math.min(...r.map(x=>x.top)),bottom:Math.max(...r.map(x=>x.bottom))};return{...b,width:b.right-b.left,height:b.bottom-b.top}})()`);
-    const st = await box('.stage');
+    const [a, st] = [await box(selector), await box('.stage')];
     assert.ok(a.left >= st.left - 1 && a.right <= st.right + 1 && a.top >= st.top - 1 && a.bottom <= st.bottom + 1, `${what} fits inside the canvas: ${JSON.stringify({ a, st })}`);
-    const cover = Math.max(a.width / st.width, a.height / st.height);
-    assert.ok(cover >= 0.85, `${what} covers ${Math.round(cover * 100)}% of the canvas's limiting side, under 85%: ${JSON.stringify({ a, st })}`);
+    const pins = await evaluate("[...document.querySelectorAll('.pin')].some(p=>p.getClientRects().length)");
+    const room = { width: st.width - (pins ? 48 : 0), height: st.height };
+    const cover = Math.max(a.width / room.width, a.height / room.height);
+    assert.ok(cover >= 0.85, `${what} covers ${Math.round(cover * 100)}% of the canvas available on its limiting side, under 85%: ${JSON.stringify({ a, room })}`);
     return cover;
   };
   const width = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().width`);
@@ -163,7 +164,7 @@ try {
     console.log(`captured ${name}.png`);
   };
   const viewport = async (w, theme) => {
-    await c('Emulation.setDeviceMetricsOverride', { width: w, height: w >= 1440 ? 900 : w > 700 ? 800 : 844, deviceScaleFactor: 1, mobile: false });
+    await c('Emulation.setDeviceMetricsOverride', { width: w, height: w >= 1920 ? 1080 : w >= 1440 ? 900 : w > 700 ? 800 : 844, deviceScaleFactor: 1, mobile: false });
     await c('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
   };
 
@@ -210,17 +211,11 @@ try {
     // Every kind of button in the Studio shows a press state.
     const held = await press('.bar a.primary', w < 700 ? `press-play-390-${theme}` : undefined);
     if (w < 700) Object.assign(phones[theme], { rest: before, held });
-    for (const selector of ['.devices a:not([aria-current]):not([href$="/both"])', '.bar .switch', '.side .list a', '.side .list button', 'form.brief [type=submit]', w > 700 ? '.bar .full-link' : '.bar .more', ...(w > 700 ? ['.bar .fold', 'form.brief .link', '.bar .comment-tool', '.pair .play-one', '.bar a.crumb'] : [])]) await press(selector);
+    for (const selector of ['.devices a:not([aria-current]):not([href$="/both"])', '.bar .switch', '.side .list a', '.side .list button', 'form.brief [type=submit]', w > 700 ? '.bar .full-link' : '.bar .more', ...(w > 700 ? ['.bar .fold', 'form.brief .link', '.bar .comment-tool', '.bar a.crumb'] : [])]) await press(selector);
     if (w > 700) {
-      // Both, the default on a wide screen: the desktop and the phone side by side at one scale, each with its own Play, pins clear of both.
-      const [desk, phone] = [await box('.pair .artboard'), await box('.pair .phone')];
-      assert.ok(phone.left >= desk.right + 40, `the phone is beside the desktop: ${JSON.stringify({ desk, phone })}`);
-      assert.ok(Math.abs(desk.width / 1280 - phone.width / 396) < 0.005, `one scale for both: ${desk.width / 1280} and ${phone.width / 396}`);
-      assert.deepEqual(await evaluate("[...document.querySelectorAll('.pair .play-one')].map(a=>a.getAttribute('href'))"), ['#/o/1/play/desktop', '#/o/1/play/phone'], 'each device has its own Play');
-      assert.equal(await evaluate("document.querySelector('.devices [aria-current]').textContent"), 'Both');
-      assert.equal(await pinsClear(), true, 'no pin covers a frame');
-      await fills('.pair', 'Both');
-      wides[theme].rest = before;
+      // At 1280 with the panel open Both cannot be drawn large (canvas.js BOTH_MIN), so the Studio opens on Desktop, which fills the width.
+      assert.equal(await evaluate("document.querySelector('.devices [aria-current]').textContent"), 'Desktop', 'the Studio opens on Desktop at 1280');
+      await fills('.stage > .scaled', 'Desktop, the default at 1280');
       // Brief collapses the column (design, options, comments and the composer), the canvas takes its room, and Brief brings it back.
       const stage = await width('.stage');
       await click('.bar [aria-controls="studio-side"]');
@@ -236,8 +231,27 @@ try {
       await state(null, { after: 'Show brief pressed: no capture, the page is as before' });
       await sideBySide(`hide-brief-${w}-${theme}`, theme, [['Before: Hide brief not pressed', before], ['After pressing Hide brief', after]]);
       await viewport(w, theme); // the side-by-side capture left the page: open the Studio again
-      await open('#/o/1');
+      // Both, one click away: the desktop and the phone side by side at one scale, each with its own Play, pins clear of both.
+      await open('#/o/1/both');
+      const [desk, phone] = [await box('.pair .artboard'), await box('.pair .phone')];
+      assert.ok(phone.left >= desk.right + 30, `the phone is beside the desktop: ${JSON.stringify({ desk, phone })}`);
+      assert.ok(Math.abs(desk.width / 1280 - phone.width / 396) < 0.005, `one scale for both: ${desk.width / 1280} and ${phone.width / 396}`);
+      assert.deepEqual(await evaluate("[...document.querySelectorAll('.pair .play-one')].map(a=>a.getAttribute('href'))"), ['#/o/1/play/desktop', '#/o/1/play/phone'], 'each device has its own Play');
+      assert.equal(await evaluate("document.querySelector('.devices [aria-current]').textContent"), 'Both');
+      assert.equal(await pinsClear(), true, 'no pin covers a frame');
+      await fills('.pair', 'Both');
+      await press('.pair .play-one');
+      wides[theme].rest = await shot(`studio-both-${w}-${theme}`, extra);
       Object.assign(wides[theme], await addComment(w, theme, `Umer (${theme}): more room above the headline`));
+      // The viewer's pick is remembered: Both picked, a fresh Studio without a device opens on Both, until Desktop is picked.
+      await open('#/o/1');
+      await click('.devices a[href="#/o/1/both"]');
+      await open('#/o/1');
+      assert.equal(await evaluate("document.querySelector('.devices [aria-current]').textContent"), 'Both', 'a picked device is remembered');
+      await click('.devices a[href="#/o/1/desktop"]');
+      await open('#/o/1');
+      assert.equal(await evaluate("document.querySelector('.devices [aria-current]').textContent"), 'Desktop', 'the new pick replaces it');
+      await evaluate("localStorage.clear()");
     } else {
       // Phone width: the phone mock alone, the composer docked at the bottom of the first screen, no Brief button (the column follows below).
       assert.equal(await shown('.phone'), true, 'the phone mock shows');
@@ -298,6 +312,17 @@ try {
     fit.push({ capture: `fit-${d}-${w}-${theme}.png`, width: w, theme, device: d, zoom: await evaluate("document.querySelector('.zoom').textContent"), cover: `${Math.round(cover * 1000) / 10}%` });
   }
   writeFileSync(join(out, 'fit.json'), JSON.stringify(fit, null, 2));
+  // The default device: Desktop where Both cannot be drawn at 83% or more (1280 and 1440 with the panel open), Both where it can (1920).
+  for (const w of [1280, 1440, 1920]) {
+    await viewport(w, 'light');
+    await open('#/o/1');
+    await evaluate('localStorage.clear()');
+    await open('#/o/1');
+    const dev = await evaluate("document.querySelector('.devices [aria-current]').textContent");
+    assert.equal(dev, w >= 1920 ? 'Both' : 'Desktop', `the default device at ${w} px`);
+    await fills(dev === 'Both' ? '.pair' : '.stage > .scaled', `the default (${dev}) at ${w} px`);
+    await shot(`default-${w}-light`, out);
+  }
 
   for (const w of [1280, 390]) {
     await viewport(w, 'light');
@@ -351,7 +376,7 @@ try {
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
     start: `The Studio in first-draft view, the app frame around a user's design: the two-option '${name}' design (${source ? 'from a real run' : 'the notes sign-in fixture'}) with two comments and no agent set, in headless Chromium`,
     steps: ["At 1280 and 390 px wide, in light and in dark, the whole Studio is captured as it opens: studio-1280-light.png, studio-1280-dark.png, studio-390-light.png and studio-390-dark.png",
-      "At 1280 px wide, in light and in dark: one top bar holds the panel toggle, the design's name and the option switcher, the Both/Desktop/Phone switch with the zoom, Comment, Fullscreen and Play; the canvas shows the desktop and the phone side by side at one scale, as large as the canvas fits, each captioned with its own Play; canvas-both-1280.png shows light and dark",
+      "At 1280 px wide, in light and in dark: one top bar holds the panel toggle, the design's name and the option switcher, the Both/Desktop/Phone switch with the zoom, Comment, Fullscreen and Play; the Studio opens on Desktop, filling the canvas width; Both shows the desktop and the phone side by side at one scale, as large as the canvas fits, each captioned with its own Play; canvas-both-1280.png shows Both in light and dark",
       "At 1280 px, press Comment, tap the phone's screen, type a comment and press Save: the box opens below the tapped point; after Save the comment is a numbered pin in the margin beside the phone (never over a frame), it is listed in the panel and it is the last entry of the comments file with device 'phone'; add-comment-1280-light.png and add-comment-1280-dark.png show the box and the saved pin",
       "At 1280 px, the panel with the options, the comments and the brief box shows, and the panel toggle is labelled 'Hide brief'",
       "Pressing 'Hide brief' removes the panel: it is gone, the toggle is labelled 'Show brief' and the design fills the canvas; hide-brief-1280-light.png and hide-brief-1280-dark.png show before and after side by side",
@@ -361,11 +386,12 @@ try {
       "At 390 px, pressing More opens a menu with Fullscreen; more-menu-390.png shows it in light and dark; Escape closes it",
       "At 390 px, More > Add comment, tap the phone, type and Save: the comment is saved to the file and shows as a pin beside the phone; add-comment-390.png shows the box and the pin, light and dark",
       "At 390 px, tapping the brief box opens it up (a taller box and a 'Terminal command' button); composer-390.png shows it at rest and tapped, light and dark",
-      'At 1280 and 1440 px wide, in light and in dark, open Both, Desktop and Phone: each is drawn at the largest scale that fits and covers at least 85% of the canvas on its limiting side (Both the width, Desktop the width, Phone the height); fit-<device>-<width>-<theme>.png captures each and fit.json records the zoom and cover',
+      'At 1280 and 1440 px wide, in light and in dark, open Both, Desktop and Phone: each is drawn at the largest scale that fits and covers at least 85% of the canvas available to it on its limiting side (the canvas less the comment-pin margins when pins show); fit-<device>-<width>-<theme>.png captures each and fit.json records the zoom and cover',
+      'Open the Studio with no device in the route at 1280, 1440 and 1920 px wide: it opens on Desktop at 1280 and 1440, where Both cannot be drawn at 83% or more, and on Both at 1920; default-<width>-light.png captures each. At 1280, pick Both: a fresh Studio opens on Both until Desktop is picked',
       'Switch Phone/Desktop and back: each device fills the canvas; click a comment in the panel and its pin opens on the canvas',
       "At 1280 px hide the panel and switch device: it stays hidden until 'Show brief'",
       'Open Option 2 (from the panel at 1280, from the option switcher at 390); type a change in the brief box and press Send with no agent set: the set-up hint shows; at 390 open Fullscreen from More and Exit; press Play, then Exit'],
-    result: "The Studio opens in one top bar with the option switcher beside the design's name and Play as its one filled button; at 1280 px it shows the desktop and the phone side by side as large as the canvas fits, each with its own Play (studio-1280-*.png, canvas-both-1280.png); at 390 px the switcher, Play and More sit above Desktop/Phone and the whole phone shows above a one-line brief box (studio-390-*.png, phone-row-390.png). A person adds a comment by tapping a point on the phone and it is saved to the comments file and shows as a pin beside the frame (add-comment-*.png); 'Hide brief' removes the panel and the design fills the canvas (hide-brief-*.png); More opens a menu with Fullscreen, Play changes colour while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, panel, composer position, canvas width, zoom label and toggle label" }, null, 2));
+    result: "The Studio opens in one top bar with the option switcher beside the design's name and Play as its one filled button; at 1280 px it opens on Desktop filling the canvas width (studio-1280-*.png), and Both shows the desktop and the phone side by side as large as the canvas fits, each with its own Play (canvas-both-1280.png); Both, Desktop and Phone each cover at least 85% of the canvas available to them at 1280 and 1440 (fit-*.png), and Both is the default only where it fits large, at 1920 (default-*.png); at 390 px the switcher, Play and More sit above Desktop/Phone and the whole phone shows above a one-line brief box (studio-390-*.png, phone-row-390.png). A person adds a comment by tapping a point on the phone and it is saved to the comments file and shows as a pin beside the frame (add-comment-*.png); 'Hide brief' removes the panel and the design fills the canvas (hide-brief-*.png); More opens a menu with Fullscreen, Play changes colour while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, panel, composer position, canvas width, zoom label and toggle label" }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: each device fills the canvas, desktop and phone side by side, add a comment on the canvas, pins clear of the frames, Brief collapse, docked one-line composer clear of the phone, the phone control row and its More menu, press states, device switch, pins, option switch, Send hint, Fullscreen, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();

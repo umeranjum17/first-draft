@@ -1,7 +1,7 @@
 // The first-draft view: every option of a design as a grid, one option in the Studio (a panel beside a canvas showing the desktop and the phone side by side, or one of them), fullscreen, and Play (clickable screens).
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, PIN_GUTTER, SANDBOX, WIDE, commentBubblePosition, commentKeyAction, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor, pairGap } from './canvas.js';
+import { BOTH_MIN, FRAMES, PIN_GUTTER, SANDBOX, WIDE, commentBubblePosition, commentKeyAction, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor, pairGap } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -13,6 +13,16 @@ let draft = ''; // the Studio brief being written, kept across options and devic
 let column = true; // the Studio's panel (and its brief) shown on a wide screen; Hide brief folds it away until Show brief
 let openPin = null; // the comment number to open once the next page is drawn (a comment just added, or one on the other device)
 let lastCanvas = null; // the Studio route Play's Exit goes back to
+// The device a viewer last picked on a wide screen, kept in this browser for the view's address; a route that names a device wins.
+const DEVICE_KEY = 'first-draft-device';
+const remembered = () => { try { return localStorage.getItem(DEVICE_KEY); } catch { return null; } };
+const remember = (d) => { try { localStorage.setItem(DEVICE_KEY, d); } catch { /* private window or blocked storage: the default stands */ } };
+// The Studio's device: the route's, else the remembered one on a wide screen, else Both where it fits large in the canvas the panel
+// leaves (the bar is 48px, the canvas 8px from the edges, the panel 296px), else Desktop.
+const studioDevice = (device) => {
+  const roomy = fitDevice('both', innerWidth - (column ? 296 : 0) - 16, innerHeight - 56) >= BOTH_MIN;
+  return deviceFor(device ?? (innerWidth >= WIDE ? remembered() ?? undefined : undefined), innerWidth, roomy);
+};
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -150,8 +160,13 @@ const artFor = (dev, iframe, pins, point) => {
 };
 const NAMES = { both: 'Both', desktop: 'Desktop', phone: 'Phone' };
 // The viewport switch; Both (the two side by side) only on the Studio canvas, and only on a wide screen (view.css).
-const devices = (base, dev, list = ['desktop', 'phone']) => el('nav', { class: 'devices', 'aria-label': 'Viewport' },
-  ...list.map((d) => el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined, title: NAMES[d] }, icon(d), el('span', { class: 'label' }, NAMES[d]))));
+// `keep` (the Studio's switch): a device picked on a wide screen is remembered for the next Studio this viewer opens.
+const devices = (base, dev, list = ['desktop', 'phone'], keep = false) => el('nav', { class: 'devices', 'aria-label': 'Viewport' },
+  ...list.map((d) => {
+    const a = el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined, title: NAMES[d] }, icon(d), el('span', { class: 'label' }, NAMES[d]));
+    if (keep) a.addEventListener('click', () => { if (innerWidth >= WIDE) remember(d); });
+    return a;
+  }));
 
 // CanvasErrorBar.tsx: the latest runtime error of the open option, with a count and a dismiss button.
 function errorBar(n) {
@@ -363,7 +378,7 @@ function switcher(o, dev) {
 // scale that fits. Hide brief folds the panel away on a wide screen; under 860px (view.css) there is no Both, the panel moves below
 // the canvas and the brief docks at the bottom of the screen. Comment (in the More menu under 860px) turns on comment mode.
 function canvas(o, device) {
-  const dev = deviceFor(device, innerWidth), all = pinsFor(o);
+  const dev = studioDevice(device), all = pinsFor(o);
   const gutter = (dev === 'both' ? all : pinsOn(o, dev)).length ? PIN_GUTTER : 0;
   let close = null; // the open comment box's
   const point = (d) => (x, y, at) => { close?.(); close = commentBox(o, d, x, y, at, (i) => { openPin = i; render(); }); };
@@ -394,7 +409,7 @@ function canvas(o, device) {
     el('a', { href: `#/o/${o.n}/play/${dev === 'both' ? 'desktop' : dev}`, class: 'button primary play' }, icon('play', 'fill'), 'Play'), ...(innerWidth < WIDE ? [more, moreMenu] : [])];
   const bar = el('header', { class: 'bar' },
     el('div', { class: 'bar-l' }, fold, home(), link('#/', design.name, 'button crumb'), el('span', { class: 'slash', 'aria-hidden': 'true' }, '/'), ...switcher(o, dev)),
-    el('div', { class: 'bar-c' }, devices(`#/o/${o.n}`, dev, ['both', 'desktop', 'phone']), zoom),
+    el('div', { class: 'bar-c' }, devices(`#/o/${o.n}`, dev, ['both', 'desktop', 'phone'], true), zoom),
     el('div', { class: 'bar-r' }, ...actions));
 
   const optionList = () => el('ol', { class: 'list' }, ...design.options.map((x) => el('li', { class: x.error ? 'broken' : undefined }, el('a', { href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'page' : undefined },
@@ -434,6 +449,7 @@ function canvas(o, device) {
   // Wide screens only (view.css): the canvas takes the panel's room; under 860px the panel is below the canvas and the brief is docked.
   fold.onclick = () => {
     column = !column;
+    if (studioDevice(device) !== dev) return render(); // the canvas the panel leaves decides between Both and Desktop
     studio.classList.toggle('folded', !column);
     fold.setAttribute('aria-expanded', String(column));
     fold.setAttribute('aria-label', column ? 'Hide brief' : 'Show brief');
@@ -510,7 +526,7 @@ function render() {
   if (view.fit) {
     resize = new ResizeObserver(() => {
       if (dock) document.documentElement.style.setProperty('--dock', `${dock.offsetHeight + 16}px`);
-      return view.dev && deviceFor(device, innerWidth) !== view.dev ? render() : view.fit();
+      return view.dev && (kind === 'canvas' ? studioDevice(device) : deviceFor(device, innerWidth)) !== view.dev ? render() : view.fit();
     });
     resize.observe(app);
     if (dock) resize.observe(dock);
