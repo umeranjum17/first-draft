@@ -45,8 +45,11 @@ export async function draft({ prompt, agent, model, timeoutMs, direction, screen
     const critiques = [];
     let best = null;
     if (render.drawing) for (let round = 0; ; round++) {
-      const shots = await render.capture(drawn.page);
-      const review = await critiqueDesign({ brief: prompt, shots, agent, model, timeoutMs });
+      let shots, review;
+      try {
+        shots = await render.capture(drawn.page);
+        review = await critiqueDesign({ brief: prompt, shots, agent, model, timeoutMs });
+      } catch (e) { critiques.push({ round, error: e.message }); break; } // the page stays; the make JSON says why it was not critiqued
       used.tokens_in += review.tokens_in; used.tokens_out += review.tokens_out; used.calls++;
       critiques.push({ round, score: review.score, verdict: review.verdict, fixes: review.fixes });
       if (!best || review.score >= best.score) best = { ...drawn, score: review.score }; // a tie keeps the revision

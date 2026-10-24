@@ -59,7 +59,7 @@ test('every screen must fit phone and desktop in both themes, and errors are rep
     const seen = [], server = await standIn(seen, [broken, fixed]);
     t.after(() => server.close());
     const env = { ...home(dir), FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
+    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' ? [...args, ...(args.includes('--count') ? [] : ['--options', '1']), '--engine'] : args)], { env });
     await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
     const out = join(dir, 'notes.html');
     const { stdout } = await run('make', 'a notes page', '--out', out);
@@ -80,7 +80,7 @@ test('with no browser on the machine the render check is skipped with one warnin
   const seen = [], server = await standIn(seen);
   t.after(() => server.close());
   const env = { ...home(dir), FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}`, FIRST_DRAFT_CHROME: join(dir, 'no-browser-here') };
-  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' ? [...args, ...(args.includes('--count') ? [] : ['--options', '1']), '--engine'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'notes.html');
   const { stdout, stderr } = await run('make', 'a notes page', '--out', out);
@@ -97,7 +97,7 @@ test('a named dark style must render a dark page: a light page fails done, one d
     const server = await standIn(seen, pages);
     t.after(() => server.close());
     const env = { ...home(dir), FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-    return promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' && !args.includes('--count') ? [...args, '--options', '1'] : args)], { env });
+    return promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' ? [...args, ...(args.includes('--count') ? [] : ['--options', '1']), '--engine'] : args)], { env });
   };
   await run([], [BROKEN, FIXED], 'init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   // oled-neon is dark-first: the model first writes a page with a light default (FIXED), is told so, and writes a dark one.
@@ -141,7 +141,7 @@ test('the engine writes App.jsx; the model is told its runtime error and fixes i
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'runs.html');
-  const { stdout } = await run('make', 'the home screen of a running app', '--out', out, '--options', '1');
+  const { stdout } = await run('make', 'the home screen of a running app', '--out', out, '--options', '1', '--engine');
   const made = JSON.parse(stdout).made;
   if (made.render_check === 'skipped') return t.skip('no Chrome or Chromium on this machine');
   assert.match(seen[0], /the host renders it once in a headless browser/); // the engine is told how its source becomes the board page
