@@ -1,58 +1,50 @@
-// Journey: make's critic on the real CLI and the machine's Chrome, against a local stand-in model (no paid call, no key, no login).
-// make "A notes app for Umer" writes one option; the stand-in writes the plain one-prompt page and scores the first version 6 against
-// the plain page's 7, so the option goes back to the engine with the critic's gaps and fixes; its revision scores 9 and is the file.
-// The evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets make.json (the CLI's output), critic-board.png (the
-// option and the plain page, each at 1280 and 390, with the score, the plain page's score, the model and the run time under each)
-// and steps.json. The scores are the stand-in's: this proves the loop and the report, not a design's quality.
+// Nonpaid real-CLI proof: policy-gated local refs -> installed Codex stand-in -> one independent review -> explicit fallback.
+// The board reports synthetic scores, never design quality. Live subscription assessment is separate private report material.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { renderCheck } from '../src/render-check.mjs';
 import { standIn } from './fixtures/critic-model.mjs';
-
-const root = new URL('..', import.meta.url).pathname;
-const out = process.env.DONE_DONE_EVIDENCE_ROOT ?? process.argv[2];
-if (!out) throw new Error('Give an evidence folder: $DONE_DONE_EVIDENCE_ROOT or the first argument');
+import { installJudge, referenceStandIn } from './fixtures/judge-cli.mjs';
+const root = new URL('..', import.meta.url).pathname, out = process.env.DONE_DONE_EVIDENCE_ROOT ?? process.argv[2];
+if (!out) throw Error('Give an evidence folder');
 mkdirSync(out, { recursive: true });
-const dir = mkdtempSync(join(tmpdir(), 'first-draft-critic-journey-'));
-const seen = [], server = await standIn(seen, [[6, 7], [9, 7]]);
-const render = renderCheck();
+const dir = mkdtempSync(join(tmpdir(), 'fd-critic-'));
+installJudge(dir);
+const seen = [], server = await standIn(seen, [[7, 6]]), refs = await referenceStandIn(dir), render = renderCheck();
 try {
-  const env = { ...process.env, CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (args) => promisify(execFile)(process.execPath, [join(root, 'src/cli.mjs'), ...args], { env, cwd: dir });
-  await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
-  const { stdout } = await run(['make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1', '--engine']);
-  writeFileSync(join(out, 'make.json'), `${JSON.stringify(JSON.parse(stdout), null, 2).replaceAll(dir, '<run>')}\n`);
-  const { made } = JSON.parse(stdout), [file] = made.files;
-  assert.ok(made.critic?.plain, `the critic ran: ${JSON.stringify(made.critic)}`);
-  assert.deepEqual([file.critique.scores, file.critique.passed, file.critique.plain_score], [[6, 9], true, 7]);
-  assert.equal(seen.filter((b) => b.includes('"review_designs"')).length, 2);
-  // The board: each page as the critic saw it, with what the report says under it.
-  const column = async (title, html, caption) => {
-    const [desktop, phone] = (await render.shoot(html, 1600)).toSorted((a, b) => b.width - a.width);
-    return `<section><h2>${title}</h2><div class="pair"><figure><img src="${desktop.dataUrl}" width="640"><figcaption>desktop 1280</figcaption></figure><figure><img src="${phone.dataUrl}" width="195"><figcaption>phone 390</figcaption></figure></div><p>${caption}</p></section>`;
-  };
-  const under = `model ${made.model} (local stand-in) · run ${made.seconds} s`;
-  const board = `<!doctype html><html><head><style>body{margin:0;padding:24px;font:15px/1.4 system-ui,sans-serif;background:#f4f2ee;color:#1d1d1b}section{margin-bottom:28px}h2{margin:0 0 10px;font-size:18px}.pair{display:flex;gap:16px;align-items:flex-start}figure{margin:0}img{display:block;border:1px solid #ccc;background:#fff}figcaption{font-size:13px;color:#555}p{margin:8px 0 0}</style></head><body>
-${await column(`Option: ${basename(file.file)}`, readFileSync(file.file, 'utf8'), `critic score ${file.critique.score}/10 (rounds ${file.critique.scores.join(' → ')}, passed: ${file.critique.passed}) · ${under}`)}
-${await column('Plain one-prompt page, same brief', readFileSync(made.critic.plain, 'utf8'), `critic score ${file.critique.plain_score}/10 · ${under}`)}
-</body></html>`;
-  const [shot] = (await render.shoot(board, 4000)).toSorted((a, b) => b.width - a.width);
-  writeFileSync(join(out, 'critic-board.png'), Buffer.from(shot.dataUrl.slice(shot.dataUrl.indexOf(',') + 1), 'base64'));
-  const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${(await promisify(execFile)('git', ['-C', root, 'rev-parse', '--short', 'HEAD'])).stdout.trim()}`;
-  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version} (source checkout), make with its critic, against a local stand-in model` },
-    start: 'A throwaway FIRST_DRAFT_HOME set to byokit:opencode-go with a local stand-in for the provider, and the machine\'s Chrome',
-    steps: ['Run first-draft-axi make "A notes app for Umer" --options 1: the engine writes version 1 of the option',
-      'The critic gets a plain one-prompt page for the same brief, sees both at 1280 and 390 and scores 6 against the plain page\'s 7',
-      'The option goes back to the engine with the critic\'s gaps and fixes; the revision scores 9 and is written as the option',
-      'Draw the option and the plain page side by side at 1280 and 390 with each score, the model and the run time (critic-board.png)'],
-    result: 'make.json reports the option\'s critique (scores 6 then 9, passed, plain page 7) and the plain page\'s file; critic-board.png shows the option (version 2) beside the plain page with their scores. The scores come from the stand-in model, so this proves the review loop and the report, not design quality' }, null, 2));
-  console.log('PASS: the critic scored the option against the plain page, sent the 6 back, and kept the revision that scored 9');
-} finally {
-  render.close();
-  server.close();
-  rmSync(dir, { recursive: true, force: true });
-}
+  const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'synthetic', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}`, FIRST_DRAFT_TEST_REF_ORIGIN: refs.origin };
+  const run = async (...args) => JSON.parse((await promisify(execFile)(process.execPath, [join(root, 'src/cli.mjs'), ...args], { env, cwd: dir })).stdout);
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const pulled = await run('refs', 'pull', '--library', refs.library);
+  assert.equal(pulled.refs_pulled.captured[0].shots, 4);
+  assert.equal(pulled.refs_pulled.not_captured.length, 2);
+  const { made } = await run('make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1');
+  const [file] = made.files;
+  assert.deepEqual([file.critique.score, file.critique.passed, file.critique.rounds], [6, false, 1]);
+  assert.equal(made.critic.judge.model, 'gpt-6.1-sol');
+  assert.equal(Object.keys(file.critique.axes).length, 7);
+  assert.equal(seen.filter(b => b.includes('"review_designs"')).length, 0);
+  env.FD_JUDGE_AUTH = 'out';
+  const fallback = await run('judge', file.file, 'A notes app for Umer', '--plain', made.critic.plain);
+  assert.match(fallback.judge.off, /not ready/);
+  assert.match(fallback.critique.judge, /same model/);
+  const clean = o => JSON.stringify(o, null, 2).replaceAll(dir, '<run>');
+  writeFileSync(join(out, 'make.json'), clean({ made }));
+  writeFileSync(join(out, 'fallback.json'), clean(fallback));
+  writeFileSync(join(out, 'refs.json'), clean(pulled));
+  const pair = async html => (await render.shoot(html, 800)).map(s => `<figure><img src="${s.dataUrl}" alt="${s.width}px screenshot"><figcaption>${s.width}px</figcaption></figure>`).join('');
+  const cached = JSON.parse(readFileSync(join(dir, 'refs-library/library.json'), 'utf8')).entries.find(e => e.captured);
+  const reference = cached.shots.filter(s => s.theme === 'light').map(s => `<figure><img src="data:image/png;base64,${readFileSync(join(dir, 'refs-library', s.file)).toString('base64')}" alt="Reference ${s.width}px"><figcaption>${s.width}px</figcaption></figure>`).join('');
+  const axes = Object.entries(file.critique.axes).map(([axis, v]) => `<li><b>${axis}: ${v.score}/10</b> — ${v.reason}</li>`).join('');
+  const board = `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;padding:24px;font:16px/1.5 system-ui;background:#f5f4f0;color:#202020}h1{font-size:28px}h2{font-size:20px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:24px}.pair{display:grid;grid-template-columns:3fr 1fr;gap:10px;align-items:start}figure{margin:0}img{display:block;width:100%;border:1px solid #aaa}p{max-width:85ch}li{margin:4px 0}</style></head><body><h1>Independent judge — protocol proof</h1><p>Local stand-ins through the real CLI, Chrome and published BYOKit adapters. No model call. Scores below are synthetic, not design quality.</p><p><b>One review: 6/10, below the 9 bar. No revision.</b> Plain page: 7/10.<br>Judge: gpt-6.1-sol / byokit:codex (stand-in), different from generator muse-spark-1.3-contributor. Make run: ${made.seconds}s.</p><div class="columns"><section><h2>Option — desktop and phone</h2><div class="pair">${await pair(readFileSync(file.file, 'utf8'))}</div></section><section><h2>Policy-admitted reference — desktop and phone</h2><div class="pair">${reference}</div><p>Umer notes fixture: explicit permission and robots allowed. Unclear permission and robots-blocked sources were not captured.</p></section></div><h2>Seven axes, scores and reasons</h2><ul>${axes}</ul><h2>Missing subscription: honest fallback</h2><p>Installed judge signed out → generator self-assessment, ${fallback.critique.score}/10. Independent axes are absent. The output explains that the independent route is not ready.</p></body></html>`;
+  writeFileSync(join(out, 'critic-board.html'), board);
+  const [shot] = await render.shoot(board, 1800);
+  writeFileSync(join(out, 'critic-board.png'), Buffer.from(shot.dataUrl.split(',')[1], 'base64'));
+  const head = (await promisify(execFile)('git', ['-C', root, 'rev-parse', 'HEAD'])).stdout.trim();
+  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${head}, source CLI and Chrome` }, start: 'Task-private HOME and local protocol stand-ins; no owner state, network model or credentials.', steps: ['refs pull captures the permitted fixture at phone/desktop in light/dark; unclear permission and robots denial stay notes-only.', 'make writes an option and baseline; the installed Codex adapter receives six native PNGs and returns seven axes in one independent review.', 'A low score stays flagged without revision; signing out the judge makes retained judge explicitly report generator self-assessment.', 'Render critic-board.png: option and reference at both widths, scores, route and fallback.'], result: 'One independent review and an explicitly labelled fallback work through the real CLI. Synthetic stand-in scores prove protocol behaviour, not visual taste or live model quality.' }, null, 2));
+  console.log('PASS: policy-admitted references, one independent review with seven axes, explicit signed-out fallback');
+} finally { render.close(); server.close(); refs.server.close(); rmSync(dir, { recursive: true, force: true }); }

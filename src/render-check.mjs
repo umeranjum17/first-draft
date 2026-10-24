@@ -5,7 +5,7 @@
 // failed. The same browser draws the engine's source (App.jsx and its runtime) once, and the
 // page it drew is kept as static HTML: that snapshot is what the check and the board see.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clarityPage } from './clarity.mjs';
@@ -17,12 +17,13 @@ const NAMES = ['google-chrome-stable', 'google-chrome', 'chromium', 'chromium-br
 const SPOTS = ['/opt/google/chrome/chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/lib/chromium/chromium', '/snap/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
 
 // The browser already on this machine. FIRST_DRAFT_CHROME names the one to use; when it names a
-// path that is not there, this machine has no browser.
+// non-executable path, this machine has no browser. Browser config directories are not candidates.
 export const findBrowser = () => {
+  const executable = (p) => { try { accessSync(p, constants.X_OK); return statSync(p).isFile(); } catch { return false; } };
   const given = process.env.FIRST_DRAFT_CHROME;
-  if (given) return existsSync(given) ? given : null;
-  for (const dir of (process.env.PATH ?? '').split(':')) for (const name of NAMES) { const p = join(dir, name); if (existsSync(p)) return p; }
-  for (const p of SPOTS) if (existsSync(p)) return p;
+  if (given) return executable(given) ? given : null;
+  for (const dir of (process.env.PATH ?? '').split(':')) for (const name of NAMES) { const p = join(dir, name); if (executable(p)) return p; }
+  for (const p of SPOTS) if (executable(p)) return p;
   return null;
 };
 
