@@ -30,6 +30,7 @@ Harness: A shell runs the CLI and curl for the url. A browser tool opens the url
 - [Play: screens on both devices](features/play-click-through-the-screens-of-an-opt.md): Open <url>?screen=<id>#/o/1/play/phone or /desktop; screen selection persists across device changes; post returns both links (`src/view.mjs`, `src/post.mjs`)
 - [Comment pins: read from and added to the design's comments file](features/comment-pins-read-from-the-design-s-comm.md): Put <design>.comments.json next to the design and open the view, or press Comment on the canvas and tap a spot (`src/view.mjs`, `src/view/app.js`)
 - [View startup output and error codes](features/view-startup-output-and-error-codes.md): Run the view command in a shell (`src/cli.mjs`)
+- [The project's landing page and README screenshots](features/project-landing-page.md): Open docs/index.html at 390/1280 light/dark; `done-done run landing` checks and captures it (`docs/index.html`, `journeys/landing.mjs`)
 - [Make a landing page from a README](features/make-a-landing-page.md): Run make with a prompt that asks for a landing page and carries the README (`src/make.mjs`)
 - [Make option count and brief controls](features/make-option-controls.md): Run the installed CLI with `--options 1`, `3`, `5`, then default count; combine `--screens`, `--brief-file`, `--model`, `--style` and `--out-dir`; check files and errors (`src/cli.mjs`, `src/make.mjs`)
 - [Make with a named design style](features/make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>` (`src/styles.mjs`)
