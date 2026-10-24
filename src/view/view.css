@@ -61,8 +61,8 @@ svg.i.fill { fill: currentColor; stroke: none; }
 .button[disabled] { opacity: 0.45; cursor: default; }
 .sep { width: 1px; height: 18px; flex-shrink: 0; background: var(--border-2); }
 
-/* The top bar: where you are (left), how you look at it (centre), what you do with it (right). */
-.bar { position: sticky; top: 0; z-index: 5; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); grid-template-areas: "l c r"; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; background: var(--bg); }
+/* The top bar: where you are (left), how you look at it (centre), what you do with it (right). Above the canvas's pins and bubbles when the page scrolls under it. */
+.bar { position: sticky; top: 0; z-index: 8; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); grid-template-areas: "l c r"; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; background: var(--bg); }
 .bar-l, .bar-r { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .bar-l { grid-area: l; }
 .bar-c { grid-area: c; display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -205,6 +205,11 @@ svg.i.fill { fill: currentColor; stroke: none; }
 .send { width: 30px; height: 30px; padding: 0; border-radius: 9999px; }
 .button.primary.send { padding: 0; }
 .brief-foot { padding: 6px 6px 0; color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+/* The running version (app.js `version`): a quiet line at the foot of the picker, the Studio's panel and its More menu. */
+.version { color: var(--muted); font: 500 10.5px/1.4 var(--font-mono); }
+.side > .version { padding: 4px 6px 0; }
+.picker > .version { margin: 32px 4px 0; }
+.menu .version { padding: 4px 10px 6px; }
 .run { display: flex; align-items: center; gap: 10px; margin: -2px -2px 0 -6px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); font-size: 12.5px; line-height: 1.4; }
 .run[hidden] { display: none; }
 .run .grow { flex: 1; min-width: 0; }
@@ -291,7 +296,8 @@ svg.i.fill { fill: currentColor; stroke: none; }
   .side { padding: 0 8px; }
   .side-scroll { overflow: visible; padding: 20px 4px 12px; }
   .brief-foot { display: none; }
-  .brief { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 6px 8px; margin-bottom: 8px; padding: 6px 6px 6px 14px; border-radius: 22px;
+  .side > .version { padding: 0 6px 16px; } /* above the docked brief (order), at the end of the panel */
+  .brief { order: 1; position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 6px 8px; margin-bottom: 8px; padding: 6px 6px 6px 14px; border-radius: 22px;
     box-shadow: var(--shadow), 0 10px 0 10px var(--bg); } /* the second shadow fills the gap under the dock, so the panel never peeks out below it */
   .brief > :is(.run, .command) { flex-basis: 100%; margin: 4px 0 2px -6px; }
   .run .then { -webkit-line-clamp: 1; }

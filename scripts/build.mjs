@@ -24,3 +24,5 @@ cpSync('docs/logo.svg', 'dist/view/favicon.svg');
 for (const f of ['favicon-32.png', 'apple-touch-icon.png']) cpSync(`docs/${f}`, `dist/view/${f}`);
 cpSync('vendor/open-codesign/LICENSE', 'dist/LICENSE');
 cpSync('vendor/open-codesign/NOTICE', 'dist/NOTICE');
+// The landing page's footer names package.json's version.
+await import('./landing-version.mjs');

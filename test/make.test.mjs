@@ -2,7 +2,7 @@
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -60,6 +60,34 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
 }
 
+// The CLI names the version it runs: package.json's from an installed package, -dev from a source checkout until HEAD carries the
+// release tag, and a pre-release as it is. A copy of the package (src and package.json; its dependencies linked) stands in for each.
+test('--version, -v and the help header name the running version, and a source checkout says -dev', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-version-')), pkg = join(dir, 'pkg');
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const repo = new URL('..', import.meta.url).pathname;
+  cpSync(join(repo, 'src'), join(pkg, 'src'), { recursive: true });
+  symlinkSync(join(repo, 'node_modules'), join(pkg, 'node_modules'));
+  const manifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'));
+  const release = (version) => writeFileSync(join(pkg, 'package.json'), JSON.stringify({ ...manifest, version }));
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Umer', GIT_AUTHOR_EMAIL: 'umer@example.invalid', GIT_COMMITTER_NAME: 'Umer', GIT_COMMITTER_EMAIL: 'umer@example.invalid' };
+  const git = (...args) => promisify(execFile)('git', ['-C', pkg, ...args], { env });
+  const names = async (version) => {
+    for (const flag of ['--version', '-v']) assert.equal((await promisify(execFile)(process.execPath, [join(pkg, 'src/cli.mjs'), flag], { env, cwd: dir })).stdout, `${version}\n`, flag);
+    assert.equal((await promisify(execFile)(process.execPath, [join(pkg, 'src/cli.mjs'), '--help'], { env, cwd: dir })).stdout.split('\n')[0], `first-draft-axi ${version}`, 'the help header');
+  };
+  release('1.4.2');
+  await names('1.4.2'); // installed from npm: no checkout
+  await git('init', '-q');
+  await git('add', '-A');
+  await git('commit', '-q', '--no-gpg-sign', '-m', 'work in progress');
+  await names('1.4.2-dev'); // a source checkout, no release tag
+  await git('tag', 'v1.4.2');
+  await names('1.4.2'); // the checkout of the tagged release
+  release('1.5.0-rc.1');
+  await names('1.5.0-rc.1'); // a pre-release says so itself
+});
+
 test('CLI option controls reach the real engine and reject bad values before calling it', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-controls-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -67,8 +95,6 @@ test('CLI option controls reach the real engine and reject bad values before cal
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
-  const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version;
-  for (const flag of ['--version', '-v']) assert.equal((await run(flag)).stdout, `${version}\n`);
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'configured-model');
   const config = readFileSync(join(dir, 'config.json'), 'utf8');
   await assert.rejects(run('make', 'Notes', '--out', 'refused.html', '--model', 'claude-opus-5-5'), (e) => /SUBSCRIPTION_ONLY/.test(e.stdout));

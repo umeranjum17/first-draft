@@ -12,7 +12,8 @@
 // desktop and the phone side by side, light and dark), add-comment-1280-<theme>.png (the comment box at the tapped point, then the saved
 // pin), hide-brief-1280-<theme>.png (the 1280 Studio before and after Hide brief, side by side); at 390, add-comment-390.png (the same, light
 // and dark), light and dark side by side in each: phone-row-390.png (the control
-// row and the whole phone above the one-line brief), more-menu-390.png (More open), press-play-390.png (Play at rest and held) and
+// row and the whole phone above the one-line brief), more-menu-390.png (More open, naming the version), version-390-light.png (the end of the
+// panel, its version above the docked brief), press-play-390.png (Play at rest and held) and
 // composer-390.png (the brief at rest and tapped); and studio-states.json (each state's measured width, theme and column). The single
 // captures (each width and theme, Send, Play, More, the tapped brief) go to $FD_EXTRA_OUT when set. Chrome is $CHROME, else chromium or google-chrome on PATH.
 import assert from 'node:assert/strict';
@@ -131,9 +132,9 @@ try {
   // What a capture shows, measured on the page: the window width, the theme the page is in, and whether the column and the composer show.
   const state = async (capture, more = {}) => states.push({ capture, ...await evaluate(`({ width: innerWidth, theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light', column: !!document.querySelector('.side')?.getClientRects().length, composer: (()=>{const b=document.querySelector('form.brief')?.getBoundingClientRect();return b?.width?{top:Math.round(b.top),bottom:Math.round(b.bottom)}:'hidden'})(), stageWidth: Math.round(document.querySelector('.stage')?.getBoundingClientRect().width ?? 0), zoom: document.querySelector('.zoom')?.getClientRects().length ? document.querySelector('.zoom').textContent : 'none', button: document.querySelector('.bar .fold')?.getClientRects().length ? document.querySelector('.bar .fold').getAttribute('aria-label') : 'none' })`), ...more });
   // A capture of the page as the user sees it, saved to `dir` when given; it returns the PNG either way.
-  const shot = async (name, dir) => {
+  const shot = async (name, dir, at = 'scrollTo(0,0)') => {
     await settle();
-    await evaluate('scrollTo(0,0)');
+    await evaluate(at);
     const expected = await evaluate("[...document.querySelectorAll('iframe')].filter(f=>f.getClientRects().length).length");
     let ready = expected === 0;
     for (let i = 0; i < 100 && !ready; i++) {
@@ -201,6 +202,8 @@ try {
     return { open, after };
   };
 
+  // The version the CLI prints (-dev from a source checkout), which the Studio names at the foot of its panel and in More.
+  const running = `first-draft ${execFileSync(process.execPath, [join(root, 'src/cli.mjs'), '--version'], { encoding: 'utf8' }).trim()}`;
   const phones = { light: {}, dark: {} }; // the 390 captures of each theme, framed side by side after the loop
   const wides = { light: {}, dark: {} }; // and the 1280 ones
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
@@ -218,6 +221,14 @@ try {
     assert.match(await evaluate('location.hash'), /^#\/o\/1$/, 'a card opens its option in the Studio');
     await open('#/o/1');
     const before = await shot(`studio-${w}-${theme}`, out);
+    // The running version: at the foot of the panel, in view as the Studio opens at 1280; at 390 at the end of the panel, above the docked brief.
+    assert.equal(await evaluate("document.querySelector('.side > .version').textContent"), running, 'the panel names the running version');
+    const end = 'scrollTo(0,document.documentElement.scrollHeight)';
+    if (w < 700) await evaluate(end);
+    const label = await box('.side > .version'), dock = await box('form.brief'), view = await evaluate('innerHeight');
+    assert.ok(label.top >= 0 && label.bottom <= (w < 700 ? dock.top : view), `the version shows${w < 700 ? ' above the docked brief at the end of the panel' : ' at the foot of the panel'}: ${JSON.stringify({ label, dock, view })}`);
+    if (w < 700 && theme === 'light') { await shot('version-390-light', out, end); await state('version-390-light.png', { after: 'scrolled to the end of the panel' }); }
+    await evaluate('scrollTo(0,0)');
     await state(w > 700 ? `hide-brief-${w}-${theme}.png (before)` : `studio-${w}-${theme}.png, phone-row-390.png (${theme}), press-play-390.png (${theme}, at rest), composer-390.png (${theme}, one line)`);
     // Every kind of button in the Studio shows a press state.
     const held = await press('.bar a.primary', w < 700 ? `press-play-390-${theme}` : undefined);
@@ -286,6 +297,7 @@ try {
       assert.equal(await shown('form.brief .link'), false, 'the terminal command link waits until the brief is used');
       await click('.bar .more');
       assert.equal(await shown('#more-menu a[href="#/o/1/full"]'), true, 'More opens a menu with Fullscreen');
+      assert.equal(await evaluate("document.querySelector('#more-menu .version').textContent"), running, 'More names the running version');
       phones[theme].more = await shot(`studio-more-390-${theme}`, extra);
       await state(`more-menu-390.png (${theme})`, { after: 'More pressed' });
       await press('#more-menu a');
@@ -308,7 +320,7 @@ try {
   const { light: l, dark: d } = phones;
   await sideBySide('add-comment-390', 'light', [['390 px, light: More > Add comment, the phone tapped: the box opens below the mark', l.open], ['390 px, light: after Save the comment is pin 3, beside the phone', l.after], ['390 px, dark: More > Add comment, the phone tapped', d.open], ['390 px, dark: after Save the comment is pin 3, beside the phone', d.after]], 390, 844);
   await sideBySide('phone-row-390', 'light', [['390 px, light: the option switcher, Play (the one filled button) and More (⋯) on one line, Desktop/Phone under them. The whole phone shows above the one-line brief box', l.rest], ['390 px, dark: the option switcher, Play (the one filled button) and More (⋯) on one line, Desktop/Phone under them. The whole phone shows above the one-line brief box', d.rest]], 390, 844);
-  await sideBySide('more-menu-390', 'light', [['390 px, light: More (⋯) pressed. Its menu holds Fullscreen', l.more], ['390 px, dark: More (⋯) pressed. Its menu holds Fullscreen', d.more]], 390, 844);
+  await sideBySide('more-menu-390', 'light', [['390 px, light: More (⋯) pressed. Its menu holds Fullscreen and names the version', l.more], ['390 px, dark: More (⋯) pressed. Its menu holds Fullscreen and names the version', d.more]], 390, 844);
   await sideBySide('press-play-390', 'light', [['390 px, light: Play at rest', l.rest], ['390 px, light: Play held down changes colour', l.held], ['390 px, dark: Play at rest', d.rest], ['390 px, dark: Play held down changes colour', d.held]], 390, 844);
   await sideBySide('composer-390', 'light', [['390 px, light: the brief box at rest is one line, below the whole phone', l.rest], ['390 px, light: the brief box tapped opens up, with Terminal command', l.focused], ['390 px, dark: the brief box at rest is one line, below the whole phone', d.rest], ['390 px, dark: the brief box tapped opens up, with Terminal command', d.focused]], 390, 844);
 
@@ -395,7 +407,8 @@ try {
       "Press 'Show brief': the panel is shown again",
       "At 390 px wide, in light and in dark: the bar is the option switcher, Play (the one filled button) and More, with Desktop/Phone under them; the whole phone shows above a one-line brief box with its Send button; phone-row-390.png shows light and dark side by side",
       "At 390 px, holding Play down changes its colour; press-play-390.png shows Play at rest and held, light and dark. Every other kind of button also changes while held",
-      "At 390 px, pressing More opens a menu with Fullscreen; more-menu-390.png shows it in light and dark; Escape closes it",
+      "At 390 px, pressing More opens a menu with Fullscreen and, under a rule, the running version ('first-draft <version>', -dev from a source checkout); more-menu-390.png shows it in light and dark; Escape closes it",
+      "The Studio names the version `first-draft-axi --version` prints, as 'first-draft <version>': at 1280 px at the foot of the panel under the brief box, in view as the Studio opens (studio-1280-light.png); at 390 px at the end of the panel, above the docked brief box (version-390-light.png, scrolled to the end)",
       "At 390 px, More > Add comment, tap the phone, type and Save: the comment is saved to the file and shows as a pin beside the phone; add-comment-390.png shows the box and the pin, light and dark",
       "At 390 px, tapping the brief box opens it up (a taller box and a 'Terminal command' button); composer-390.png shows it at rest and tapped, light and dark",
       'At 1280 and 1440 px wide, in light and in dark, open Both, Desktop and Phone: each is drawn at the largest scale that fits and covers at least 85% of the canvas available to it on its limiting side (the canvas less the comment-pin margins when pins show); fit-<device>-<width>-<theme>.png captures each and fit.json records the zoom and cover',
@@ -403,7 +416,7 @@ try {
       'Switch Phone/Desktop and back: each device fills the canvas; click a comment in the panel and its pin opens on the canvas',
       "At 1280 px hide the panel and switch device: it stays hidden until 'Show brief'",
       'Open Option 2 (from the panel at 1280, from the option switcher at 390); type a change in the brief box and press Send with no agent set: the set-up hint shows; at 390 open Fullscreen from More and Exit; press Play, then Exit'],
-    result: "The option picker shows each option at desktop and phone width with its comment count, and a card opens it in the Studio (picker-*.png). The Studio opens in one top bar with the option switcher beside the design's name and Play as its one filled button; at 1280 px it opens on Desktop filling the canvas width (studio-1280-*.png), and Both shows the desktop and the phone side by side as large as the canvas fits, each with its own Play (canvas-both-1280.png); Both, Desktop and Phone each cover at least 85% of the canvas available to them at 1280 and 1440 (fit-*.png), and Both is the default only where it fits large, at 1920 (default-*.png); at 390 px the switcher, Play and More sit above Desktop/Phone and the whole phone shows above a one-line brief box (studio-390-*.png, phone-row-390.png). A person adds a comment by tapping a point on the phone and it is saved to the comments file and shows as a pin beside the frame (add-comment-*.png); 'Hide brief' removes the panel and the design fills the canvas (hide-brief-*.png); More opens a menu with Fullscreen, Play changes colour while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, panel, composer position, canvas width, zoom label and toggle label" }, null, 2));
+    result: "The option picker shows each option at desktop and phone width with its comment count, and a card opens it in the Studio (picker-*.png). The Studio opens in one top bar with the option switcher beside the design's name and Play as its one filled button; at 1280 px it opens on Desktop filling the canvas width (studio-1280-*.png), and Both shows the desktop and the phone side by side as large as the canvas fits, each with its own Play (canvas-both-1280.png); Both, Desktop and Phone each cover at least 85% of the canvas available to them at 1280 and 1440 (fit-*.png), and Both is the default only where it fits large, at 1920 (default-*.png); at 390 px the switcher, Play and More sit above Desktop/Phone and the whole phone shows above a one-line brief box (studio-390-*.png, phone-row-390.png). A person adds a comment by tapping a point on the phone and it is saved to the comments file and shows as a pin beside the frame (add-comment-*.png); 'Hide brief' removes the panel and the design fills the canvas (hide-brief-*.png); More opens a menu with Fullscreen; the Studio names the running version (the one `first-draft-axi --version` prints) at the foot of its panel (studio-1280-light.png, version-390-light.png) and in More (more-menu-390.png); Play changes colour while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, panel, composer position, canvas width, zoom label and toggle label" }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: each device fills the canvas, desktop and phone side by side, add a comment on the canvas, pins clear of the frames, Brief collapse, docked one-line composer clear of the phone, the phone control row and its More menu, press states, device switch, pins, option switch, Send hint, Fullscreen, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();

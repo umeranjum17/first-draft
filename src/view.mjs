@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
+import { VERSION } from './version.mjs';
 
 const LIMIT = 5_000_000; // sign-off takes mocks of 5 MB or less
 const DIST = new URL('../dist/view/', import.meta.url);
@@ -124,7 +125,7 @@ export async function serve({ files, name, host, advertise = host, port, framePo
   };
   const page = () => {
     const { pins, error: pinsError } = readPins(comments);
-    const data = { name, frames: frameOrigin, pins, pinsError, options: options.map(shown) };
+    const data = { name, version: VERSION, frames: frameOrigin, pins, pinsError, options: options.map(shown) };
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/view.css"></head>`
       + `<body><div id="app"></div><script type="application/json" id="design">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script><script src="/view.js"></script></body></html>`;
   };
