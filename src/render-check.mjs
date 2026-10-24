@@ -179,7 +179,7 @@ const coveredText = () => {
       let shown=true;for(let p=e.parentElement;p&&shown;p=p.parentElement){const s=getComputedStyle(p),b=p.getBoundingClientRect();if(s.overflow!=='visible'&&(x<b.left||x>b.right||y<b.top||y>b.bottom))shown=false;} // scrolled out of its own box
       const hit=shown&&document.elementFromPoint(x,y);
       const bar=hit && !e.contains(hit) && bars.find(b=>b.contains(hit)&&!b.contains(e));
-      if(bar) {covered.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))} under <${bar.tagName.toLowerCase()}${typeof bar.className==='string'&&bar.className?` class="${bar.className}"`:''}>`);break;}
+      if(bar) {covered.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))} under <${bar.tagName.toLowerCase()}${bar.id?` id="${bar.id}"`:''}${typeof bar.className==='string'&&bar.className?` class="${bar.className}"`:''}> (position:${getComputedStyle(bar).position})`);break;}
     }
   }
   return covered;
@@ -329,7 +329,7 @@ export class Renderer {
         if (!shot.visible) errors.push({ source: 'render', message: `${context} in ${theme} has no visible layout. Each screen must work independently on phone and desktop. Then call done again.` });
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
-        if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Dock the navigation in its own layout row (content scrolls in the row above it) or reserve its space, so nothing sits under it, then call done again.`});
+        if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
         if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;
         const { measured: m } = shot, worst = m.worst.tag ? m.worst : null;
