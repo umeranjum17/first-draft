@@ -249,6 +249,12 @@ if (command === 'references') {
     try { drawn = await drawLogos({ brief: prompt, direction: values.direction && logoDirection(values.direction), count, references: refs.images, explore: exploration.picture, make, ...c }); }
     catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the logo: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     tokens_in += drawn.tokens_in; tokens_out += drawn.tokens_out;
+    // The baseline the critic compared every finished mark with stays beside the options (not one of them) for review.
+    if (drawn.baseline.made) {
+      const file = join(resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.baseline', 'baseline.html');
+      try { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, drawn.baseline.made.html); drawn.baseline = { file, logo_dir: writeLogo(file, drawn.baseline.made.logo, { brief: prompt, baseline: 'the plain output of the same model on the same brief, without the concept step; the critic compared every finished mark with it', agent: c.agent, model: c.model }).dir }; }
+      catch (e) { fail('OUTPUT_FAILED', `cannot write ${file}: ${e.message}`); }
+    }
   }
   const png = (url) => Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
   for (let i = 0; i < count; i++) {
@@ -277,7 +283,7 @@ if (command === 'references') {
         writeLogo(file, a.made.logo, { brief: prompt, dropped: true, concept: conceptOf(a.concept), critique: [a.verdict], exploration: picture(a.picture) ?? exploration.off, agent: c.agent, model: c.model }, { 'critique.png': png(a.board), ...(a.picture?.webp && { 'exploration.webp': a.picture.webp }) });
       }
       if (logo) written = writeLogo(out, made.logo, { brief: prompt, direction, concept: conceptOf(option.concept), passed: option.passed,
-        critique: option.critiques, explored: conceptSummary(drawn), exploration: picture(option.picture) ?? exploration.off, timing: { ...drawn.timing, option_s: option.seconds },
+        critique: option.critiques, explored: conceptSummary(drawn), baseline: drawn.baseline.file ?? { error: drawn.baseline.error }, exploration: picture(option.picture) ?? exploration.off, timing: { ...drawn.timing, option_s: option.seconds },
         ...(drawn.second_round && { second_round: drawn.second_round }), critic: 'the same model, against written principles and the person\'s --ref images; not an independent judgement or trademark clearance', agent: c.agent, model: c.model },
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
@@ -289,7 +295,7 @@ if (command === 'references') {
   }
   if (logo && !files.length) fail('MAKE_FAILED', `the concept critique left no concept to draw: ${drawn.concepts.map((k) => `${k.name} (${k.verdict}; ${(k.flaws ?? []).join('; ')})`).join(', ')}`, ['Run logo again, or name a --direction in your own words']);
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check },
-    ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, ...(drawn.kinds_missing && { kinds_missing: drawn.kinds_missing }), ...(drawn.second_round && { second_round: drawn.second_round }),
+    ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, baseline: drawn.baseline.file ? { file: drawn.baseline.file, logo_dir: drawn.baseline.logo_dir } : { error: drawn.baseline.error }, ...(drawn.kinds_missing && { kinds_missing: drawn.kinds_missing }), ...(drawn.second_round && { second_round: drawn.second_round }),
       exploration: exploration.provider ? { provider: exploration.provider, images: drawn.options.filter((o) => o.made).map((o) => o.picture?.error ? { error: o.picture.error } : o.picture && { concept: o.concept.name, seconds: o.picture.seconds }) } : { off: exploration.off }, timing: drawn.timing }),
     ...(inventory && { redesign: { sources: resolve(values.out, 'sources', 'sources.json'), screens: inventory.pages.map(p=>({id:p.id,title:p.title})), pending: inventory.pending, limitations: inventory.limitations } }),
     ...(refs.metadata && { references:{name:refs.metadata.name,url:refs.metadata.url,fetched_at:refs.metadata.fetched_at} }),

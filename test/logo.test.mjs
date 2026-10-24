@@ -80,12 +80,13 @@ const W1 = {
 for (const t of Object.values(W1)) t.forEach((k, i) => { t[i] = concept(k); });
 const CONCEPTS = Object.values(W1).flat();
 // The sketch critique: Slow script reads as a smiley (a keep becomes redo), Hairline's detail dies at 16 px (redo), Leaf U is an initial
-// carved into a leaf (a keep becomes drop), and Moon cup is a strong keep whose base shape, a ring, Ripple already holds.
+// carved into a leaf (a keep becomes drop), Moon cup is a keep of 8, under the bar of 9 beside the best of its class (it goes back: redo),
+// and its base shape, a ring, Ripple already holds.
 const SAYS = { 'Level type': { verdict: 'keep', score: 9 }, 'Slow script': { verdict: 'keep', score: 6, misreads: ['a smiley face'] }, Ripple: { verdict: 'keep', score: 9 }, Hairline: { verdict: 'keep', score: 9 },
-  'Falling drop': { verdict: 'keep', score: 7 }, 'Moon cup': { verdict: 'keep', score: 8 }, 'Leaf U': { verdict: 'keep', score: 9, letter_object: true }, 'Last drop': { verdict: 'keep', score: 7 } };
-// The second look at Level type says redo but scores 8 and names no serious flaw: that is a keep.
-const FINAL = { 'Level type': [{ verdict: 'redo', score: 6, misreads: [], fix: 'Open the waterline so it reads at 16 px.' }, { verdict: 'redo', score: 8, fix: 'Could be bolder.' }], Ripple: [{ verdict: 'drop', score: 3, cliche: '', reads_as: 'a dot', fix: 'At 16 px it is a dot: the idea cannot carry.' }],
-  Hairline: [{ verdict: 'redo', score: 5, fix: 'Widen the gap.' }], 'Last drop': [{ verdict: 'keep', score: 8 }] };
+  'Falling drop': { verdict: 'keep', score: 9 }, 'Moon cup': { verdict: 'keep', score: 8, compared: 'Close to Raycast\'s calm, but a plainer silhouette.' }, 'Leaf U': { verdict: 'keep', score: 9, letter_object: true }, 'Last drop': { verdict: 'keep', score: 7 } };
+// The second look at Level type says redo but scores 9 beside the best of its class and names no serious flaw: that is a keep.
+const FINAL = { 'Level type': [{ verdict: 'redo', score: 6, misreads: [], fix: 'Open the waterline so it reads at 16 px.', compared: 'Behind Stripe: the waterline is lost at 16 px.' }, { verdict: 'redo', score: 9, fix: 'Could be bolder.' }], Ripple: [{ verdict: 'drop', score: 3, cliche: '', reads_as: 'a dot', fix: 'At 16 px it is a dot: the idea cannot carry.' }],
+  Hairline: [{ verdict: 'redo', score: 5, fix: 'Widen the gap.' }], 'Last drop': [{ verdict: 'keep', score: 9 }] };
 // Round two: the critic dropped every drawn mark in round one, so the stand-in proposes nine more concepts when it is shown the critic's advice.
 const bud = ([kind, base, name, idea], r) => concept({ kind, base, name, idea, sketch: sketch(`<circle cx="48" cy="48" r="${r}" fill="${PALS[name].light.primary}"/>`) });
 const ROUND1 = Object.fromEntries(Object.entries({
@@ -95,10 +96,10 @@ const ROUND1 = Object.fromEntries(Object.entries({
 }).map(([t, list]) => [t, list.map((k, i) => bud(k, 34 - i))]));
 const ROUND2 = Object.fromEntries(Object.entries(ROUND1).map(([t, list]) => [t, list.map((k) => ({ ...k, name: `${k.name} again`, palette: PALS[k.name] }))]));
 const BASE_OF = Object.fromEntries([...CONCEPTS, ...Object.values(ROUND1).flat(), ...Object.values(ROUND2).flat()].map((k) => [k.name, k.base]));
-const said = (m, s = {}) => ({ id: m.id, reads_as: s.reads_as ?? m.name.toLowerCase(), base: BASE_OF[m.name], intended: true, small: true, misreads: s.misreads ?? [], cliche: s.cliche ?? '', plain_letter: false, letter_object: s.letter_object ?? false, resembles_reference: '', score: s.score, verdict: s.verdict, fix: s.fix ?? '' });
+const said = (m, s = {}) => ({ id: m.id, reads_as: s.reads_as ?? m.name.toLowerCase(), base: BASE_OF[m.name], intended: true, small: true, misreads: s.misreads ?? [], cliche: s.cliche ?? '', plain_letter: false, letter_object: s.letter_object ?? false, resembles_reference: '', score: s.score, compared: s.compared ?? 'Holds up beside the best of its class and the baseline.', verdict: s.verdict, fix: s.fix ?? '' });
 const ADVICE = 'Look for one stroke that both pours and curls.';
-const WORLD2 = { proposals: [ROUND1, ROUND2], says: Object.fromEntries([...Object.values(ROUND1).flat(), ...Object.values(ROUND2).flat()].map((k) => [k.name, k.name === 'Bud' || k.name === 'Pour again' ? { verdict: 'keep', score: 8 } : { verdict: 'drop', score: 3, cliche: 'a stock image', fix: 'Not this.' }])),
-  finals: { Bud: [{ verdict: 'redo', score: 5, misreads: ['a horseshoe'], fix: ADVICE }, { verdict: 'drop', score: 3, misreads: ['a horseshoe'], fix: 'Still a horseshoe.' }], 'Pour again': [{ verdict: 'keep', score: 8 }] } };
+const WORLD2 = { proposals: [ROUND1, ROUND2], says: Object.fromEntries([...Object.values(ROUND1).flat(), ...Object.values(ROUND2).flat()].map((k) => [k.name, k.name === 'Bud' || k.name === 'Pour again' ? { verdict: 'keep', score: 9 } : { verdict: 'drop', score: 3, cliche: 'a stock image', fix: 'Not this.' }])),
+  finals: { Bud: [{ verdict: 'redo', score: 5, misreads: ['a horseshoe'], fix: ADVICE }, { verdict: 'drop', score: 3, misreads: ['a horseshoe'], fix: 'Still a horseshoe.' }], 'Pour again': [{ verdict: 'keep', score: 9 }] } };
 const WORLD1 = { proposals: [W1], says: SAYS, finals: FINAL };
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -231,18 +232,24 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.match(status['Typed name'].flaws.join(), /the sketch is not clean SVG: <text> is not allowed/);
   // Letter + object is rejected: the critic scored Leaf U a keep of 9, and the host drops it.
   assert.deepEqual([status['Leaf U'].verdict, status['Leaf U'].flaws], ['drop', ['an initial dressed as an object, and the brief does not ask for the letter']]);
-  // No repeated base shape: Moon cup is a keep of 8, above Last drop's 7, but its ring is Ripple's base shape.
-  assert.deepEqual([status['Moon cup'].verdict, status['Moon cup'].base_seen, status.Ripple.base_seen], ['keep', 'ring', 'ring']);
+  // The owner's bar: Moon cup's keep of 8, with no flaw, is under 9 beside the best of its class, so it goes back (redo), with the reasons.
+  assert.deepEqual([status['Moon cup'].verdict, status['Moon cup'].score, status['Moon cup'].flaws, status['Moon cup'].compared], ['redo', 8, [], 'Close to Raycast\'s calm, but a plainer silhouette.']);
+  // No repeated base shape: Moon cup scores above Last drop's 7, but its ring is Ripple's base shape.
+  assert.deepEqual([status['Moon cup'].base_seen, status.Ripple.base_seen], ['ring', 'ring']);
   // Option 1 refines Level type (wordmark-led): the critic sent it back once, the redo went to the engine as a revise, and the second look
   // kept it. Option 2 was Ripple (abstract), dropped by the critic as a dot at 16 px, so a reserve took its place: of its kind, and not
   // Falling drop, whose drop is option 3's base shape, but Hairline, drawn once (two engine runs an option): no attempt passed, so the
   // best-scored one is the option, flagged. Option 3, Last drop, passed at once. Every other attempt is kept for review.
   assert.deepEqual(made.files.map((f) => [f.concept.name, f.concept.kind, f.passed]), [['Level type', 'wordmark', true], ['Hairline', 'abstract', false], ['Last drop', 'symbol', true]]);
-  assert.ok(seen.some((b) => b.includes('Revise this logo option: Self-critique of this logo at 16 and 32 px') && b.includes('Open the waterline so it reads at 16 px.')));
+  assert.ok(seen.some((b) => b.includes('Revise this logo option: Self-critique of this logo at 16 and 32 px') && b.includes('Beside the best marks of its class it scores 6 of 10, under the 9 it needs: Behind Stripe') && b.includes('Open the waterline so it reads at 16 px.')));
   assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict, d.critique.score, d.option]), [['Ripple', 'drop', 3, undefined], ['Hairline', 'redo', 5, 'kept as the best attempt, flagged as not passing']]);
   assert.match(result.help[0], /1 option\(s\) did not pass the self-critique/);
   assert.equal(finalCritiques.length, 4 + 1, 'Level type twice, Ripple, Hairline and Last drop once each');
-  assert.equal(new Set(trace).size, 5, 'five engine runs for three options: at most two an option');
+  assert.equal(new Set(trace).size, 6, 'five engine runs for three options (at most two an option) and the baseline');
+  // The baseline, the plain output of the same model on the same brief, stands beside every finished mark the critic scores, and stays for review.
+  for (const b of finalCritiques) assert.match(b, /The row labelled baseline is the plain output of muse-spark-1\.3-contributor on the same brief/);
+  assert.deepEqual(result.baseline, { file: join(dir, 'tea.baseline', 'baseline.html'), logo_dir: join(dir, 'tea.baseline', 'baseline.logo') });
+  assert.equal(JSON.parse(readFileSync(join(dir, 'tea.baseline', 'baseline.logo', 'logo.json'), 'utf8')).model, 'muse-spark-1.3-contributor');
   for (const [option, attempts] of [[1, ['concept-1-first']], [2, ['concept-4-first']]]) {
     assert.deepEqual(readdirSync(join(dir, `tea-${option}.dropped`)).sort(), attempts.flatMap((a) => [`${a}.html`, `${a}.logo`]).sort());
     for (const a of attempts) assert.equal(JSON.parse(readFileSync(join(dir, `tea-${option}.dropped`, `${a}.logo`, 'logo.json'), 'utf8')).dropped, true);
@@ -250,7 +257,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.ok(!existsSync(join(dir, 'tea-3.dropped')));
   assert.equal(made.files[1].dropped_attempts, join(dir, 'tea-2.dropped'));
   for (const b of finalCritiques) assert.match(b, /"input_image"[^]*"input_image"/, 'the finished mark board and the --ref image');
-  const engine = seen.find((b) => b.includes('first-draft logo mode') && b.includes('Level type'));
+  const engine = seen.find((b) => b.includes('first-draft logo mode') && b.includes(': Level type. Idea'));
   assert.match(engine, /Logo direction: Concept 1 of the 9 explored, wordmark: Level type\. Idea: The name in level, unhurried letters[^]*It comes from the brief: calm: the still moment/);
   assert.match(engine, /The wordmark leads: draw the name in letters of its own first/);
   assert.match(engine, /Its palette is in logo\/palette\.json \(Level type: colours that come from its idea/);
@@ -289,7 +296,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.equal(logo.concept.name, f.concept.name);
     assert.equal(logo.concept.idea, CONCEPTS.find((k) => k.name === f.concept.name).idea);
     assert.equal(logo.explored.length, 9);
-    assert.deepEqual(logo.critique.map((c) => [c.round, c.verdict, c.score]), [[['first', 'redo', 6], ['redo', 'keep', 8]], [['first', 'redo', 5]], [['first', 'keep', 8]]][i]);
+    assert.deepEqual(logo.critique.map((c) => [c.round, c.verdict, c.score]), [[['first', 'redo', 6], ['redo', 'keep', 9]], [['first', 'redo', 5]], [['first', 'keep', 9]]][i]);
     assert.deepEqual(f.critique, logo.critique.at(-1));
     assert.equal(logo.passed, i !== 1);
     assert.match(logo.critic, /same model/);
@@ -298,6 +305,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.ok(Object.entries(logo.palette.contrast.light).every(([role, v]) => role === 'ground' || v >= 3), JSON.stringify(logo.palette.contrast));
     if (i === 0) assert.deepEqual(logo.palette.contrast.light, { ground: '#ffffff', primary: 12.2, accent: 6.3, neutral: 14.2 });
     assert.equal(logo.exploration, 'CI never generates images', 'no provider in CI: drawn from the idea alone');
+    assert.equal(logo.baseline, join(dir, 'tea.baseline', 'baseline.html'));
+    assert.ok(logo.critique.every((c) => c.compared.trim()), 'every score comes with its reasons');
     assert.ok(!existsSync(join(folder, 'exploration.webp')));
     assert.ok(logo.timing.concurrency === 3 && logo.timing.concept_calls === 3 && logo.timing.total_s >= logo.timing.concepts_s + logo.timing.drawing_s - 1 && Number.isInteger(logo.timing.option_s), JSON.stringify(logo.timing));
     assert.equal(logo.explored[0].palette, '#1f3b2d');
@@ -383,7 +392,7 @@ test('logo: image-first exploration through the asset provider, and a second rou
   const created = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse).filter((a) => a[0] === 'generate' && a[1] === 'create');
   assert.equal(created.length, 2, 'one image for Bud, one for Pour again');
   assert.match(created[0].join(' '), /Concept "Bud": A tea bud held between two pinched leaves\./);
-  const engines = seen.filter((b) => b.includes('first-draft logo mode'));
+  const engines = seen.filter((b) => b.includes('first-draft logo mode') && /Logo direction|Revise this logo option/.test(userMessages(b)[0])); // not the baseline's
   assert.ok(engines.length >= 3 && engines.every((b) => b.includes('"type":"input_image"')), 'every engine turn carries the exploration image');
   assert.match(engines[0], /The last attached image is a raster exploration of this concept by an image model/);
   assert.deepEqual(result.exploration, { provider: 'higgsfield', images: [{ concept: 'Pour again', seconds: result.exploration.images[0].seconds }] });
