@@ -164,6 +164,26 @@ const staticPage = () => {
   return `<!doctype html>\n${page.outerHTML}`;
 };
 
+// Text the eye cannot read because a fixed or sticky bar is painted over it in the first viewport.
+const coveredText = () => {
+  const bars=[...document.querySelectorAll('*')].filter(e=>/^(fixed|sticky)$/.test(getComputedStyle(e).position)&&e.getClientRects().length),covered=[];
+  if(!bars.length)return covered;
+  const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+  while(walker.nextNode() && covered.length<3) {
+    const node=walker.currentNode,e=node.parentElement;
+    if(!node.textContent.trim() || !(e instanceof HTMLElement) || getComputedStyle(e).visibility==='hidden')continue;
+    const range=document.createRange();range.selectNodeContents(node);
+    for(const r of range.getClientRects()) {
+      const x=r.left+r.width/2,y=r.top+r.height/2;
+      if(!r.width || x<0 || y<0 || x>innerWidth || y>innerHeight)continue;
+      let shown=true;for(let p=e.parentElement;p&&shown;p=p.parentElement){const s=getComputedStyle(p),b=p.getBoundingClientRect();if(s.overflow!=='visible'&&(x<b.left||x>b.right||y<b.top||y>b.bottom))shown=false;} // scrolled out of its own box
+      const hit=shown&&document.elementFromPoint(x,y);
+      const bar=hit && !e.contains(hit) && bars.find(b=>b.contains(hit)&&!b.contains(e));
+      if(bar) {covered.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))} under <${bar.tagName.toLowerCase()}${bar.id?` id="${bar.id}"`:''}${typeof bar.className==='string'&&bar.className?` class="${bar.className}"`:''}> (position:${getComputedStyle(bar).position})`);break;}
+    }
+  }
+  return covered;
+};
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
@@ -215,7 +235,8 @@ export class Renderer {
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
     const layout = screen === null ? null : await this.eval(c, `(()=>{const e=document.querySelectorAll('[data-oc-screen]')[${screen}],r=e.getBoundingClientRect();return {width:r.width,height:r.height,visible:getComputedStyle(e).visibility!=='hidden'}})()`);
     const visible = screen === null || (layout.width > 0 && layout.height > 0 && layout.visible);
-    return { measured, sig, lightness, visible, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    const covered = this.redesign && screen !== null ? await this.eval(c, `(${coveredText.toString()})()`) : [];
+    return { measured, sig, lightness, visible, covered, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -308,6 +329,7 @@ export class Renderer {
         if (!shot.visible) errors.push({ source: 'render', message: `${context} in ${theme} has no visible layout. Each screen must work independently on phone and desktop. Then call done again.` });
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
+        if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
         if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;
         const { measured: m } = shot, worst = m.worst.tag ? m.worst : null;
