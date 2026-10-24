@@ -51,7 +51,7 @@ const SAYS = { 'Leaf cup': { verdict: 'drop', score: 4, cliche: 'a cup with a le
   Hairline: { verdict: 'keep', score: 9 }, Pebble: { verdict: 'keep', score: 6 } };
 // The second look at U steam says redo but scores 8 and names no serious flaw: that is a keep.
 const FINAL = { 'U steam': [{ verdict: 'redo', score: 6, misreads: [], fix: 'Open the curl so the steam reads at 16 px.' }, { verdict: 'redo', score: 8, fix: 'Could be bolder.' }], Pebble: [{ verdict: 'drop', score: 3, cliche: '', reads_as: 'a dot', fix: 'At 16 px it is a dot: the idea cannot carry.' }],
-  Hairline: [{ verdict: 'redo', score: 5, fix: 'Widen the gap.' }, { verdict: 'redo', score: 6, misreads: ['a pause button'], fix: 'Still a pause button.' }] };
+  Hairline: [{ verdict: 'redo', score: 5, fix: 'Widen the gap.' }, { verdict: 'redo', score: 4, misreads: ['a pause button'], fix: 'Still a pause button.' }] };
 const said = (m, s = {}) => ({ id: m.id, reads_as: s.reads_as ?? m.name.toLowerCase(), intended: true, small: true, misreads: s.misreads ?? [], cliche: s.cliche ?? '', plain_letter: false, resembles_reference: '', score: s.score, verdict: s.verdict, fix: s.fix ?? '' });
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -142,13 +142,14 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.match(status['Typed U'].flaws.join(), /the sketch is not clean SVG: <text> is not allowed/);
   // Option 1 refines U steam: the critic sent it back once, the redo went to the engine as a revise, and the second look kept it.
   // Option 2 was Pebble, dropped by the critic as a dot at 16 px, so the next concept of the queue, Hairline, took its place; its redo
-  // still read as a pause button, so no attempt passed and the best-scored one is the option, flagged. Every other attempt is kept for review.
+  // read as a pause button and scored lower, so no attempt passed and the best-scored one, Hairline's first, is the option, flagged, with
+  // the critique of that attempt only. Every other attempt is kept for review.
   assert.deepEqual(made.files.map((f) => [f.concept.name, f.passed]), [['U steam', true], ['Hairline', false]]);
   assert.ok(seen.some((b) => b.includes('Revise this logo option: Self-critique of this logo at 16 and 32 px') && b.includes('Open the curl so the steam reads at 16 px.')));
-  assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict, d.option]), [['Pebble', 'drop', undefined], ['Hairline', 'redo', 'kept as the best attempt, flagged as not passing']]);
+  assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict, d.critique.score, d.option]), [['Pebble', 'drop', 3, undefined], ['Hairline', 'redo', 4, 'kept as the best attempt, flagged as not passing']]);
   assert.match(result.help[0], /1 option\(s\) did not pass the self-critique/);
   assert.equal(finalCritiques.length, 5);
-  for (const [option, attempts] of [[1, ['concept-2-first']], [2, ['concept-6-first', 'concept-4-first']]]) {
+  for (const [option, attempts] of [[1, ['concept-2-first']], [2, ['concept-6-first', 'concept-4-redo']]]) {
     assert.deepEqual(readdirSync(join(dir, `tea-${option}.dropped`)).sort(), attempts.flatMap((a) => [`${a}.html`, `${a}.logo`]).sort());
     for (const a of attempts) assert.equal(JSON.parse(readFileSync(join(dir, `tea-${option}.dropped`, `${a}.logo`, 'logo.json'), 'utf8')).dropped, true);
   }
@@ -171,7 +172,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.equal(f.logo_dir, folder);
     assert.deepEqual(readdirSync(folder).sort(), [...Object.keys(CLEAN), ...[16, 32, 48, 180, 192, 512, 1024].map((n) => `icon-${n}.png`), 'favicon.ico', 'logo.json', 'concepts.png', 'critique.png'].sort());
     for (const [name, text] of Object.entries(CLEAN)) if (name !== 'mark.svg') assert.equal(readFileSync(join(folder, name), 'utf8'), text, name);
-    assert.match(readFileSync(join(folder, 'mark.svg'), 'utf8'), /C26 30 22 52 48 84/, 'the redo changed the mark');
+    if (i === 0) assert.match(readFileSync(join(folder, 'mark.svg'), 'utf8'), /C26 30 22 52 48 84/, 'the redo changed the mark');
+    else assert.equal(readFileSync(join(folder, 'mark.svg'), 'utf8'), CLEAN['mark.svg'], 'the first attempt is the one shown');
     for (const n of [16, 32, 48, 180, 192, 512, 1024]) assert.deepEqual(png(join(folder, `icon-${n}.png`)), [n, n], `icon-${n}.png is ${n} px`);
     for (const board of ['concepts.png', 'critique.png']) png(join(folder, board));
     const ico = readFileSync(join(folder, 'favicon.ico'));
@@ -186,7 +188,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.equal(logo.concept.name, f.concept.name);
     assert.equal(logo.concept.idea, CONCEPTS.find((k) => k.name === f.concept.name).idea);
     assert.equal(logo.explored.length, 6);
-    assert.deepEqual(logo.critique.map((c) => c.verdict), ['redo', i === 0 ? 'keep' : 'redo']);
+    assert.deepEqual(logo.critique.map((c) => [c.round, c.verdict, c.score]), i === 0 ? [['first', 'redo', 6], ['redo', 'keep', 8]] : [['first', 'redo', 5]]);
+    assert.deepEqual(f.critique, logo.critique.at(-1));
     assert.equal(logo.passed, i === 0);
     assert.match(logo.critic, /same model/);
     assert.deepEqual({ reason: logo.palette.reason, light: logo.palette.light, dark: logo.palette.dark }, PALETTE);
@@ -203,7 +206,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     for (const name of Object.keys(CLEAN)) if (name !== 'palette.json') assert.ok(sheet.includes(`data:image/svg+xml;base64,${readFileSync(join(folder, name)).toString('base64')}`), `the sheet shows ${name}`);
     assert.ok(sheet.includes(`data:image/png;base64,${readFileSync(join(folder, 'icon-16.png')).toString('base64')}`), 'the sheet shows the 16 px icon');
     assert.doesNotMatch(sheet, /src="logo\//);
-    assert.ok(sheet.includes(`<p data-logo="idea"><!--logo:idea-->${logo.concept.idea}${i === 0 ? '' : '<br><strong>Did not pass the self-critique.</strong> A stranger sees "hairline"; reads as a pause button (score 6 of 10). Shown as the best attempt.'}<!--/logo:idea--></p>`));
+    assert.ok(sheet.includes(`<p data-logo="idea"><!--logo:idea-->${logo.concept.idea}${i === 0 ? '' : '<br><strong>Did not pass the self-critique.</strong> A stranger sees "hairline" (score 5 of 10). Shown as the best attempt.'}<!--/logo:idea--></p>`));
     assert.match(sheet, /<div data-logo="palette"><!--logo:palette-->[^]*A deep tea green[^]*Primary #1f3b2d<br><small>12\.2:1 contrast, passes 3:1[^]*Dark, on #121212[^]*<!--\/logo:palette--><\/div>/);
   }
 

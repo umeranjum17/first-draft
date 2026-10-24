@@ -140,13 +140,13 @@ const directionOf = (k, plan) => `Concept ${k.id} of the ${plan.concepts.length}
 export const conceptSummary = (plan) => plan.concepts.map(({ id, kind, name, idea, status, verdict, score, reads_as, flaws, fix }) => ({ id, kind, name, idea, status, verdict, score, reads_as, flaws, fix }));
 
 // One option: the next concept drawn by the engine (make), then critiqued at 16 and 32 px. A redo goes back to the engine once with the
-// critique; a concept that still fails, or is dropped, gives way to the next concept, two concepts at most (plan.dropped keeps its last
-// critique). An option is never lost to the critique: when no attempt is kept, the best-scored one is the option, with passed false.
-// Returns the option with its concept's critiques, every other attempt (kept beside the output for review), and the tokens spent;
+// critique; a concept that still fails, or is dropped, gives way to the next concept, two concepts at most, and only while more concepts
+// are left than the options still to make (left), so no later option goes without one (plan.dropped keeps its last critique). An option is never lost to the critique: when no attempt is kept, the best-scored one is the option, with passed false.
+// Returns the option with its concept's critiques up to the attempt it shows, every other attempt (kept beside the output for review), and the tokens spent;
 // made is null only when no concept was left to try.
-export async function logoOption(plan, { prompt, make, references = [], ...c }) {
+export async function logoOption(plan, { prompt, make, left = 0, references = [], ...c }) {
   const attempts = []; let tokens_in = 0, tokens_out = 0;
-  tries: for (let tries = 0; tries < 2 && plan.queue.length; tries++) {
+  tries: for (let tries = 0; tries < 2 && plan.queue.length > (tries ? left : 0); tries++) {
     const concept = plan.queue.shift();
     let made = await make({ prompt, ...c, references, direction: directionOf(concept, plan), logo: { idea: concept.idea } });
     for (let redo = 0; ; redo++) {
@@ -167,6 +167,6 @@ export async function logoOption(plan, { prompt, make, references = [], ...c }) 
   const kept = attempts.find((a) => a.verdict.verdict === 'keep') ?? attempts.reduce((best, a) => a.verdict.score >= best.verdict.score ? a : best);
   const passed = kept.verdict.verdict === 'keep';
   if (!passed) Object.assign(plan.dropped.find((d) => d.concept === kept.concept.id && !d.option) ?? {}, { option: 'kept as the best attempt, flagged as not passing' });
-  return { made: { ...kept.made, html: passed ? kept.made.html : flagSheet(kept.made.html, kept.verdict) }, concept: kept.concept, passed, critiques: attempts.filter((a) => a.concept === kept.concept).map((a) => a.verdict),
+  return { made: { ...kept.made, html: passed ? kept.made.html : flagSheet(kept.made.html, kept.verdict) }, concept: kept.concept, passed, critiques: attempts.slice(0, attempts.indexOf(kept) + 1).filter((a) => a.concept === kept.concept).map((a) => a.verdict),
     board: kept.board, others: attempts.filter((a) => a !== kept), tokens_in, tokens_out };
 }
