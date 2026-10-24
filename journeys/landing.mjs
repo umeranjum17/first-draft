@@ -1,7 +1,7 @@
 // Journey: the landing page (docs/index.html, served by GitHub Pages) in headless Chromium over CDP, at 1280 and 390, light and dark.
 // Each width and theme: the page's own fonts load (Instrument Sans, Instrument Serif), every image loads and shows its theme's variant
-// (light or -dark), nothing scrolls sideways, and the Get started link lands on the steps. The evidence folder ($DONE_DONE_EVIDENCE_ROOT,
-// or the first argument) gets landing-<width>-<theme>.png (the first screen) and landing-<width>-<theme>-full.png (the whole page), and
+// (light or -dark), nothing scrolls sideways, the footer names package.json's version, and the Get started link lands on the steps. The
+// evidence folder ($DONE_DONE_EVIDENCE_ROOT, or the first argument) gets landing-<width>-<theme>.png (the first screen) and landing-<width>-<theme>-full.png (the whole page), and
 // steps.json. Chrome is $CHROME, else chromium or google-chrome on PATH.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -48,6 +48,8 @@ try {
     writeFileSync(join(out, `${name}.png`), Buffer.from(data, 'base64'));
     console.log(`captured ${name}.png`);
   };
+  // The footer names package.json's version, stamped by the build and the Pages deploy (scripts/landing-version.mjs).
+  const released = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
   const seen = [];
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
     await c('Emulation.setDeviceMetricsOverride', { width: w, height: w > 700 ? 800 : 844, deviceScaleFactor: 1, mobile: false });
@@ -66,6 +68,7 @@ try {
     assert.ok(media.length >= 4 && media.every((i) => i.src.endsWith('-dark.webp') === (theme === 'dark')), `${w} ${theme}: each screenshot shows the ${theme} variant: ${JSON.stringify(media)}`);
     assert.ok(state.ui && state.displayLoaded && /Instrument Serif/.test(state.display), `${w} ${theme}: the page's fonts load: ${JSON.stringify(state)}`);
     assert.equal(state.wide, false, `${w} ${theme}: the page scrolls sideways`);
+    assert.equal(await evaluate("document.querySelector('footer .version').textContent"), released, `${w} ${theme}: the footer names the version`);
     await capture(`landing-${w}-${theme}`);
     await capture(`landing-${w}-${theme}-full`, true);
     await evaluate("document.querySelector('a[href=\"#start\"]').click()");
@@ -78,9 +81,10 @@ try {
     start: 'The first-draft landing page, docs/index.html as GitHub Pages serves it, opened from the file in headless Chromium',
     steps: ['At 1280 and 390 px wide, in light and in dark, open the landing page: its fonts (Instrument Sans, Instrument Serif) and every image load, each screenshot shows its light or dark variant to match, and nothing scrolls sideways',
       'Capture the first screen (landing-<width>-<theme>.png) and the whole page (landing-<width>-<theme>-full.png)',
-      "Click 'Get started': the page moves to the three steps"],
-    result: "The landing page opens with the serif headline 'Explore designs. Then build.', the install command and a screenshot of the Studio, then How it works (make, compare, refine), the three steps, the 390 Studio and the sign-off and agent cards, in light and dark at 1280 and 390, with each screenshot in the matching theme (landing-*.png)" }, null, 2));
-  console.log('PASS: landing page at 1280 and 390, light and dark: fonts, images in the matching theme, no sideways scroll, Get started');
+      "Click 'Get started': the page moves to the three steps",
+      "The footer names the released version from package.json ('first-draft <version>'), seen at the foot of each whole-page capture"],
+    result: "The landing page opens with the serif headline 'Explore designs. Then build.', the install command and a screenshot of the Studio, then How it works (make, compare, refine), the three steps, the 390 Studio and the sign-off and agent cards, and a footer naming the version, in light and dark at 1280 and 390, with each screenshot in the matching theme (landing-*.png)" }, null, 2));
+  console.log('PASS: landing page at 1280 and 390, light and dark: fonts, images in the matching theme, no sideways scroll, the footer version, Get started');
 } finally {
   if (ws?.readyState === 1) ws.close();
   if (child && child.exitCode === null) { child.kill('SIGTERM'); await new Promise((r) => { child.once('exit', r); setTimeout(r, 3000); }); }

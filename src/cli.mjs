@@ -17,8 +17,8 @@ import { redesignSource } from './redesign.mjs';
 import { makeRedesign } from './redesign-writer.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
 import { LOGO_DIRECTIONS, logoDirection, readLogo, writeLogo } from './logo.mjs';
+import { VERSION } from './version.mjs';
 
-const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const PICK = 'which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
 const ASK = `Ask the user ${PICK}`;
@@ -125,7 +125,8 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
   }
 };
 
-const HELP = `usage: first-draft-axi <command> [flags]
+const HELP = `first-draft-axi ${VERSION}
+usage: first-draft-axi <command> [flags]
 commands[11]:
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)

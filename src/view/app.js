@@ -182,6 +182,8 @@ function errorBar(n) {
 const option = (n) => design.options.find((o) => o.n === n);
 const link = (href, text, cls) => el('a', { href, class: cls }, text);
 const home = () => el('a', { class: 'home', href: '#/', 'aria-label': 'All options' }, el('img', { class: 'brand', src: '/favicon.svg', alt: '', width: '22', height: '22' }));
+// The running first-draft, quiet at the foot of the picker, the Studio's panel and its More menu; a source checkout's says -dev (src/version.mjs).
+const version = (tag = 'p') => el(tag, { class: 'version' }, `first-draft ${design.version}`);
 
 // Menus are popovers: under their button on a wide screen, a sheet at the foot of a phone's screen (view.css).
 function menu(id, button, ...items) {
@@ -219,7 +221,7 @@ function grid() {
   });
   const bar = el('header', { class: 'bar' }, el('div', { class: 'bar-l' }, home(), el('span', { class: 'title' }, design.name)), el('div', { class: 'bar-c' }), el('div', { class: 'bar-r' }, el('span', { class: 'count' }, plural(design.options.length, 'option'))));
   const head = el('div', { class: 'picker-head' }, el('h1', {}, design.name), el('p', {}, `${plural(design.options.length, 'option')}. Open one to see it at desktop and phone width, comment on it and make a change.`));
-  return { body: [bar, el('main', { class: 'picker' }, head, el('div', { class: 'grid' }, ...cards))], fit: () => cards.forEach((c) => c.mat.fit?.()) };
+  return { body: [bar, el('main', { class: 'picker' }, head, el('div', { class: 'grid' }, ...cards), version('footer'))], fit: () => cards.forEach((c) => c.mat.fit?.()) };
 }
 
 // A shell word as typed: plain words stay bare, anything else is single-quoted.
@@ -416,7 +418,7 @@ function canvas(o, device) {
   // Under 860px (view.css) Fullscreen and Comment move into the More menu, so Play is the one primary in the bar.
   const more = el('button', { type: 'button', class: 'button icon more', 'aria-label': 'More', 'data-align': 'right' }, icon('more'));
   const add = el('button', { type: 'button', class: 'item' }, icon('comment'), el('span', { class: 'name' }, 'Add comment'));
-  const moreMenu = menu('more-menu', more, el('a', { class: 'item', href: `#/o/${o.n}/full` }, icon('full'), el('span', { class: 'name' }, 'Fullscreen')), add);
+  const moreMenu = menu('more-menu', more, el('a', { class: 'item', href: `#/o/${o.n}/full` }, icon('full'), el('span', { class: 'name' }, 'Fullscreen')), add, el('hr'), version('div'));
   const fold = el('button', { type: 'button', class: 'button icon fold', 'aria-controls': 'studio-side', 'aria-expanded': String(column), 'aria-label': column ? 'Hide brief' : 'Show brief', title: column ? 'Hide brief' : 'Show brief' }, icon('panel'));
   const actions = o.error ? [] : [tool, el('a', { href: `#/o/${o.n}/full`, class: 'button icon full-link', 'aria-label': 'Fullscreen', title: 'Fullscreen' }, icon('full')), el('span', { class: 'sep' }),
     el('a', { href: `#/o/${o.n}/play/${dev === 'both' ? 'desktop' : dev}`, class: 'button primary play' }, icon('play', 'fill'), 'Play'), ...(innerWidth < WIDE ? [more, moreMenu] : [])];
@@ -439,7 +441,7 @@ function canvas(o, device) {
     el('div', { class: 'side-scroll' },
       el('section', {}, el('h2', { class: 'kicker' }, 'Options', el('span', { class: 'mono' }, String(design.options.length))), options),
       el('section', {}, el('h2', { class: 'kicker' }, `Comments · Option ${o.n}`, el('span', { class: 'mono' }, String(all.length))), notes)),
-    ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]));
+    ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]), version());
 
   const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), stage));
   const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };

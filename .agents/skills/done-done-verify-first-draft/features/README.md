@@ -3,6 +3,7 @@
 The repo's maintained verification map; a proof that drives one entry point is incomplete when this lists others.
 
 - [Generated assets inside a draft screen](generated-assets.md): Preview cost, explicitly approve one image, generate and capture real Codex/Higgsfield outputs with `journeys/assets.mjs`
+- [The running version](running-version.md): Run `first-draft-axi --version` or `--help`; the Studio's panel foot and More menu, the picker and the landing footer name it
 - [Grid of every option](grid-of-every-option.md): Open the view url at #/ (the root)
 - [Studio: one option on a phone 390 or desktop 1280 canvas, beside its brief column](canvas-for-one-option-at-phone-390-and-d.md): From the grid, click an option card, or open <url>#/o/1 (#/o/1/phone, #/o/1/desktop)
 - [Play: click through the screens of an option](play-click-through-the-screens-of-an-opt.md): From the canvas, press the Play button, or open <url>#/o/1/play

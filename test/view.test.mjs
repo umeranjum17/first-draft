@@ -46,6 +46,10 @@ test('the Studio viewport switch shows the option on the picked device only, and
     play: [...html.matchAll(/href="#\/o\/1\/play\/(phone|desktop)"/g)].map((m) => m[1]).join() });
   assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/phone`)), { phone: true, desktop: false, current: 'phone', play: 'phone' }); // never a desktop pane under the phone
   assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/desktop`)), { phone: false, desktop: true, current: 'desktop', play: 'desktop' });
+  // The panel's foot and the picker's name the version the CLI prints (-dev from this checkout).
+  const version = execFileSync(process.execPath, [CLI, '--version'], { encoding: 'utf8' }).trim();
+  assert.match(await dom(dir, `${v.url}#/o/1/desktop`), new RegExp(`<p class="version">first-draft ${version.replaceAll('.', '\\.')}</p>`));
+  assert.match(await dom(dir, v.url), new RegExp(`<footer class="version">first-draft ${version.replaceAll('.', '\\.')}</footer>`));
   for (const device of ['phone', 'desktop']) {
     const played = await dom(dir, `${v.url}?screen=home#/o/1/play/${device}`);
     assert.match(played, /aria-current="true">home<\/button>/, 'the selected screen opens on either device');
