@@ -145,10 +145,6 @@
           <a class="ghost" href="#start">Get started</a>
         </div>
         <p class="fine">Runs on your own Claude or ChatGPT subscription. No API key.</p>
-        <figure class="shot">
-          <a href="media/studio.webp" aria-label="Open the full-size screenshot of the Studio"><picture><source srcset="media/studio-dark.webp" media="(prefers-color-scheme: dark)"><img src="media/studio.webp" width="2560" height="1440" alt="The first-draft Studio in a 1920px-wide window, where it opens on Both: a notes app's first option at desktop and phone width side by side, with two comments pinned beside the frames and the options, comments and brief composer in the panel"></picture></a>
-        </figure>
-        <p class="caption">The Studio in a 1920px window, open on one option from a real run. On a laptop it opens on Desktop.</p>
       </section>
 
       <section class="block" id="how" aria-labelledby="how-title">
@@ -160,11 +156,11 @@
             <div class="txt"><h3><span>01</span>Start with a prompt</h3><p>Ask for a screen or a flow. You get three directions, each in its own style, instead of committing to the first one; <code>--options 1</code> to <code>5</code> sets how many.</p></div>
           </article>
           <article class="step">
-            <div class="vis"><picture><source srcset="media/options-dark.webp" media="(prefers-color-scheme: dark)"><img src="media/options.webp" width="2560" height="1240" alt="The option picker: each option of a design at desktop and phone width, with its comment count" loading="lazy"></picture></div>
+            <div class="vis"><div class="term" role="img" aria-label="The view lists each option with its own Play link"><div><span class="c">$</span> first-draft-axi view notes.html</div><div class="o">{"viewing":{"url":"http://127.0.0.1:4430/",</div><div class="o">&nbsp;"options":[{"option":1,"file":"notes-1.html", …}, …]}}</div></div></div>
             <div class="txt"><h3><span>02</span>See what changes</h3><p>Every option side by side. Open one in the Studio to see its desktop and phone at once, and click a spot to comment on it.</p></div>
           </article>
           <article class="step">
-            <div class="vis"><picture><source srcset="media/refine-dark.webp" media="(prefers-color-scheme: dark)"><img src="media/refine.webp" width="1280" height="960" alt="The Studio at 1280px on Desktop, with comments pinned beside the option and a change typed into the brief composer" loading="lazy"></picture></div>
+            <div class="vis"><div class="term" role="img" aria-label="A terminal running first-draft-axi refine on one option"><div><span class="c">$</span> first-draft-axi refine notes-2.html <span class="k">"warmer, with an empty state"</span> --out notes-warm.html</div><div class="o">notes-2.html stays as it was</div></div></div>
             <div class="txt"><h3><span>03</span>Keep the good direction</h3><p>Describe a change and your agent writes it as a new option. The one you started from stays untouched.</p></div>
           </article>
         </div>
@@ -183,7 +179,7 @@
         </div>
       </section>
 
-      <section class="block split" aria-labelledby="open-title">
+      <section class="block" aria-labelledby="open-title">
         <div>
           <p class="kicker">Not just a picture</p>
           <h2 id="open-title">A design you can open, at every width.</h2>
@@ -194,7 +190,6 @@
             <li><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Comments are saved next to the design as plain JSON.</li>
           </ul>
         </div>
-        <div class="phone-shot"><picture><source srcset="media/studio-390-dark.webp" media="(prefers-color-scheme: dark)"><img src="media/studio-390.webp" width="780" height="1688" alt="The Studio in a 390px-wide window: the option switcher and Play above the phone, the brief composer docked below" loading="lazy"></picture></div>
       </section>
 
       <section class="block" aria-label="Working with others">

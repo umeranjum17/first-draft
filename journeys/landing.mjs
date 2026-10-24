@@ -65,7 +65,7 @@ try {
       document.readyState==='complete'?go():addEventListener('load',go)})`);
     assert.ok(state.imgs.every((i) => i.ok), `${w} ${theme}: an image did not load: ${JSON.stringify(state.imgs)}`);
     const media = state.imgs.filter((i) => i.src.endsWith('.webp'));
-    assert.ok(media.length >= 4 && media.every((i) => i.src.endsWith('-dark.webp') === (theme === 'dark')), `${w} ${theme}: each screenshot shows the ${theme} variant: ${JSON.stringify(media)}`);
+    assert.ok(media.every((i) => i.src.endsWith('-dark.webp') === (theme === 'dark')), `${w} ${theme}: each screenshot shows the ${theme} variant: ${JSON.stringify(media)}`);
     assert.ok(state.ui && state.displayLoaded && /Instrument Serif/.test(state.display), `${w} ${theme}: the page's fonts load: ${JSON.stringify(state)}`);
     assert.equal(state.wide, false, `${w} ${theme}: the page scrolls sideways`);
     assert.equal(await evaluate("document.querySelector('footer .version').textContent"), released, `${w} ${theme}: the footer names the version`);
@@ -79,11 +79,11 @@ try {
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft landing page (docs/index.html) in first-draft-axi ${version}` },
     start: 'The first-draft landing page, docs/index.html as GitHub Pages serves it, opened from the file in headless Chromium',
-    steps: ['At 1280 and 390 px wide, in light and in dark, open the landing page: its fonts (Instrument Sans, Instrument Serif) and every image load, each screenshot shows its light or dark variant to match, and nothing scrolls sideways',
+    steps: ['At 1280 and 390 px wide, in light and in dark, open the landing page: its fonts (Instrument Sans, Instrument Serif) and every image load, any screenshot shows its light or dark variant to match, and nothing scrolls sideways',
       'Capture the first screen (landing-<width>-<theme>.png) and the whole page (landing-<width>-<theme>-full.png)',
       "Click 'Get started': the page moves to the three steps",
       "The footer names the released version from package.json ('first-draft <version>'), seen at the foot of each whole-page capture"],
-    result: "The landing page opens with the serif headline 'Explore designs. Then build.', the install command and a screenshot of the Studio, then How it works (make, compare, refine), the three steps, the 390 Studio and the sign-off and agent cards, and a footer naming the version, in light and dark at 1280 and 390, with each screenshot in the matching theme (landing-*.png)" }, null, 2));
+    result: "The landing page opens with the serif headline 'Explore designs. Then build.', the install command, then How it works (make, compare, refine, each as a terminal), the three steps, the open-at-every-width facts and the sign-off and agent cards, and a footer naming the version, in light and dark at 1280 and 390 (landing-*.png)" }, null, 2));
   console.log('PASS: landing page at 1280 and 390, light and dark: fonts, images in the matching theme, no sideways scroll, the footer version, Get started');
 } finally {
   if (ws?.readyState === 1) ws.close();
