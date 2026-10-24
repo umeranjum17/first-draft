@@ -34,10 +34,11 @@ const options = files.map((file, i) => {
   assert.deepEqual([ico.readUInt16LE(2), ico.readUInt16LE(4)], [1, 3], 'favicon.ico holds three icons');
   [16, 32, 48].forEach((n, k) => { const at = ico.readUInt32LE(18 + 16 * k), len = ico.readUInt32LE(14 + 16 * k); assert.deepEqual(ico.subarray(at, at + len), readFileSync(join(folder, `icon-${n}.png`))); });
   assert.equal(logo.checks.icon.full_bleed, true);
-  assert.ok(logo.concept?.idea && logo.explored?.length >= 6 && logo.critique?.at(-1)?.verdict === 'keep' && logo.palette?.reason, `${folder}/logo.json has the concept, the explored concepts, a kept critique and the palette`);
+  assert.ok(logo.concept?.idea && logo.explored?.length >= 6 && logo.critique?.length && typeof logo.passed === 'boolean' && logo.palette?.reason, `${folder}/logo.json has the concept, the explored concepts, the critique and the palette`);
   for (const name of ['palette.json', 'concepts.png', 'critique.png']) assert.ok(existsSync(join(folder, name)), `${folder}/${name}`);
   const sheet = readFileSync(file, 'utf8');
   assert.ok(sheet.includes('<!--logo:idea-->') && sheet.includes('<!--logo:palette-->'), `${file} shows its idea and palette`);
+  assert.equal(sheet.includes('Did not pass the self-critique.'), !logo.passed, `${file} says whether its mark passed the self-critique`);
   return { n: i + 1, file, folder, logo, sha256: hash(readFileSync(file)) };
 });
 writeFileSync(join(support, 'source.json'), JSON.stringify({ source: resolve(source), retained: true, options: options.map(({ n, file, logo, sha256 }) => ({ n, file, sha256, model: logo.model, concept: logo.concept?.name, idea: logo.concept?.idea, palette: logo.palette, critique: logo.critique, checks: logo.checks })) }, null, 2));
@@ -55,7 +56,7 @@ try {
 <img src="file://${options[0].folder}/concepts.png" alt="The concept sketches as the critic saw them" style="max-width:100%">`));
   for (const o of options) {
     const swatches = (set) => ['primary', 'accent', 'neutral'].map((role) => `<span style="display:inline-block;width:22px;height:22px;border-radius:4px;vertical-align:middle;background:${o.logo.palette[set][role]}"></span> ${role} ${o.logo.palette[set][role]} (${o.logo.palette.contrast[set][role]}:1)`).join(' &nbsp; ');
-    writeFileSync(join(support, `critique-${o.n}.html`), page(`${label(o)} critique`, `<h1>${esc(label(o))} (${esc(o.logo.concept.kind)})</h1><p>${esc(o.logo.concept.idea)}</p>
+    writeFileSync(join(support, `critique-${o.n}.html`), page(`${label(o)} critique`, `<h1>${esc(label(o))} (${esc(o.logo.concept.kind)})</h1><p>${esc(o.logo.concept.idea)}</p><p><b>${o.logo.passed ? 'Passed the self-critique.' : 'Did not pass the self-critique: shown as the best attempt.'}</b></p>
 <p><b>Palette:</b> ${esc(o.logo.palette.reason)}<br>light: ${swatches('light')}<br>dark: ${swatches('dark')}</p>
 <ol>${o.logo.critique.map((c) => `<li>${esc(c.round)} look: <b>${esc(c.verdict)}</b> (score ${c.score}); a stranger sees "${esc(c.reads_as)}"${c.flaws.length ? `; ${esc(c.flaws.join('; '))}` : ''}${c.fix ? `. ${esc(c.fix)}` : ''}</li>`).join('')}</ol>
 <p>16 px detail of icon.svg: ${JSON.stringify(o.logo.checks.detail_16['icon.svg'])}</p>

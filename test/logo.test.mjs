@@ -49,7 +49,9 @@ const CONCEPTS = [
 ].map((k) => ({ shape: 'A few shapes on the 96 grid.', avoid: 'A face.', ...k }));
 const SAYS = { 'Leaf cup': { verdict: 'drop', score: 4, cliche: 'a cup with a leaf', fix: 'The stock tea image; nothing twists it.' }, 'U steam': { verdict: 'keep', score: 8 }, 'Smile leaf': { verdict: 'keep', score: 7, misreads: ['a smiley face'] },
   Hairline: { verdict: 'keep', score: 9 }, Pebble: { verdict: 'keep', score: 6 } };
-const FINAL = { 'U steam': [{ verdict: 'redo', score: 6, misreads: [], fix: 'Open the curl so the steam reads at 16 px.' }, { verdict: 'keep', score: 8 }], Pebble: [{ verdict: 'drop', score: 3, cliche: '', reads_as: 'a dot', fix: 'At 16 px it is a dot: the idea cannot carry.' }], Hairline: [{ verdict: 'keep', score: 8 }] };
+// The second look at U steam says redo but scores 8 and names no serious flaw: that is a keep.
+const FINAL = { 'U steam': [{ verdict: 'redo', score: 6, misreads: [], fix: 'Open the curl so the steam reads at 16 px.' }, { verdict: 'redo', score: 8, fix: 'Could be bolder.' }], Pebble: [{ verdict: 'drop', score: 3, cliche: '', reads_as: 'a dot', fix: 'At 16 px it is a dot: the idea cannot carry.' }],
+  Hairline: [{ verdict: 'redo', score: 5, fix: 'Widen the gap.' }, { verdict: 'redo', score: 6, misreads: ['a pause button'], fix: 'Still a pause button.' }] };
 const said = (m, s = {}) => ({ id: m.id, reads_as: s.reads_as ?? m.name.toLowerCase(), intended: true, small: true, misreads: s.misreads ?? [], cliche: s.cliche ?? '', plain_letter: false, resembles_reference: '', score: s.score, verdict: s.verdict, fix: s.fix ?? '' });
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -60,7 +62,7 @@ const userText = (body) => JSON.parse(body).input.filter((m) => m.role === 'user
 // dies at 16 px, runs done, fixes the icon and runs done again; later new logos write clean files at once. A revise (a redo from the
 // critique, or a refine) writes DESIGN.md (done needs it), views the mark (the editor needs it), makes the leaf rounder and runs done.
 function standIn(seen) {
-  let start = 0, script = 'make', makes = 0;
+  let start = 0, script = 'make', makes = 0, revises = 0;
   const finals = {};
   const server = createServer((req, res) => {
     let body = '';
@@ -76,15 +78,15 @@ function standIn(seen) {
         const first = marks.length > 1 && !user.includes('was not usable');
         calls = [['critique_marks', { marks: marks.length > 1 ? marks.map((m) => said(m, { ...SAYS[m.name], ...(first && m.name === 'Leaf cup' && { fix: 'x'.repeat(900) }) })) : [said(marks[0], FINAL[marks[0].name][(finals[marks[0].name] = (finals[marks[0].name] ?? -1) + 1)])] }]];
       } else {
-        if (!body.includes('function_call_output')) { start = seen.length - 1; script = body.includes('Revise this logo option') ? 'revise' : makes++ ? 'clean' : 'make'; }
+        if (!body.includes('function_call_output')) { start = seen.length - 1; script = body.includes('Revise this logo option') ? 'revise' : makes++ ? 'clean' : 'make'; if (script === 'revise') revises++; }
         const n = seen.length - 1 - start;
         const write = (set, slots) => [...Object.entries(set).map(([f, t]) => create(`logo/${f}`, t)), ...(slots === undefined ? [] : [create('index.html', SHEET(slots))])];
-        const round = 'M48 14C26 30 22 52 48 84C74 52 70 30 48 14Z';
+        const round = `M48 ${12 + 2 * revises}C26 30 22 52 48 84C74 52 70 30 48 ${12 + 2 * revises}Z`;
         calls = {
           make: [[['set_todos', { items: [{ text: 'Draw the logo files and the sheet', checked: false }] }]], [create('DESIGN.md', DESIGN), ...write(REFUSED, false)], [['done', { path: 'index.html' }]], write(THIN, true), [['done', { path: 'index.html' }]], write({ 'icon.svg': CLEAN['icon.svg'] }), [['done', { path: 'index.html' }]]],
           clean: [[create('DESIGN.md', DESIGN), ...write(CLEAN, true)], [['done', { path: 'index.html' }]]],
           revise: [[['set_todos', { items: [{ text: 'Round the leaf', checked: false }] }]],
-            [create('DESIGN.md', DESIGN), ['str_replace_based_edit_tool', { command: 'view', path: 'logo/mark.svg' }], ['str_replace_based_edit_tool', { command: 'str_replace', path: 'logo/mark.svg', old_str: 'M48 12C30 28 24 50 48 84C72 50 66 28 48 12Z', new_str: round }]],
+            [create('DESIGN.md', DESIGN), ['str_replace_based_edit_tool', { command: 'view', path: 'logo/mark.svg' }], create('logo/mark.svg', svg('0 0 96 96', leaf(INK, round)))],
             [['done', { path: 'index.html' }]]],
         }[script][n];
       }
@@ -139,11 +141,18 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.match(status.Hairline.flaws.join(), /loses detail at 16 px: 2 distinct parts at 512 px but 1 at 16 px/);
   assert.match(status['Typed U'].flaws.join(), /the sketch is not clean SVG: <text> is not allowed/);
   // Option 1 refines U steam: the critic sent it back once, the redo went to the engine as a revise, and the second look kept it.
-  // Option 2 was Pebble, dropped by the critic as a dot at 16 px, so the next concept of the queue, Hairline, took its place.
-  assert.deepEqual(made.files.map((f) => f.concept.name), ['U steam', 'Hairline']);
+  // Option 2 was Pebble, dropped by the critic as a dot at 16 px, so the next concept of the queue, Hairline, took its place; its redo
+  // still read as a pause button, so no attempt passed and the best-scored one is the option, flagged. Every other attempt is kept for review.
+  assert.deepEqual(made.files.map((f) => [f.concept.name, f.passed]), [['U steam', true], ['Hairline', false]]);
   assert.ok(seen.some((b) => b.includes('Revise this logo option: Self-critique of this logo at 16 and 32 px') && b.includes('Open the curl so the steam reads at 16 px.')));
-  assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict]), [['Pebble', 'drop']]);
-  assert.equal(finalCritiques.length, 4);
+  assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict, d.option]), [['Pebble', 'drop', undefined], ['Hairline', 'redo', 'kept as the best attempt, flagged as not passing']]);
+  assert.match(result.help[0], /1 option\(s\) did not pass the self-critique/);
+  assert.equal(finalCritiques.length, 5);
+  for (const [option, attempts] of [[1, ['concept-2-first']], [2, ['concept-6-first', 'concept-4-first']]]) {
+    assert.deepEqual(readdirSync(join(dir, `tea-${option}.dropped`)).sort(), attempts.flatMap((a) => [`${a}.html`, `${a}.logo`]).sort());
+    for (const a of attempts) assert.equal(JSON.parse(readFileSync(join(dir, `tea-${option}.dropped`, `${a}.logo`, 'logo.json'), 'utf8')).dropped, true);
+  }
+  assert.equal(made.files[1].dropped_attempts, join(dir, 'tea-2.dropped'));
   for (const b of finalCritiques) assert.match(b, /"input_image"[^]*"input_image"/, 'the finished mark board and the --ref image');
   const engine = seen.find((b) => b.includes('first-draft logo mode'));
   assert.match(engine, /Logo direction: Concept 2 of the 6 explored, letter: U steam\. Idea: The U of Umer/);
@@ -161,7 +170,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.equal(f.file, join(dir, `tea-${i + 1}.html`));
     assert.equal(f.logo_dir, folder);
     assert.deepEqual(readdirSync(folder).sort(), [...Object.keys(CLEAN), ...[16, 32, 48, 180, 192, 512, 1024].map((n) => `icon-${n}.png`), 'favicon.ico', 'logo.json', 'concepts.png', 'critique.png'].sort());
-    for (const [name, text] of Object.entries(CLEAN)) if (!(i === 0 && /^(?:mark|lockup)/.test(name) && !name.includes('dark'))) assert.equal(readFileSync(join(folder, name), 'utf8'), text, name);
+    for (const [name, text] of Object.entries(CLEAN)) if (name !== 'mark.svg') assert.equal(readFileSync(join(folder, name), 'utf8'), text, name);
+    assert.match(readFileSync(join(folder, 'mark.svg'), 'utf8'), /C26 30 22 52 48 84/, 'the redo changed the mark');
     for (const n of [16, 32, 48, 180, 192, 512, 1024]) assert.deepEqual(png(join(folder, `icon-${n}.png`)), [n, n], `icon-${n}.png is ${n} px`);
     for (const board of ['concepts.png', 'critique.png']) png(join(folder, board));
     const ico = readFileSync(join(folder, 'favicon.ico'));
@@ -176,7 +186,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.equal(logo.concept.name, f.concept.name);
     assert.equal(logo.concept.idea, CONCEPTS.find((k) => k.name === f.concept.name).idea);
     assert.equal(logo.explored.length, 6);
-    assert.deepEqual(logo.critique.map((c) => c.verdict), i === 0 ? ['redo', 'keep'] : ['keep']);
+    assert.deepEqual(logo.critique.map((c) => c.verdict), ['redo', i === 0 ? 'keep' : 'redo']);
+    assert.equal(logo.passed, i === 0);
     assert.match(logo.critic, /same model/);
     assert.deepEqual({ reason: logo.palette.reason, light: logo.palette.light, dark: logo.palette.dark }, PALETTE);
     assert.deepEqual(logo.palette.contrast.light, { ground: '#ffffff', primary: 12.2, accent: 6.3, neutral: 14.2 });
@@ -189,10 +200,10 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     // The sheet is one self-contained page: every logo file embedded as itself, the idea and the palette written in by the host.
     const sheet = readFileSync(f.file, 'utf8');
     assert.match(sheet, /Content-Security-Policy/);
-    for (const [name, text] of Object.entries(CLEAN)) if (name !== 'palette.json') assert.ok(sheet.includes(`data:image/svg+xml;base64,${Buffer.from(i === 0 && name === 'mark.svg' ? readFileSync(join(folder, name), 'utf8') : text).toString('base64')}`), `the sheet shows ${name}`);
+    for (const name of Object.keys(CLEAN)) if (name !== 'palette.json') assert.ok(sheet.includes(`data:image/svg+xml;base64,${readFileSync(join(folder, name)).toString('base64')}`), `the sheet shows ${name}`);
     assert.ok(sheet.includes(`data:image/png;base64,${readFileSync(join(folder, 'icon-16.png')).toString('base64')}`), 'the sheet shows the 16 px icon');
     assert.doesNotMatch(sheet, /src="logo\//);
-    assert.ok(sheet.includes(`<p data-logo="idea"><!--logo:idea-->${logo.concept.idea}<!--/logo:idea--></p>`));
+    assert.ok(sheet.includes(`<p data-logo="idea"><!--logo:idea-->${logo.concept.idea}${i === 0 ? '' : '<br><strong>Did not pass the self-critique.</strong> A stranger sees "hairline"; reads as a pause button (score 6 of 10). Shown as the best attempt.'}<!--/logo:idea--></p>`));
     assert.match(sheet, /<div data-logo="palette"><!--logo:palette-->[^]*A deep tea green[^]*Primary #1f3b2d<br><small>12\.2:1 contrast, passes 3:1[^]*Dark, on #121212[^]*<!--\/logo:palette--><\/div>/);
   }
 
@@ -202,13 +213,13 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.match(seen[before], /Revise this logo option: a rounder leaf/);
   assert.match(seen[before], /data-logo=\\"idea\\"><\/p>/);
   assert.equal(refined.logo_dir, join(dir, 'tea-round.logo'));
-  assert.match(readFileSync(join(dir, 'tea-round.logo', 'mark.svg'), 'utf8'), /M48 14C26 30/);
+  assert.notEqual(readFileSync(join(dir, 'tea-round.logo', 'mark.svg'), 'utf8'), readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'));
   assert.equal(readFileSync(join(dir, 'tea-round.logo', 'wordmark.svg'), 'utf8'), CLEAN['wordmark.svg']);
   const round = JSON.parse(readFileSync(join(dir, 'tea-round.logo', 'logo.json'), 'utf8'));
   assert.equal(round.refined_from, join(dir, 'tea-2.html'));
   assert.equal(round.concept.name, 'Hairline');
   assert.ok(readFileSync(join(dir, 'tea-round.html'), 'utf8').includes(`<!--logo:idea-->${round.concept.idea}<!--/logo:idea-->`));
-  assert.equal(readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'), CLEAN['mark.svg'], 'the option it came from is untouched');
+  assert.ok(!readFileSync(join(dir, 'tea-2.html'), 'utf8').includes(readFileSync(join(dir, 'tea-round.logo', 'mark.svg')).toString('base64')), 'the option it came from is untouched');
 
   // The Studio's brief runs the same refine: the new option joins the design with its own logo folder.
   const view = spawn(process.execPath, [CLI, 'view', out, '--host', '127.0.0.1', '--port', '0'], { env });
@@ -217,6 +228,6 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   const sent = await fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify({ option: 2, change: 'a rounder leaf' }) });
   assert.equal(sent.status, 200, await sent.clone().text());
   assert.deepEqual(await sent.json(), { option: { n: 3, label: 'tea-2-refined', file: 'tea-2-refined.html' } });
-  assert.match(readFileSync(join(dir, 'tea-2-refined.logo', 'mark.svg'), 'utf8'), /M48 14C26 30/);
+  assert.notEqual(readFileSync(join(dir, 'tea-2-refined.logo', 'mark.svg'), 'utf8'), readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'));
   assert.ok(existsSync(join(dir, 'tea-2-refined.logo', 'favicon.ico')));
 });

@@ -250,7 +250,7 @@ if (command === 'references') {
       if (logo) {
         option = await logoOption(plan, { prompt, make, references: refs.images, ...c });
         tokens_in += option.tokens_in; tokens_out += option.tokens_out;
-        if (!option.made) continue; // both concepts this option tried were dropped by the critique; plan.dropped says why
+        if (!option.made) continue; // no concept was left to try for this option; concepts says why
       }
       made = option?.made ?? await (redesign ? makeRedesign : make)({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction });
     } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
@@ -259,24 +259,31 @@ if (command === 'references') {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, made.html);
       writeOptionReferences(out,refs.metadata);
-      if (logo) written = writeLogo(out, made.logo, { brief: prompt, direction, concept: (({ id, kind, name, idea, shape, avoid, sketch }) => ({ id, kind, name, idea, shape, avoid, sketch }))(option.concept),
+      const conceptOf = ({ id, kind, name, idea, shape, avoid, sketch }) => ({ id, kind, name, idea, shape, avoid, sketch });
+      // Every attempt the critique did not keep as this option stays for review in <option>.dropped/, outside the options the view lists.
+      if (logo) for (const a of option.others) {
+        const file = join(`${out.replace(/\.html?$/i, '')}.dropped`, `concept-${a.concept.id}-${a.verdict.round}.html`);
+        mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, a.made.html);
+        writeLogo(file, a.made.logo, { brief: prompt, dropped: true, concept: conceptOf(a.concept), critique: [a.verdict], agent: c.agent, model: c.model }, { 'critique.png': png(a.board) });
+      }
+      if (logo) written = writeLogo(out, made.logo, { brief: prompt, direction, concept: conceptOf(option.concept), passed: option.passed,
         critique: option.critiques, explored: conceptSummary(plan), critic: 'the same model, against written principles and the person\'s --ref images; not an independent judgement or trademark clearance', agent: c.agent, model: c.model },
       { 'concepts.png': png(plan.board), 'critique.png': png(option.board) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
-    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, palette: written.logo.palette, critique: option.critiques.at(-1), checks: written.logo.checks }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}) });
+    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}) });
     if (!logo) { tokens_in += made.tokens_in; tokens_out += made.tokens_out; }
     made.remote.forEach((r) => blocked.add(r));
     if (made.render_check === 'skipped') render_check = 'skipped';
     if (made.truncated) cut.push(numbered);
   }
-  if (logo && !files.length) fail('MAKE_FAILED', `the self-critique dropped every concept it tried: ${plan.dropped.map((d) => `${d.name} (${[d.critique.reads_as, ...d.critique.flaws].join('; ')})`).join(', ')}`, ['Run logo again, or name a --direction in your own words']);
+  if (logo && !files.length) fail('MAKE_FAILED', `the concept critique left no concept to draw: ${plan.concepts.map((k) => `${k.name} (${k.verdict}; ${(k.flaws ?? []).join('; ')})`).join(', ')}`, ['Run logo again, or name a --direction in your own words']);
   console.log(JSON.stringify({ made: { files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check },
     ...(plan && { concepts: conceptSummary(plan), ...(plan.dropped.length && { dropped: plan.dropped }) }),
     ...(inventory && { redesign: { sources: resolve(values.out, 'sources', 'sources.json'), screens: inventory.pages.map(p=>({id:p.id,title:p.title})), pending: inventory.pending, limitations: inventory.limitations } }),
     ...(refs.metadata && { references:{name:refs.metadata.name,url:refs.metadata.url,fetched_at:refs.metadata.fetched_at} }),
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
-    help: [...(logo && files.length < count ? [`${files.length} of ${count} options were made: the critique kept too few concepts${plan.dropped.length ? ` and dropped ${plan.dropped.length} drawn one(s)` : ''}; concepts and dropped say why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
+    help: [...(logo && files.some((f) => !f.passed) ? [`${files.filter((f) => !f.passed).length} option(s) did not pass the self-critique: each is its best attempt, flagged in its sheet and logo.json (passed: false)`] : []), ...(logo && files.length < count ? [`${files.length} of ${count} options were made: the concept critique kept too few concepts to draw; concepts says why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
       `See them on the tailnet: first-draft-axi view ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath}`,
       `Post them for review: first-draft-axi post ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath} --title "<question>" --recommend a`] }));} else if (command === 'post') {
   const { values, positionals } = flags(rest, { title: { type: 'string' }, recommend: { type: 'string' }, evidence: { type: 'boolean' }, media: { type: 'string', multiple: true }, option: { type: 'string', multiple: true }, tradeoff: { type: 'string' }, key: { type: 'string' }, board: { type: 'string' }, host: { type: 'string' }, port: { type: 'string' } });

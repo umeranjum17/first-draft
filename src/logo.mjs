@@ -260,6 +260,8 @@ export const fillSheet = (html, { idea, palette }) => {
 <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))">${swatches('light')}${swatches('dark')}</div></div>` };
   return SLOTS.reduce((page, name) => text[name] ? page.replace(slot(name), (_, open, tag, close) => `${open}<!--logo:${name}-->${text[name]}<!--/logo:${name}-->${close}`) : page, html);
 };
+// A sheet whose mark did not pass the self-critique says so under its idea, with what the critic saw.
+export const flagSheet = (html, verdict) => html.replace(/(<!--logo:idea-->[\s\S]*?)(<!--\/logo:idea-->)/, (_, idea, close) => `${idea}<br><strong>Did not pass the self-critique.</strong> A stranger sees "${esc(verdict.reads_as)}"${verdict.flaws.length ? `; ${esc(verdict.flaws.join('; '))}` : ''} (score ${verdict.score} of 10). Shown as the best attempt.${close}`);
 // The sheet as the engine wrote it: each embedded logo file named by its logo/ path again, and the slots empty.
 export const logoSeed = (html, { svgs, pngs }) => {
   let seed = html.replace(/<!--logo:(\w+)-->[\s\S]*?<!--\/logo:\1-->/g, '');
