@@ -43,6 +43,9 @@ journeys:
   critic:
     command: node journeys/critic.mjs
     timeout: 8m
+  human-side-recapture:
+    command: node journeys/human-side.mjs
+    timeout: 8m
 
 # This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
 # agent: opencode

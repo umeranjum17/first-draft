@@ -1,6 +1,6 @@
 # The critic: every make option scored against real products and a plain page
 
-Part of the first-draft verification map. Source: `src/critic.mjs`, `src/cli.mjs` (make), `src/render-check.mjs` (`shoot`), `test/critic.test.mjs`.
+Part of the first-draft verification map. Source: `src/critic.mjs`, `src/cli.mjs` (make), `src/render-check.mjs` (`shoot`), `src/human-side.mjs`, `test/critic.test.mjs`.
 
 ## How to get to it (user POV)
 
@@ -17,3 +17,5 @@ Harness: a shell runs the CLI with a throwaway FIRST_DRAFT_HOME; a browser opens
 
 
 Before the critic, the default make measures the drawn page itself (`src/restraint.mjs` on its source; `src/render-check.mjs` in Chrome: overflow, text under a fixed bar, clipped text, unreadable text, a close control on screen with nothing open) and sends the model back once with those findings; `repaired` in each file's JSON lists them (`unrepaired` and `repair_failed` when the fix call fails). Deterministic proof: `node --test --test-name-pattern="strong grid" test/make.test.mjs`.
+
+For a landing, home, marketing, product or company brief the same review also answers `ai_side` and the nine `hero` points (`critique.ai_side`, `critique.hero`), and a page that reads as the AI side does not pass: `node --test test/critic.test.mjs` (the landing tests) and `done-done run human-side-recapture` (`journeys/human-side.mjs`: `findings.json`, `make.json`, `human-side-board.png`, `steps.json`, a stand-in model).

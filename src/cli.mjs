@@ -289,7 +289,7 @@ if (command === 'references') {
     let critique;
     if (critic?.judge) {
       tokens_in += made.tokens_in; tokens_out += made.tokens_out; made = { ...made, tokens_in: 0, tokens_out: 0 }; // a revision's tokens are the critic's
-      try { ({ made, critique } = await critic.judge(made, (version, change) => (engine ? make : draft)({ prompt: change, ...c, seed: version.html, references: refs.images, referenceBrief: refs.metadata?.brief }))); }
+      try { ({ made, critique } = await critic.judge(made, (version, change) => (engine ? make : draft)({ prompt: change, brief: prompt, ...c, seed: version.html, references: refs.images, referenceBrief: refs.metadata?.brief }))); }
       catch (e) { critique = { error: `the critic did not score this option: ${e.message}` }; }
     }
     const out = resolve(numbered);
