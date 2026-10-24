@@ -30,7 +30,7 @@ journeys:
     timeout: 25m
   logo-recapture:
     command: node journeys/logo.mjs
-    timeout: 15m
+    timeout: 25m
   landing:
     command: node journeys/landing.mjs
     timeout: 5m
