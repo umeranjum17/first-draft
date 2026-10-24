@@ -112,11 +112,14 @@ try {
   const box = (selector) => evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height,left:b.left,right:b.right,width:b.width}})()`);
   // No pin covers a frame's screen: each sits in the margin beside it, level with its point.
   const pinsClear = () => evaluate("(()=>{const hit=(a,b)=>a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1;const screens=[...document.querySelectorAll('.artboard,.phone-screen')].map(e=>e.getBoundingClientRect());return [...document.querySelectorAll('.pin')].filter(p=>p.getClientRects().length).every(p=>screens.every(s=>!hit(p.getBoundingClientRect(),s)))})()");
-  // Fit to space: what the canvas shows sits inside it and reaches its padding on one side (canvas.js: 40px in all, plus the pins' margins).
+  // Fit to space: what the canvas shows sits inside it and covers at least 85% of the canvas on its limiting side (the side it
+  // reaches first as it grows). Returns that cover.
   const fills = async (selector, what) => {
     const [a, st] = [await box(selector), await box('.stage')];
     assert.ok(a.left >= st.left - 1 && a.right <= st.right + 1 && a.top >= st.top - 1 && a.bottom <= st.bottom + 1, `${what} fits inside the canvas: ${JSON.stringify({ a, st })}`);
-    assert.ok(Math.min(st.width - a.width, st.height - a.height) <= 40 + 48 + 2, `${what} is drawn at the largest scale that fits: ${JSON.stringify({ a, st })}`);
+    const cover = Math.max(a.width / st.width, a.height / st.height);
+    assert.ok(cover >= 0.85, `${what} covers ${Math.round(cover * 100)}% of the canvas's limiting side, under 85%: ${JSON.stringify({ a, st })}`);
+    return cover;
   };
   const width = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect().width`);
   // A capture waits until every visible option frame has painted its page.
@@ -158,7 +161,7 @@ try {
     console.log(`captured ${name}.png`);
   };
   const viewport = async (w, theme) => {
-    await c('Emulation.setDeviceMetricsOverride', { width: w, height: w > 700 ? 800 : 844, deviceScaleFactor: 1, mobile: false });
+    await c('Emulation.setDeviceMetricsOverride', { width: w, height: w >= 1440 ? 900 : w > 700 ? 800 : 844, deviceScaleFactor: 1, mobile: false });
     await c('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
   };
 
@@ -282,6 +285,18 @@ try {
   await sideBySide('press-play-390', 'light', [['390 px, light: Play at rest', l.rest], ['390 px, light: Play held down changes colour', l.held], ['390 px, dark: Play at rest', d.rest], ['390 px, dark: Play held down changes colour', d.held]], 390, 844);
   await sideBySide('composer-390', 'light', [['390 px, light: the brief box at rest is one line, below the whole phone', l.rest], ['390 px, light: the brief box tapped opens up, with Terminal command', l.focused], ['390 px, dark: the brief box at rest is one line, below the whole phone', d.rest], ['390 px, dark: the brief box tapped opens up, with Terminal command', d.focused]], 390, 844);
 
+  // Fit to space at 1280 and 1440 wide, light and dark: Both, Desktop and Phone each cover 85% or more of the canvas's limiting
+  // side, captured whole as fit-<device>-<width>-<theme>.png; fit.json records each zoom and cover.
+  const fit = [];
+  for (const w of [1280, 1440]) for (const theme of ['light', 'dark']) for (const d of ['both', 'desktop', 'phone']) {
+    await viewport(w, theme);
+    await open(`#/o/1/${d}`);
+    const cover = await fills(d === 'both' ? '.pair' : '.stage > .scaled', `${d} at ${w} px, ${theme}`);
+    await shot(`fit-${d}-${w}-${theme}`, out);
+    fit.push({ capture: `fit-${d}-${w}-${theme}.png`, width: w, theme, device: d, zoom: await evaluate("document.querySelector('.zoom').textContent"), cover: `${Math.round(cover * 1000) / 10}%` });
+  }
+  writeFileSync(join(out, 'fit.json'), JSON.stringify(fit, null, 2));
+
   for (const w of [1280, 390]) {
     await viewport(w, 'light');
     await open('#/o/1');
@@ -344,6 +359,7 @@ try {
       "At 390 px, pressing More opens a menu with Fullscreen; more-menu-390.png shows it in light and dark; Escape closes it",
       "At 390 px, More > Add comment, tap the phone, type and Save: the comment is saved to the file and shows as a pin beside the phone; add-comment-390.png shows the box and the pin, light and dark",
       "At 390 px, tapping the brief box opens it up (a taller box and a 'Terminal command' button); composer-390.png shows it at rest and tapped, light and dark",
+      'At 1280 and 1440 px wide, in light and in dark, open Both, Desktop and Phone: each is drawn at the largest scale that fits and covers at least 85% of the canvas on its limiting side (Both the width, Desktop the width, Phone the height); fit-<device>-<width>-<theme>.png captures each and fit.json records the zoom and cover',
       'Switch Phone/Desktop and back: each device fills the canvas; click a comment in the panel and its pin opens on the canvas',
       "At 1280 px hide the panel and switch device: it stays hidden until 'Show brief'",
       'Open Option 2 (from the panel at 1280, from the option switcher at 390); type a change in the brief box and press Send with no agent set: the set-up hint shows; at 390 open Fullscreen from More and Exit; press Play, then Exit'],

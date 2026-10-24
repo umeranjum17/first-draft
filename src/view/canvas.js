@@ -22,12 +22,12 @@ export const deviceFor = (device, viewportWidth) => (device === 'both' && viewpo
   ?? (viewportWidth < 760 ? 'phone' : viewportWidth < WIDE ? 'desktop' : 'both');
 // Fit to space: each device is drawn at the largest scale that fits the stage, larger than its true size on a big stage,
 // with PADDING around it (the stage's edge to the frame, both sides together).
-const PADDING = 40;
-// Comment pins sit in the margin beside the frame: a design with pins keeps this much more room on each side.
+const PADDING = 24;
+// Comment pins sit in the margin beside the frame (a 26px pin centred 22px out reaches 35px, inside this and half the padding): a design with pins keeps this much more room on each side.
 export const PIN_GUTTER = 24;
 // Side by side: the two frames share one scale, so the phone keeps its true size beside the desktop, with this much room
 // between them on screen (wider with pins, whose margins meet there) and a caption above each.
-export const pairGap = (pins) => (pins ? 72 : 40);
+export const pairGap = (pins) => (pins ? 72 : 32);
 export const CAPTION = 34;
 const outer = (d) => ({ w: FRAMES[d].width + (FRAMES[d].bezel ?? 0) * 2, h: FRAMES[d].height + (FRAMES[d].bezel ?? 0) * 2 });
 export function fitDevice(device, width, height, gutter = 0) {
