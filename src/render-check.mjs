@@ -185,10 +185,25 @@ const coveredText = () => {
   }
   return covered;
 };
+// A close control that is on screen with nothing open: a drawer's or dialog's close button shown beside the page (a stray x). A close
+// inside a dialog, alert, banner, toast, chip or the like is the thing's own and not counted.
+const strayClose = () => {
+  const out = [];
+  for (const e of document.querySelectorAll('button,a,[role=button]')) {
+    const text = e.textContent.trim(), cls = typeof e.className === 'string' ? e.className : '';
+    if (!/\b(close|dismiss)\b|[×✕✖]/i.test([e.getAttribute('aria-label'), e.title, e.id, cls, text.length <= 2 ? text : ''].join(' '))) continue;
+    const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    if (!r.width || !r.height || s.visibility === 'hidden' || s.opacity === '0' || r.right <= 0 || r.left >= innerWidth || r.bottom <= 0 || r.top >= innerHeight) continue;
+    if (e.closest('dialog[open],[role=dialog],[role=alertdialog],[role=alert],[role=status],[aria-modal=true],[class*=modal],[class*=dialog],[class*=toast],[class*=banner],[class*=alert],[class*=notice],[class*=popover],[class*=snackbar],[class*=chip],[class*=tag],[class*=pill],[class*=badge],[class*=callout]')) continue;
+    out.push(`<${e.tagName.toLowerCase()}${e.id ? ` id="${e.id}"` : ''}${cls ? ` class="${cls}"` : ''}>`);
+    if (out.length === 2) break;
+  }
+  return out;
+};
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
-  constructor(bin, onWarn, dark, clarity) { this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
+  constructor(bin, onWarn, dark, clarity, pageChecks) { this.pageChecks = pageChecks; this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
@@ -239,9 +254,10 @@ export class Renderer {
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
     const layout = screen === null ? null : await this.eval(c, `(()=>{const e=document.querySelectorAll('[data-oc-screen]')[${screen}],r=e.getBoundingClientRect();return {width:r.width,height:r.height,visible:getComputedStyle(e).visibility!=='hidden'}})()`);
     const visible = screen === null || (layout.width > 0 && layout.height > 0 && layout.visible);
-    const covered = this.redesign && screen !== null ? await this.eval(c, `(${coveredText.toString()})()`) : [];
+    const covered = (this.redesign && screen !== null) || (this.pageChecks && screen === null) ? await this.eval(c, `(${coveredText.toString()})()`) : [];
+    const stray = this.pageChecks && screen === null ? await this.eval(c, `(${strayClose.toString()})()`) : [];
     const clarity = this.clarity && screen === null ? await this.eval(c, `(${clarityPage.toString()})(${this.clarity.flash})`) : []; // the clarity page is the whole page, not one screen
-    return { measured, sig, lightness, visible, covered, clarity, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    return { measured, sig, lightness, visible, covered, stray, clarity, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -380,6 +396,7 @@ export class Renderer {
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
         for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
+        if (shot.stray?.length && theme === 'light') errors.push({ source: 'restraint', message: `${context}: a close control is on screen with nothing open: ${shot.stray.join('; ')}. Show it only while its drawer, dialog or banner is open (hide it by default and at this width), or remove it.` });
         if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
         if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;
@@ -401,14 +418,14 @@ export class Renderer {
 // The render check for one run: the browser starts with the first done and stops with the run.
 // dark: the named style is dark-first, so the page must be dark in both renders instead of different in each.
 // clarity: { flash } when the brief asks for a company or product page (clarity.mjs); flash waives the colour and motion checks.
-export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity } = {}) => {
+export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity, pageChecks } = {}) => {
   const bin = findBrowser();
   if (!bin) {
     const warning = 'no Chrome or Chromium was found on this machine, so the 390px/1280px light/dark render checks were skipped';
     onWarn(warning);
     return { status: 'skipped', warning, drawing: false, verify: async () => [], close: () => {} };
   }
-  const render = new Renderer(bin, onWarn, dark, clarity);
+  const render = new Renderer(bin, onWarn, dark, clarity, pageChecks);
   return {
     drawing: true, // this machine can draw an App.jsx into static HTML
     get status() { return render.state === 'ready' ? 'checked' : 'skipped'; },

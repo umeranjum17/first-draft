@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { findBrowser } from '../src/render-check.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 // These journeys test the engine loop with bare pages; the render check has its own test (render-check.test.mjs).
@@ -360,6 +361,46 @@ test('make writes each option as one page from one call, with the frontend-desig
   const two = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'two.html'), '--options', '2')).stdout).made;
   assert.deepEqual(two.files.map((f) => f.direction), ['Direction 1', 'Direction 2']);
   assert.deepEqual(seen.map((b) => JSON.stringify(b).match(/Direction: (Direction \d)/)[1]), ['Direction 1', 'Direction 2'], 'each option is made from its own planned direction');
+});
+
+// The host measures what the critic should not have to find; the model gets one call to fix exactly that (draft.mjs, restraint.mjs, render-check.mjs).
+test('make sends a page with a strong grid, four hues, a stray close and a bar over its text back once with the findings', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [];
+  const bad = '<!doctype html><html><head><title>First</title><style>body{margin:0;background:#faf7f0;background-image:linear-gradient(rgba(0,0,0,.2) 1px,transparent 1px);background-size:100% 24px}a{color:#e11d48}b{color:#16a34a}i{color:#2563eb}u{color:#eab308}.close{display:block}</style></head><body><h1>First</h1><button class="close" aria-label="Close menu">×</button><p style="margin-top:760px">Flat 4B lease, due 30 Nov</p><div style="position:fixed;bottom:0;left:0;right:0;height:80px;background:#ddd">Home Notes Settings</div></body></html>';
+  const good = '<!doctype html><html><head><title>Second</title><style>body{margin:0;background:#faf7f0}</style></head><body><h1>Second</h1><p>Flat 4B lease, due 30 Nov</p></body></html>';
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      seen.push(JSON.parse(body));
+      const text = seen.length === 1 ? bad : good;
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.end(ev({ type: 'response.created', response: { id: 'r1' } }) + ev({ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'm1' } })
+        + ev({ type: 'response.output_text.delta', output_index: 0, item_id: 'm1', content_index: 0, delta: text })
+        + ev({ type: 'response.output_item.done', output_index: 0, item: { type: 'message', id: 'm1', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] } })
+        + ev({ type: 'response.completed', response: { id: 'r1', status: 'completed', usage: { input_tokens: 10, output_tokens: 40, total_tokens: 50 } } }));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  const { files } = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1', '--no-critic')).stdout).made;
+  assert.equal(seen.length, 2, 'one call for the page, one to fix what the host measured');
+  const asked = JSON.stringify(seen[1]);
+  assert.match(asked, /background grid or line pattern is too strong/);
+  assert.match(asked, /4 different saturated hues/);
+  assert.match(asked, /close \(x\) control with nothing to close/);
+  assert.match(asked, /<h1>First<\/h1>/, 'the fix starts from the page it measured');
+  assert.match(readFileSync(join(dir, 'notes.html'), 'utf8'), /<h1>Second<\/h1>/, 'the fixed page is the option');
+  assert.ok(files[0].repaired.length >= 3 && files[0].turns === 2);
+  if (findBrowser()) { // the browser measures what only a browser can: text under a fixed bar, a close control on screen
+    assert.match(asked, /covered by fixed or sticky navigation/);
+    assert.match(asked, /close control is on screen with nothing open/);
+  }
 });
 
 test('make writes self-contained mocks through the BYOKit Go route', async (t) => {
