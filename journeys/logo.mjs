@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { basename, join, resolve } from 'node:path';
 import { SIZES, SVGS, logoDir } from '../src/logo.mjs';
 import { designFiles } from '../src/view.mjs';
@@ -24,6 +25,9 @@ for (const key of ['CHROME_DEVTOOLS_AXI_AUTO_CONNECT', 'CHROME_DEVTOOLS_AXI_BROW
 const run = (bin, args) => execFileSync(bin, args, { env, encoding: 'utf8', timeout: 90_000, maxBuffer: 10_000_000 });
 const hash = (b) => createHash('sha256').update(b).digest('hex');
 const size = (png) => [png.readUInt32BE(16), png.readUInt32BE(20)];
+// A port the OS says is free, for each browser session's bridge: the port chrome-devtools-axi derives from a session name can already be
+// held by another lane's bridge on a shared host.
+const freePort = () => new Promise((ok, no) => { const s = createServer().once('error', no).listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); }); });
 
 // The files as a user receives them, checked before anything is captured.
 const options = files.map((file, i) => {
@@ -70,8 +74,9 @@ try {
   const url = await new Promise((ok, no) => { let text = ''; const timer = setTimeout(() => no(Error('View startup deadline')), 15_000); view.stdout.on('data', (b) => { text += b; if (text.includes('\n')) { clearTimeout(timer); const r = JSON.parse(text); r.viewing ? ok(r.viewing.url) : no(Error(r.error?.message || text)); } }); view.once('exit', (code) => { clearTimeout(timer); no(Error(`View exited ${code}`)); }); view.once('error', no); });
   const metrics = [];
   // One owned browser per width and theme, as a person opens the view on a phone or a desktop.
-  const session = (name, width, height, theme, shots) => {
+  const session = async (name, width, height, theme, shots) => {
     env.CHROME_DEVTOOLS_AXI_SESSION = `fd-logo-${process.pid}-${name}`;
+    env.CHROME_DEVTOOLS_AXI_PORT = String(await freePort());
     env.CHROME_DEVTOOLS_AXI_USER_DATA_DIR = join(dir, name);
     const browser = (...args) => run('chrome-devtools-axi', args);
     try {
@@ -90,9 +95,9 @@ try {
   };
   // Phone and desktop frames a person meets: 360x800, 390x844, 445x965, 1280x800 and 1440x900.
   for (const theme of ['light', 'dark']) for (const [width, height] of [[360, 800], [390, 844], [445, 965], [1280, 800], [1440, 900]]) {
-    session(`${theme}-${width}`, width, height, theme, [[`picker-${width}-${theme}.png`, `${url}#/`], ...options.map((o) => [`studio-${o.n}-${width}-${theme}.png`, `${url}#/o/${o.n}`])]);
+    await session(`${theme}-${width}`, width, height, theme, [[`picker-${width}-${theme}.png`, `${url}#/`], ...options.map((o) => [`studio-${o.n}-${width}-${theme}.png`, `${url}#/o/${o.n}`])]);
   }
-  session('sheets', 1280, 800, 'light', [['explored.png', `file://${join(support, 'explored.html')}`, true], ...options.flatMap((o) => [[`critique-${o.n}.png`, `file://${join(support, `critique-${o.n}.html`)}`, true], [`icons-${o.n}.png`, `file://${join(support, `icons-${o.n}.html`)}`, true], [`svgs-${o.n}.png`, `file://${join(support, `svgs-${o.n}.html`)}`, true]])]);
+  await session('sheets', 1280, 800, 'light', [['explored.png', `file://${join(support, 'explored.html')}`, true], ...options.flatMap((o) => [[`critique-${o.n}.png`, `file://${join(support, `critique-${o.n}.html`)}`, true], [`icons-${o.n}.png`, `file://${join(support, `icons-${o.n}.html`)}`, true], [`svgs-${o.n}.png`, `file://${join(support, `svgs-${o.n}.html`)}`, true]])]);
   writeFileSync(join(support, 'metrics.json'), JSON.stringify(metrics, null, 2));
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: run('git', ['-C', root, 'rev-parse', 'HEAD']).trim() },
     start: `Retained real logo run: ${options.length} options made by ${options[0].logo.agent} / ${options[0].logo.model}; no model call during this run.`,
