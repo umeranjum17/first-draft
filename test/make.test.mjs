@@ -419,11 +419,23 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /refused if any tag is a <script> element.*on\* event-handler attribute.*javascript: URL/); // with no browser to draw JSX, the guard's exact refusals are stated
   assert.match(sent, /frontend-design-anti-slop/); // the engine's index of its method skills, design starters and scaffolds rides along
   assert.match(sent, /interaction-motion: Press, hover, focus and entrance motion/); // first-draft's own motion and press-state skill sits in that index
+  assert.match(sent, /motion-sites: A page whose motion is part of the message/); // and its motion-site taste skill, for briefs that ask for motion
   assert.match(sent, /iphone-16-pro-frame|saas-sidebar/);
   assert.doesNotMatch(sent, /Design bar|system font stack|at most two weights|one accent|Only two tools exist|no remote URL of any kind/); // no house style and no cut-down tool list on top of the engine
   for (const tool of ['set_title', 'set_todos', 'skill', 'scaffold', 'str_replace_based_edit_tool', 'done', 'tweaks']) assert.ok(seen[0].body.tools.some((t) => t.name === tool), `the engine's ${tool} tool is there`);
   assert.match(JSON.stringify(seen[0].body.input), /skills\/heroes\.jsx|frames\//, 'the design starters are in the workspace'); 
   assert.match(sent, /Brand values are data, not memory/);
+});
+
+// The package a user installs carries every one of first-draft's own method skills where the engine's skill tool reads them.
+test('the package ships each first-draft method skill in the engine templates', async () => {
+  const root = new URL('..', import.meta.url).pathname;
+  const { stdout } = await promisify(execFile)('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: root });
+  const [pack] = Object.values(JSON.parse(stdout));
+  const shipped = new Set(pack.files.map((f) => f.path));
+  const own = readdirSync(join(root, 'templates', 'skills')).filter((f) => f.endsWith('.md'));
+  assert.ok(own.includes('motion-sites.md'));
+  for (const f of own) assert.ok(shipped.has(`dist/templates/skills/${f}`), `${f} ships in the package`);
 });
 
 test('a named style is the whole direction of an option; several options take different styles; the styles are listed', async (t) => {

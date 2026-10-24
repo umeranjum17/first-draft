@@ -72,6 +72,14 @@ that passed. An engine run may need many model turns; a bound of 60 turns stops 
 that never ends (the last version that passed `done` is kept), and a failed boundary
 call is retried only when it timed out or its connection dropped.
 
+first-draft's `templates/skills/motion-sites.md` joins its method skills the same way: taste
+rules for a page whose motion is part of the message (one moving subject, still words, a
+one-time entrance, CSS-only motion whose first frame is the finished design, a
+reduced-motion still, and when not to animate), with a text-only reference set, written
+for first-draft from a study of public motionsites.ai examples with no text, code, media
+or pixels copied. Its description asks the engine to load it only when a brief asks for
+motion; that is a model instruction, not a host check.
+
 `doctor` loads the actual built engine and prompt sections, validates plan-key
 and api-key model metadata, and checks the selected route locally. Installed-CLI readiness
 uses BYOKit's native status probe, never a paid model request. It cannot promise
