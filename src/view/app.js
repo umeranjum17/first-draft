@@ -48,6 +48,7 @@ const ICONS = {
   grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5M12 16.2v.1"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>',
 };
 const icon = (name, cls = '') => {
@@ -198,15 +199,27 @@ function menu(id, button, ...items) {
   return m;
 }
 
+// The option picker: every option at desktop and phone width on a sheet of canvas, its number, name and comment count under it.
+// The frames load lazily, so an option scrolled out of view costs nothing until it is near.
 function grid() {
   const cards = design.options.map((o) => {
-    const body = o.error ? el('div', { class: 'thumb thumb-error' }, o.error)
-      : el('div', { class: 'thumb' }, scaled(FRAMES.desktop.width, FRAMES.desktop.height, frame(o, `Option ${o.n} thumbnail`, true)));
-    return el('a', { class: 'card', href: `#/o/${o.n}` }, body, el('div', { class: 'card-label' }, el('span', { class: 'num' }, String(o.n)), o.label));
+    let mat;
+    if (o.error) mat = el('div', { class: 'mat broken' }, el('div', { class: 'blank' }, el('div', { class: 'mark' }, icon('alert')), el('p', {}, o.error)));
+    else {
+      const d = artFor('desktop', frame(o, `Option ${o.n} at desktop width`, true), []), p = artFor('phone', frame(o, `Option ${o.n} at phone width`, true), []);
+      mat = el('div', { class: 'mat' }, el('div', { class: 'mat-desktop' }, d), el('div', { class: 'mat-phone' }, p));
+      // The desktop takes 70% of the sheet's width, the phone 78% of its height, overlapping the desktop's right edge.
+      mat.fit = () => { d.rescale((mat.clientWidth * 0.7) / FRAMES.desktop.width); p.rescale((mat.clientHeight * 0.78) / (FRAMES.phone.height + FRAMES.phone.bezel * 2)); };
+    }
+    const comments = pinsFor(o).length;
+    const card = el('a', { class: 'card', href: `#/o/${o.n}`, 'aria-label': `Option ${o.n}, ${o.label}` }, mat, el('div', { class: 'card-label' }, el('span', { class: 'num' }, String(o.n)), el('span', { class: 'name' }, o.label),
+      el('span', { class: o.error ? 'muted broken' : 'muted' }, o.error ? 'Cannot open' : comments ? plural(comments, 'comment') : 'No comments'), el('span', { class: 'open' }, 'Open', icon('arrow'))));
+    card.mat = mat;
+    return card;
   });
-  const fit = () => document.querySelectorAll('.thumb .scaled').forEach((s) => s.rescale(s.parentElement.clientWidth / FRAMES.desktop.width));
-  return { body: [el('header', { class: 'bar' }, el('div', { class: 'bar-l' }, home(), el('h1', { class: 'title' }, design.name)), el('div', { class: 'bar-c' }), el('div', { class: 'bar-r' }, el('span', { class: 'count' }, plural(design.options.length, 'option')))),
-    el('main', { class: 'grid' }, ...cards)], fit };
+  const bar = el('header', { class: 'bar' }, el('div', { class: 'bar-l' }, home(), el('span', { class: 'title' }, design.name)), el('div', { class: 'bar-c' }), el('div', { class: 'bar-r' }, el('span', { class: 'count' }, plural(design.options.length, 'option'))));
+  const head = el('div', { class: 'picker-head' }, el('h1', {}, design.name), el('p', {}, `${plural(design.options.length, 'option')}. Open one to see it at desktop and phone width, comment on it and make a change.`));
+  return { body: [bar, el('main', { class: 'picker' }, head, el('div', { class: 'grid' }, ...cards))], fit: () => cards.forEach((c) => c.mat.fit?.()) };
 }
 
 // A shell word as typed: plain words stay bare, anything else is single-quoted.
