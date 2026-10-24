@@ -14,7 +14,7 @@ import { directionText } from './styles.mjs';
 // The skill's own words, unmodified (Apache-2.0, src/taste/LICENSE.txt), without its attribution comment and frontmatter.
 const TASTE = readFileSync(new URL('./taste/frontend-design.md', import.meta.url), 'utf8').replace(/^<!--[\s\S]*?-->\s*---[\s\S]*?\n---\s*/, '');
 const LANDING = /\blanding[\s-]?pages?\b/i;
-const contract = (drawing) => `Page contract: reply with one complete, self-contained HTML document (<!doctype html> to </html>), with its CSS inside. People compare it at phone width (390px) and desktop width (1280px), so design both. Google Fonts named in a <link> or @import are embedded by the host. Images are inline SVG, CSS or data: URIs: a remote image is blocked. ${FACTS} ${drawing
+const contract = (drawing) => `Page contract: reply with one complete, self-contained HTML document (<!doctype html> to </html>), with its CSS inside. Design what the brief names: an app, tool or product is shown as its own screens in use, not as a page that markets it, unless the brief asks for a landing, marketing or company page. People compare it at phone width (390px) and desktop width (1280px), so design both. Google Fonts named in a <link> or @import are embedded by the host. Images are inline SVG, CSS or data: URIs: a remote image is blocked. ${FACTS} ${drawing
   ? 'Script may run once: the host draws the page in a browser at 1280px and keeps what that first render shows, without the script, so the first render must show the whole design.'
   : 'Write no script, no on* event handler and no javascript: URL: the page is shown as a static document.'}`;
 
