@@ -4,7 +4,7 @@ Part of the first-draft verification map. Source: `src/make.mjs`, `src/render-ch
 
 ## How to get to it (user POV)
 
-Run `first-draft-axi make "<prompt>" --out <file.html>` on the real model route with Chrome or Chromium installed. The engine runs with every upstream tool (`set_todos`, `skill`, `scaffold`, the editor, `done`, `tweaks` ...), its templates tree (method skills including first-draft's `interaction-motion`, the 12 design starters under `skills/*.jsx`, scaffolds, frames, brand references) and writes its usual `App.jsx`; the host draws it once headless and writes the static, script-free page it drew. Google Fonts it names are embedded as `data:` fonts. When a run ends with no version passing `done`, make sends `done`'s errors back as the next message, at most three times. A run is bounded at 60 model turns.
+Run `first-draft-axi make "<prompt>" --out <file.html>` on the real model route with Chrome or Chromium installed. The engine runs with every upstream tool (`set_todos`, `skill`, `scaffold`, the editor, `done`, `tweaks` ...), its templates tree (method skills including first-draft's `interaction-motion` and `motion-sites`, the 12 design starters under `skills/*.jsx`, scaffolds, frames, brand references) and writes its usual `App.jsx`; the host draws it once headless and writes the static, script-free page it drew. Google Fonts it names are embedded as `data:` fonts. When a run ends with no version passing `done`, make sends `done`'s errors back as the next message, at most three times. A run is bounded at 60 model turns.
 
 ## Driving it
 
@@ -15,5 +15,6 @@ Harness: a shell runs the CLI with a throwaway FIRST_DRAFT_HOME and the model ke
 3. The page has no `<script>`, no `on*=` handler and the policy meta; a page that names a web font holds `data:font/woff2`.
 4. Capture: open each page at 390 and 1280, in light and in dark (full page), and save the shots. Compare against the same prompts on main and on the upstream engine path (default prompt and tools, JSX shown with its own runtime) side by side.
 5. Count finished briefs: a brief is finished when make exits 0 with no `truncated` entry.
-6. With `FIRST_DRAFT_CHROME` set to a path that does not exist, the engine is asked for script-free `index.html` instead and `source` is `index.html`.
-7. Stop what you started.
+6. Motion brief (paid): add "with a slow scroll story of the product" to the landing prompt. Pass: `tools` names `skill`, and the page's `@keyframes` and `animation-timeline` rules sit inside `prefers-reduced-motion: no-preference`, so the capture with animations off is the complete design (`templates/skills/motion-sites.md`, self-check). Nonpaid: `test/make.test.mjs` proves the skill ships in the package (`npm pack`) and sits in the engine's skill index.
+7. With `FIRST_DRAFT_CHROME` set to a path that does not exist, the engine is asked for script-free `index.html` instead and `source` is `index.html`.
+8. Stop what you started.
