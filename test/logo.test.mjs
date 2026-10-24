@@ -303,6 +303,7 @@ test('logo: image-first exploration through the asset provider, and a second rou
   mkdirSync(bin);
   await promisify(execFile)('convert', ['-size', '16x16', 'xc:#2f6b3b', mark]);
   writeFileSync(join(bin, 'higgsfield'), `#!${process.execPath}\nimport {appendFileSync} from 'node:fs';\nconst a=process.argv.slice(2);appendFileSync(${JSON.stringify(log)},JSON.stringify(a)+'\\n');\nif(a[0]==='account')console.log('{"credits":10}');else if(a[1]==='cost')console.log('{"credits":0.15}');else console.log('[{"status":"completed","job_type":"z_image","result_url":"https://fixture.invalid/mark.png"}]');`, { mode: 0o755 });
+  writeFileSync(join(bin, 'magick'), '#!/bin/sh\nexec convert "$@"\n', { mode: 0o755 }); // ImageMagick 6 (a CI runner) has convert and no magick
   const hook = join(dir, 'fetch.mjs');
   writeFileSync(hook, `const real=globalThis.fetch;globalThis.fetch=(url,options)=>url==='https://fixture.invalid/mark.png'?Promise.resolve(new Response(Buffer.from('${readFileSync(mark).toString('base64')}','base64'))):real(url,options);`);
   const seen = [], server = await standIn(seen, WORLD2);
