@@ -28,6 +28,9 @@ journeys:
   studio:
     command: node journeys/studio.mjs
     timeout: 25m
+  logo-recapture:
+    command: node journeys/logo.mjs
+    timeout: 15m
   landing:
     command: node journeys/landing.mjs
     timeout: 5m
