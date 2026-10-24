@@ -17,25 +17,27 @@ export function pageFor(option, mode) {
 
 // The canvas shows the device the route names, else the one that fits the viewport: on a wide screen (860px and up, where the
 // Studio has its column) 'both', the desktop and the phone side by side; under that one device, and 'both' falls back to it.
-// Each is as large as the stage allows without upscaling (PreviewPane.tsx computeFitPreviewZoom).
 export const WIDE = 860;
 export const deviceFor = (device, viewportWidth) => (device === 'both' && viewportWidth < WIDE ? undefined : device)
   ?? (viewportWidth < 760 ? 'phone' : viewportWidth < WIDE ? 'desktop' : 'both');
-const PADDING = 48;
+// Fit to space: each device is drawn at the largest scale that fits the stage, larger than its true size on a big stage,
+// with PADDING around it (the stage's edge to the frame, both sides together).
+const PADDING = 40;
 // Comment pins sit in the margin beside the frame: a design with pins keeps this much more room on each side.
-export const PIN_GUTTER = 16;
+export const PIN_GUTTER = 24;
 // Side by side: the two frames share one scale, so the phone keeps its true size beside the desktop, with this much room
 // between them on screen (wider with pins, whose margins meet there) and a caption above each.
-export const pairGap = (pins) => (pins ? 88 : 48);
-export const CAPTION = 32;
+export const pairGap = (pins) => (pins ? 72 : 40);
+export const CAPTION = 34;
 const outer = (d) => ({ w: FRAMES[d].width + (FRAMES[d].bezel ?? 0) * 2, h: FRAMES[d].height + (FRAMES[d].bezel ?? 0) * 2 });
 export function fitDevice(device, width, height, gutter = 0) {
+  const room = (n) => Math.max(1, n);
   if (device === 'both') {
     const d = outer('desktop'), p = outer('phone');
-    return Math.min(1, Math.max(1, width - PADDING - gutter * 2 - pairGap(gutter > 0)) / (d.w + p.w), Math.max(1, height - PADDING - CAPTION) / Math.max(d.h, p.h));
+    return Math.min(room(width - PADDING - gutter * 2 - pairGap(gutter > 0)) / (d.w + p.w), room(height - PADDING - CAPTION) / Math.max(d.h, p.h));
   }
   const { w, h } = outer(device);
-  return Math.min(1, Math.max(1, width - PADDING - gutter * 2) / w, Math.max(1, height - PADDING) / h);
+  return Math.min(room(width - PADDING - gutter * 2) / w, room(height - PADDING) / h);
 }
 
 // comment/CommentBubble.tsx commentKeyAction and commentBubblePosition, unchanged: the add-a-comment box opens below the

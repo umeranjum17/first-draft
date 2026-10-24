@@ -7,3 +7,7 @@ Copyright 2026 OpenCoworkAI Contributors. Its core, providers, shared and
 runtime packages are vendored unmodified in vendor/open-codesign at the commit
 named in ENGINE.md, with their own LICENSE and NOTICE in that folder. The
 published package carries them as dist/LICENSE and dist/NOTICE.
+
+The view's typefaces, Instrument Sans, Instrument Serif and JetBrains Mono, are
+included as latin-subset web fonts in src/view/fonts under the SIL Open Font
+License 1.1, with their copyright notices and the licence in src/view/fonts/OFL.txt.

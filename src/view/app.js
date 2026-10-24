@@ -1,7 +1,7 @@
-// The first-draft view: every option of a design as a grid, one option in the Studio (a brief column beside a canvas showing the desktop and the phone side by side, or one of them), fullscreen, and Play (clickable screens).
+// The first-draft view: every option of a design as a grid, one option in the Studio (a panel beside a canvas showing the desktop and the phone side by side, or one of them), fullscreen, and Play (clickable screens).
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
 import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
-import { FRAMES, PIN_GUTTER, SANDBOX, commentBubblePosition, commentKeyAction, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor, pairGap } from './canvas.js';
+import { FRAMES, PIN_GUTTER, SANDBOX, WIDE, commentBubblePosition, commentKeyAction, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor, pairGap } from './canvas.js';
 import './view.css';
 
 const design = JSON.parse(document.getElementById('design').textContent);
@@ -10,7 +10,7 @@ const errors = new Map(); // option number -> runtime error lines
 let frames = []; // [{ n, iframe }] currently mounted
 let resize = null;
 let draft = ''; // the Studio brief being written, kept across options and devices
-let column = true; // the Studio's column (and its brief) shown on a wide screen; Hide brief folds it away until Show brief
+let column = true; // the Studio's panel (and its brief) shown on a wide screen; Hide brief folds it away until Show brief
 let openPin = null; // the comment number to open once the next page is drawn (a comment just added, or one on the other device)
 let lastCanvas = null; // the Studio route Play's Exit goes back to
 
@@ -19,6 +19,34 @@ const el = (tag, attrs = {}, ...kids) => {
   for (const [k, v] of Object.entries(attrs)) if (v !== undefined) e.setAttribute(k, v);
   e.append(...kids);
   return e;
+};
+// Icons: 24px strokes drawn at 16px.
+const ICONS = {
+  panel: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9.5 4v16"/>',
+  chevron: '<path d="m7 10 5 5 5-5"/>',
+  both: '<rect x="2.5" y="5" width="13" height="10" rx="1.6"/><path d="M6 19h6M9 15v4"/><rect x="17" y="8" width="4.5" height="11" rx="1.2"/>',
+  desktop: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.4"/><path d="M11 18.5h2"/>',
+  comment: '<path d="M20 11.5a7.5 7.5 0 0 1-11 6.6L4.5 19.5l1.3-4A7.5 7.5 0 1 1 20 11.5Z"/>',
+  full: '<path d="M14.5 4.5h5v5M9.5 19.5h-5v-5M19.5 4.5 13.8 10.2M4.5 19.5l5.7-5.7"/>',
+  play: '<path d="M7.5 5.2v13.6a.6.6 0 0 0 .9.5l11-6.8a.6.6 0 0 0 0-1L8.4 4.7a.6.6 0 0 0-.9.5Z"/>',
+  send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  terminal: '<path d="m5 7 5 5-5 5M12.5 17.5h6.5"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+  more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+  grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5M12 16.2v.1"/>',
+  copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>',
+};
+const icon = (name, cls = '') => {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('class', `i${cls ? ` ${cls}` : ''}`);
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = ICONS[name];
+  return s;
 };
 
 function frame(option, title, lazy, query = '') {
@@ -30,8 +58,14 @@ function frame(option, title, lazy, query = '') {
   frames.push({ n: option.n, iframe });
   return iframe;
 }
+// Paper lines over a frame until its page has loaded.
+const skeleton = (iframe) => {
+  const s = el('div', { class: 'skeleton', 'aria-hidden': 'true' }, el('i'), el('i'), el('i'), el('i'));
+  iframe.addEventListener('load', () => s.remove(), { once: true });
+  return s;
+};
 
-// PreviewPane.tsx ScaledPreviewFrame: lay the artboard out at its real size and scale it down.
+// PreviewPane.tsx ScaledPreviewFrame: lay the artboard out at its real size and scale it.
 // `pins` (this option's comments on this device) are drawn in a layer over the frame, in this page, outside the iframe; `pad` is the bezel around the screen.
 // `point(x, y, at)`, when given, is called with the fractions of the screen a person taps in comment mode (a layer over the screen catches the tap).
 function scaled(width, height, child, pins = [], pad = 0, point) {
@@ -52,6 +86,7 @@ function scaled(width, height, child, pins = [], pad = 0, point) {
     outer.style.width = `${width * scale}px`;
     outer.style.height = `${height * scale}px`;
     inner.style.transform = `scale(${scale})`;
+    inner.style.setProperty('--unscaled-10', `${10 / scale}px`);
   };
   return outer;
 }
@@ -61,7 +96,7 @@ function scaled(width, height, child, pins = [], pad = 0, point) {
 function pinLayer(pins) {
   const layer = el('div', { class: 'pins' });
   const items = pins.map((p) => {
-    const i = p.i; // the comment's number on its option, the same on every frame and in the column
+    const i = p.i; // the comment's number on its option, the same on every frame and in the panel
     const pin = el('button', { type: 'button', class: `pin ${p.x < 0.5 ? 'left' : 'right'}`, 'aria-label': `Comment ${i + 1}`, 'aria-expanded': 'false', 'data-i': i }, String(i + 1));
     const bubble = el('div', { class: 'pin-bubble', role: 'note', hidden: '' }, el('strong', {}, `${i + 1}  `), p.text);
     bubble.style.setProperty('--x', p.x < 0.5 ? '0px' : '100%'); // the bubble is placed from --x by CSS, so it stays inside the frame
@@ -84,15 +119,15 @@ function pinLayer(pins) {
     layer.append(pin, bubble);
     return { p, pin, bubble };
   });
-  // Each side's pins keep to their own column, level with their point and at least 34px apart (the 28px pin plus a gap); w and h are the frame's size on screen.
+  // Each side's pins keep to their own column, level with their point and at least 32px apart (the 26px pin plus a gap); w and h are the frame's size on screen.
   layer.layout = (w, h) => {
     for (const side of ['left', 'right']) {
       const mine = items.filter((it) => (it.p.x < 0.5 ? 'left' : 'right') === side).sort((a, b) => a.p.y - b.p.y);
       let prev = -20;
-      const ys = mine.map((it) => (prev = Math.max(it.p.y * h, prev + 34)));
-      for (let k = ys.length - 1, limit = h - 14; k >= 0; k--, limit = ys[k + 1] - 34) ys[k] = Math.min(ys[k], limit);
+      const ys = mine.map((it) => (prev = Math.max(it.p.y * h, prev + 32)));
+      for (let k = ys.length - 1, limit = h - 13; k >= 0; k--, limit = ys[k + 1] - 32) ys[k] = Math.min(ys[k], limit);
       mine.forEach((it, k) => {
-        Object.assign(it.pin.style, { left: `${side === 'left' ? -22 : w + 22}px`, top: `${Math.max(14, ys[k])}px` });
+        Object.assign(it.pin.style, { left: `${side === 'left' ? -22 : w + 22}px`, top: `${Math.max(13, ys[k])}px` });
         it.bubble.classList.toggle('up', it.p.y < 0.5); // the far half of the frame from the point
       });
     }
@@ -103,46 +138,61 @@ const pinsFor = (o) => design.pins.filter((p) => p.option === o.n);
 // The option's comments numbered, on one device's frame: those placed on it and those that name no device.
 const pinsOn = (o, dev) => pinsFor(o).map((p, i) => ({ ...p, i })).filter((p) => !p.device || p.device === dev);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-const pinsNotice = () => design.pinsError ? [el('div', { class: 'error-bar', role: 'alert' }, el('div', {}, design.pinsError))] : [];
+const pinsNotice = () => design.pinsError ? [el('div', { class: 'error-bar', role: 'alert' }, el('div', {}, el('strong', {}, 'Comments'), el('span', { class: 'error-text' }, design.pinsError)))] : [];
 
 // PhoneFrame.tsx: bezel, screen, Dynamic Island and home indicator around the iframe.
-const phoneFrame = (iframe) => el('div', { class: 'phone' }, el('div', { class: 'phone-screen' }, iframe),
+const phoneFrame = (iframe) => el('div', { class: 'phone' }, el('div', { class: 'phone-screen' }, iframe, skeleton(iframe)),
   el('div', { class: 'phone-island', 'aria-hidden': 'true' }), el('div', { class: 'phone-home', 'aria-hidden': 'true' }));
 // One option on one device: the phone in its frame, the desktop on an artboard, each laid out at its real size.
 const artFor = (dev, iframe, pins, point) => {
   const f = FRAMES[dev];
-  return dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel, point) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe), pins, 0, point);
+  return dev === 'phone' ? scaled(f.width + f.bezel * 2, f.height + f.bezel * 2, phoneFrame(iframe), pins, f.bezel, point) : scaled(f.width, f.height, el('div', { class: 'artboard' }, iframe, skeleton(iframe)), pins, 0, point);
 };
 const NAMES = { both: 'Both', desktop: 'Desktop', phone: 'Phone' };
 // The viewport switch; Both (the two side by side) only on the Studio canvas, and only on a wide screen (view.css).
 const devices = (base, dev, list = ['desktop', 'phone']) => el('nav', { class: 'devices', 'aria-label': 'Viewport' },
-  ...list.map((d) => el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined }, NAMES[d])));
+  ...list.map((d) => el('a', { href: `${base}/${d}`, 'aria-current': d === dev ? 'true' : undefined, title: NAMES[d] }, icon(d), el('span', { class: 'label' }, NAMES[d]))));
 
 // CanvasErrorBar.tsx: the latest runtime error of the open option, with a count and a dismiss button.
 function errorBar(n) {
   const list = errors.get(n) ?? [];
   if (!list.length) return el('div', { class: 'error-bar', hidden: '' });
-  const dismiss = el('button', { type: 'button', class: 'icon', 'aria-label': 'Dismiss errors' }, '×');
+  const dismiss = el('button', { type: 'button', class: 'button icon', 'aria-label': 'Dismiss errors' }, icon('close'));
   dismiss.onclick = () => { errors.delete(n); document.querySelector('.error-bar')?.replaceWith(errorBar(n)); };
   return el('div', { class: 'error-bar', role: 'alert' },
-    el('div', {}, el('strong', {}, `Runtime error${list.length > 1 ? ` (${list.length})` : ''}`), el('div', { class: 'error-text', title: list.at(-1) }, list.at(-1))), dismiss);
+    el('div', {}, el('strong', {}, `Runtime error${list.length > 1 ? ` (${list.length})` : ''}`), el('span', { class: 'error-text', title: list.at(-1) }, list.at(-1))), dismiss);
 }
 
 const option = (n) => design.options.find((o) => o.n === n);
 const link = (href, text, cls) => el('a', { href, class: cls }, text);
+const home = () => el('a', { class: 'home', href: '#/', 'aria-label': 'All options' }, el('img', { class: 'brand', src: '/favicon.svg', alt: '', width: '22', height: '22' }));
+
+// Menus are popovers: under their button on a wide screen, a sheet at the foot of a phone's screen (view.css).
+function menu(id, button, ...items) {
+  const m = el('div', { id, class: 'menu', popover: '', role: 'menu' }, ...items);
+  button.setAttribute('popovertarget', id);
+  button.setAttribute('aria-haspopup', 'menu');
+  m.addEventListener('beforetoggle', (e) => {
+    if (e.newState !== 'open') return;
+    const sheet = innerWidth < WIDE;
+    m.classList.toggle('sheet', sheet);
+    if (sheet) return Object.assign(m.style, { top: '', left: '', right: '' });
+    const b = button.getBoundingClientRect();
+    Object.assign(m.style, button.dataset.align === 'right' ? { top: `${b.bottom + 6}px`, right: `${innerWidth - b.right}px`, left: 'auto' } : { top: `${b.bottom + 6}px`, left: `${b.left}px`, right: 'auto' });
+  });
+  return m;
+}
 
 function grid() {
   const cards = design.options.map((o) => {
     const body = o.error ? el('div', { class: 'thumb thumb-error' }, o.error)
       : el('div', { class: 'thumb' }, scaled(FRAMES.desktop.width, FRAMES.desktop.height, frame(o, `Option ${o.n} thumbnail`, true)));
-    return el('a', { class: 'card', href: `#/o/${o.n}` }, body, el('div', { class: 'card-label' }, el('strong', {}, `Option ${o.n}`), ` ${o.label}`));
+    return el('a', { class: 'card', href: `#/o/${o.n}` }, body, el('div', { class: 'card-label' }, el('span', { class: 'num' }, String(o.n)), o.label));
   });
   const fit = () => document.querySelectorAll('.thumb .scaled').forEach((s) => s.rescale(s.parentElement.clientWidth / FRAMES.desktop.width));
-  return { body: [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name), el('span', { class: 'muted' }, plural(design.options.length, 'option'))),
+  return { body: [el('header', { class: 'bar' }, el('div', { class: 'bar-l' }, home(), el('h1', { class: 'title' }, design.name)), el('div', { class: 'bar-c' }), el('div', { class: 'bar-r' }, el('span', { class: 'count' }, plural(design.options.length, 'option')))),
     el('main', { class: 'grid' }, ...cards)], fit };
 }
-
-const brand = () => el('img', { class: 'brand', src: '/favicon.svg', alt: '', width: '24', height: '24' });
 
 // A shell word as typed: plain words stay bare, anything else is single-quoted.
 const shellWord = (s) => /^[\w./-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`;
@@ -150,23 +200,30 @@ const shellWord = (s) => /^[\w./-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''
 // The Studio brief: sending it runs the person's own agent through the view server (the same refine as the terminal) and the new option joins the picker.
 // `job` is the change being made, `result` how the last send ended; both outlive a re-render, so the box is right on any option or device.
 let job = null; // { n, started } while a change is being made
-let result = null; // { n, text } for the option it ended on, or { n, error, help } for the option it failed on
+let result = null; // { n, made, text } for the option it ended on, or { n, error, help } for the option it failed on
 let clock = null;
-
-const withCode = (s) => s.split('`').map((part, i) => (i % 2 ? el('code', {}, part) : part)); // a hint's `command` is shown as code, not with its backticks
+const seconds = () => `${Math.round((performance.now() - job.started) / 1000)}s`;
+const tick = () => document.querySelectorAll('.clock').forEach((c) => { c.textContent = seconds(); });
 
 function status(o) {
   const box = el('div', { class: 'run', role: 'status', 'aria-live': 'polite', hidden: '' });
   if (job) {
-    const left = el('span', { class: 'muted' });
-    const tick = () => { left.textContent = `${Math.round((performance.now() - job.started) / 1000)}s`; };
-    tick(); clearInterval(clock); clock = setInterval(tick, 1000);
-    box.replaceChildren(el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('span', {}, `Making a new option from Option ${job.n}. This takes a minute or two. `, left));
+    clearInterval(clock); clock = setInterval(tick, 1000);
+    box.classList.add('working');
+    box.replaceChildren(el('span', { class: 'spinner', 'aria-hidden': 'true' }),
+      el('div', { class: 'grow' }, el('div', { class: 'what' }, `Making Option ${design.options.length + 1} from Option ${job.n}`), el('div', { class: 'then' }, `A minute or two. Option ${job.n} stays as it is.`)), el('span', { class: 'clock' }, seconds()));
     box.hidden = false;
-  } else if (result && result.n === o.n) {
-    box.className = `run${result.error ? ' failed' : ''}`;
-    box.setAttribute('role', result.error ? 'alert' : 'status');
-    box.replaceChildren(el('span', {}, result.error ?? result.text), ...(result.help ?? []).map((h) => el('span', { class: 'muted' }, ...withCode(h))));
+  } else if (result?.error && result.n === o.n) {
+    box.className = 'run failed';
+    box.setAttribute('role', 'alert');
+    // A "<route>: first-draft-axi ..." hint shows its command as a code block under the route; a `command` in backticks shows as inline code.
+    const hint = (h) => { const m = h.match(/^(.*?):\s*(first-draft-axi .*)$/); return m ? el('div', { class: 'help' }, el('span', {}, m[1]), el('code', {}, m[2]))
+      : el('div', { class: 'help inline' }, ...h.split('`').map((part, i) => (i % 2 ? el('code', {}, part) : part))); };
+    box.replaceChildren(icon('alert'), el('div', { class: 'grow' }, el('div', { class: 'what' }, result.error), ...(result.help ?? []).map(hint)));
+    box.hidden = false;
+  } else if (result?.text && result.made === o.n) {
+    box.className = 'run done';
+    box.replaceChildren(el('span', { class: 'ok', 'aria-hidden': 'true' }, icon('check')), el('div', { class: 'grow' }, el('div', { class: 'what' }, `Option ${result.made} is ready`), el('div', { class: 'then' }, result.text)));
     box.hidden = false;
   }
   return box;
@@ -175,42 +232,45 @@ function status(o) {
 async function send(o, change) {
   job = { n: o.n, started: performance.now() };
   result = null;
-  refreshBrief();
+  refreshStudio?.();
   try {
     const res = await fetch('/refine', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ option: o.n, change }) });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(body.error ?? `The view answered ${res.status}`), { help: body.help });
     design.options.push(body.option);
     draft = '';
-    result = { n: body.option.n, text: `Option ${body.option.n} is Option ${o.n} with this change: ${change}` };
-    if (/^#\/o\/\d+(\/(phone|desktop|both))?$/.test(location.hash)) location.hash = `#/o/${body.option.n}${location.hash.match(/\/(phone|desktop|both)$/)?.[0] ?? ''}`;
+    result = { n: o.n, made: body.option.n, text: `Option ${o.n} with this change: ${change}` };
+    job = null;
+    clearInterval(clock);
+    if (/^#\/o\/\d+(\/(phone|desktop|both))?$/.test(location.hash)) return void (location.hash = `#/o/${body.option.n}${location.hash.match(/\/(phone|desktop|both)$/)?.[0] ?? ''}`);
   } catch (e) { result = { n: o.n, error: e.message === 'Failed to fetch' ? 'The view cannot be reached. Is first-draft-axi view still running?' : e.message, help: e.help }; }
   job = null;
   clearInterval(clock);
-  refreshBrief();
+  refreshStudio?.();
 }
-const refreshBrief = () => { const o = option(current()); if (o) document.querySelector('form.brief')?.replaceWith(brief(o)); };
+// The Studio redraws its panel and option menu (not its frames) when a change starts or ends; set while the Studio is open.
+let refreshStudio = null;
 
 function brief(o) {
-  const text = el('textarea', { rows: '3', 'aria-label': `Brief for a change to Option ${o.n}`, placeholder: `Describe a change to Option ${o.n}` });
+  const text = el('textarea', { rows: '2', 'aria-label': `Brief for a change to Option ${o.n}`, placeholder: `Describe a change to Option ${o.n}` });
   text.value = draft;
   text.oninput = () => { draft = text.value; };
   const cmd = el('div', { class: 'command', hidden: '' });
-  const go = el('button', { type: 'submit', class: 'button primary', disabled: job ? '' : undefined }, job ? 'Working…' : 'Send');
-  const terminal = el('button', { type: 'button', class: 'link' }, 'Copy terminal command');
-  const form = el('form', { class: 'brief' }, el('label', { class: 'kicker' }, 'Next brief'), status(o), cmd, text, el('div', { class: 'brief-row' }, terminal, go));
+  const go = el('button', { type: 'submit', class: 'button primary send', 'aria-label': job ? 'Working' : 'Send', title: job ? 'Working' : 'Send', disabled: job ? '' : undefined }, job ? el('span', { class: 'spinner' }) : icon('send'));
+  const terminal = el('button', { type: 'button', class: 'button link' }, icon('terminal'), 'Terminal command');
+  const form = el('form', { class: 'brief' }, status(o), cmd, text, el('div', { class: 'brief-row' }, terminal, go));
   text.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } };
   const command = () => {
     const change = text.value.trim();
     if (!change) return text.focus();
     const out = o.file.replace(/(\.[^.]*)?$/, (ext) => `-refined${ext}`);
     const code = el('code', {}, `first-draft-axi refine ${shellWord(o.file)} ${shellWord(change)} --out ${shellWord(out)}`);
-    const copy = el('button', { type: 'button', class: 'button' }, 'Copy');
+    const copy = el('button', { type: 'button', class: 'button line' }, icon('copy'), 'Copy');
     copy.onclick = async () => {
-      try { await navigator.clipboard.writeText(code.textContent); copy.textContent = 'Copied'; }
-      catch { getSelection().selectAllChildren(code); copy.textContent = document.execCommand('copy') ? 'Copied' : 'Selected'; } // no clipboard API off https: copy the selection
+      try { await navigator.clipboard.writeText(code.textContent); copy.lastChild.textContent = 'Copied'; }
+      catch { getSelection().selectAllChildren(code); copy.lastChild.textContent = document.execCommand('copy') ? 'Copied' : 'Selected'; } // no clipboard API off https: copy the selection
     };
-    cmd.replaceChildren(el('pre', {}, code), el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, `Run it in the design's folder. It writes ${out} and leaves Option ${o.n} as it is.`), copy));
+    cmd.replaceChildren(el('pre', {}, code), el('div', { class: 'brief-row' }, el('span', { class: 'muted' }, `Run it in the design's folder. It writes ${out}.`), copy));
     cmd.hidden = false;
   };
   terminal.onclick = command;
@@ -275,10 +335,6 @@ function commentBox(o, dev, x, y, at, done) {
   return close;
 }
 
-// Studio: the design, its options and the open option's comments in a column beside the canvas, the brief under them.
-// On a wide screen the canvas shows the desktop and the phone side by side (Both), each captioned with its own Play, or the one device
-// the switch picks. Hide brief folds the column away on a wide screen; under 860px (view.css) there is no Both, the column moves below
-// the canvas and the brief docks at the bottom of the screen. Comment (in the More menu under 860px) turns on comment mode.
 function referencePanel(o) {
   if(o.referenceError) return [el('p',{class:'reference-error',role:'alert'},o.referenceError)];
   const r=o.references; if(!r) return [];
@@ -291,8 +347,23 @@ function referencePanel(o) {
   return [el('section',{class:'references','aria-label':`Reference images for Option ${o.n}`},heading,...shots)];
 }
 
+// The option switcher beside the design's name: its menu lists every option, an option being made, and the grid of all of them.
+function switcher(o, dev) {
+  const button = el('button', { type: 'button', class: 'button switch', 'aria-label': `Option ${o.n} ${o.label}: switch option` }, el('span', { class: 'num on' }, String(o.n)), el('span', { class: 'name' }, o.label), icon('chevron', 'chev'));
+  const m = menu('option-menu', button, el('div', { class: 'label' }, `${design.name} · ${plural(design.options.length, 'option')}`),
+    ...design.options.map((x) => el('a', { class: 'item', role: 'menuitem', href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'true' : undefined },
+      el('span', { class: `num${x === o ? ' on' : ''}` }, String(x.n)), el('span', { class: 'name' }, x.label), el('span', { class: 'muted' }, x.error ? 'Cannot open' : pinsFor(x).length ? plural(pinsFor(x).length, 'comment') : ''))),
+    ...(job ? [el('div', { class: 'item making', 'aria-disabled': 'true' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('span', { class: 'name' }, `Option ${design.options.length + 1} · making`), el('span', { class: 'muted mono clock' }, seconds()))] : []),
+    el('hr'), el('a', { class: 'item', role: 'menuitem', href: '#/' }, icon('grid'), el('span', { class: 'name' }, 'All options side by side')));
+  return [button, m];
+}
+
+// Studio: the panel (options, the open option's comments and the brief) beside the canvas. On a wide screen the canvas shows the
+// desktop and the phone side by side (Both), each captioned with its own Play, or the one device the switch picks, at the largest
+// scale that fits. Hide brief folds the panel away on a wide screen; under 860px (view.css) there is no Both, the panel moves below
+// the canvas and the brief docks at the bottom of the screen. Comment (in the More menu under 860px) turns on comment mode.
 function canvas(o, device) {
-  const dev = deviceFor(device, innerWidth), f = FRAMES[dev], all = pinsFor(o);
+  const dev = deviceFor(device, innerWidth), all = pinsFor(o);
   const gutter = (dev === 'both' ? all : pinsOn(o, dev)).length ? PIN_GUTTER : 0;
   let close = null; // the open comment box's
   const point = (d) => (x, y, at) => { close?.(); close = commentBox(o, d, x, y, at, (i) => { openPin = i; render(); }); };
@@ -301,46 +372,51 @@ function canvas(o, device) {
   if (!o.error && dev === 'both') {
     const pair = ['desktop', 'phone'].map((d) => [d, one(d)]);
     art = el('div', { class: 'pair' }, ...pair.map(([d, a]) => el('figure', {},
-      el('figcaption', {}, link(`#/o/${o.n}/${d}`, NAMES[d], 'device-name'), el('span', { class: 'muted' }, `${FRAMES[d].width} × ${FRAMES[d].height}`), link(`#/o/${o.n}/play/${d}`, 'Play', 'button play-one')), a)));
+      el('figcaption', {}, link(`#/o/${o.n}/${d}`, NAMES[d], 'device-name'), el('span', { class: 'size' }, `${FRAMES[d].width} × ${FRAMES[d].height}`),
+        el('a', { href: `#/o/${o.n}/play/${d}`, class: 'button play-one' }, icon('play', 'fill'), 'Play')), a)));
     art.style.gap = `${pairGap(gutter > 0)}px`;
     art.rescale = (scale) => pair.forEach(([, a]) => a.rescale(scale));
   } else if (!o.error) art = one(dev);
   const done = el('button', { type: 'button', class: 'button' }, 'Done');
-  const hint = el('div', { class: 'comment-hint', role: 'status' }, el('span', {}, 'Tap the spot your comment is about'), done);
-  const stage = el('div', { class: 'stage dotted' }, art ?? el('div', { class: 'thumb-error', role: 'alert' }, o.error), ...(art ? [hint] : []));
-  const zoom = el('span', { class: 'muted zoom' });
-  const pick = el('select', { 'aria-label': 'Option' }, ...design.options.map((x) => el('option', { value: x.n, selected: x === o ? '' : undefined }, `Option ${x.n} · ${x.label}`)));
-  pick.onchange = () => { location.hash = `#/o/${pick.value}/${dev}`; };
-  // Under 860px (view.css) Fullscreen and Comment move into the More menu, so Play is the one primary in the row.
-  const more = el('button', { type: 'button', class: 'button more', popovertarget: 'more-menu', 'aria-label': 'More' }, '⋯');
-  const add = el('button', { type: 'button', class: 'button' }, 'Add comment');
-  const menu = el('div', { id: 'more-menu', class: 'menu', popover: '' }, link(`#/o/${o.n}/full`, 'Fullscreen', 'button'), add);
-  menu.addEventListener('beforetoggle', (e) => {
-    if (e.newState !== 'open') return;
-    const b = more.getBoundingClientRect();
-    Object.assign(menu.style, { top: `${b.bottom + 6}px`, right: `${innerWidth - b.right}px` });
-  });
-  const tool = el('button', { type: 'button', class: 'button comment-tool', 'aria-pressed': 'false' }, 'Comment');
-  const tools = el('div', { class: 'tools' }, pick, devices(`#/o/${o.n}`, dev, ['both', 'desktop', 'phone']), zoom,
-    ...(o.error ? [] : [tool, link(`#/o/${o.n}/full`, 'Fullscreen', 'button full-link'), more, menu, link(`#/o/${o.n}/play/${dev === 'both' ? 'desktop' : dev}`, 'Play', 'button primary')]));
+  const hint = el('div', { class: 'comment-hint', role: 'status' }, el('span', {}, `${innerWidth < WIDE ? 'Tap' : 'Click'} the spot your comment is about`), done);
+  const blank = o.error && el('div', { class: 'blank', role: 'alert' }, el('div', { class: 'mark' }, icon('alert')), el('h2', {}, `Option ${o.n} cannot open`), el('p', {}, o.error),
+    ...(design.options.some((x) => !x.error) ? [link(`#/o/${design.options.find((x) => !x.error).n}`, `Open Option ${design.options.find((x) => !x.error).n}`, 'button line')] : []));
+  const stage = el('div', { class: 'stage' }, art ?? blank, ...(art ? [hint] : []));
+  const zoom = el('span', { class: 'zoom', title: 'Zoom' });
 
-  const options = el('ol', { class: 'list' }, ...design.options.map((x) => el('li', {}, el('a', { href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'page' : undefined },
-    el('span', { class: 'num' }, String(x.n)), el('span', { class: 'name' }, x.label), el('span', { class: 'muted' }, x.error ? 'cannot open' : pinsFor(x).length ? plural(pinsFor(x).length, 'comment') : '')))));
+  const tool = el('button', { type: 'button', class: 'button line comment-tool', 'aria-pressed': 'false' }, icon('comment'), 'Comment');
+  // Under 860px (view.css) Fullscreen and Comment move into the More menu, so Play is the one primary in the bar.
+  const more = el('button', { type: 'button', class: 'button icon more', 'aria-label': 'More', 'data-align': 'right' }, icon('more'));
+  const add = el('button', { type: 'button', class: 'item' }, icon('comment'), el('span', { class: 'name' }, 'Add comment'));
+  const moreMenu = menu('more-menu', more, el('a', { class: 'item', href: `#/o/${o.n}/full` }, icon('full'), el('span', { class: 'name' }, 'Fullscreen')), add);
+  const fold = el('button', { type: 'button', class: 'button icon fold', 'aria-controls': 'studio-side', 'aria-expanded': String(column), 'aria-label': column ? 'Hide brief' : 'Show brief', title: column ? 'Hide brief' : 'Show brief' }, icon('panel'));
+  const actions = o.error ? [] : [tool, el('a', { href: `#/o/${o.n}/full`, class: 'button icon full-link', 'aria-label': 'Fullscreen', title: 'Fullscreen' }, icon('full')), el('span', { class: 'sep' }),
+    el('a', { href: `#/o/${o.n}/play/${dev === 'both' ? 'desktop' : dev}`, class: 'button primary play' }, icon('play', 'fill'), 'Play'), ...(innerWidth < WIDE ? [more, moreMenu] : [])];
+  const bar = el('header', { class: 'bar' },
+    el('div', { class: 'bar-l' }, fold, home(), link('#/', design.name, 'button crumb'), el('span', { class: 'slash', 'aria-hidden': 'true' }, '/'), ...switcher(o, dev)),
+    el('div', { class: 'bar-c' }, devices(`#/o/${o.n}`, dev, ['both', 'desktop', 'phone']), zoom),
+    el('div', { class: 'bar-r' }, ...actions));
+
+  const optionList = () => el('ol', { class: 'list' }, ...design.options.map((x) => el('li', { class: x.error ? 'broken' : undefined }, el('a', { href: `#/o/${x.n}/${dev}`, 'aria-current': x === o ? 'page' : undefined },
+    el('span', { class: `num${x === o ? ' on' : ''}` }, String(x.n)), el('span', { class: 'name' }, x.label), el('span', { class: 'muted' }, x.error ? 'Cannot open' : pinsFor(x).length ? plural(pinsFor(x).length, 'comment') : '')))),
+    ...(job ? [el('li', {}, el('div', { class: 'making' }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), el('span', { class: 'name' }, `Option ${design.options.length + 1}`), el('span', { class: 'muted mono clock' }, seconds())))] : []));
   const notes = all.length ? el('ol', { class: 'list' }, ...all.map((p, i) => {
-    const b = el('button', { type: 'button' }, el('span', { class: 'num pin-num' }, String(i + 1)), el('span', { class: 'name' }, p.text), ...(p.device ? [el('span', { class: 'muted' }, NAMES[p.device])] : []));
+    const b = el('button', { type: 'button' }, el('span', { class: 'num pin-num' }, String(i + 1)), el('span', { class: 'name' }, p.text), ...(p.device ? [el('span', { class: 'tag' }, NAMES[p.device])] : []));
     // The pin with this number opens its comment on the canvas; a comment on the other device switches to it first.
     b.onclick = () => { const pin = document.querySelector(`.pin[data-i="${i}"]`); if (pin) pin.click(); else if (p.device) { openPin = i; location.hash = `#/o/${o.n}/${p.device}`; } };
     return el('li', {}, b);
-  })) : el('p', { class: 'muted' }, 'No comments on this option yet.');
-  const side = el('aside', { id: 'studio-side', class: 'side', 'aria-label': 'Design' },
-    el('section', {}, el('p', { class: 'kicker' }, 'Design'), el('h2', { class: 'title' }, design.name), el('p', { class: 'muted' }, plural(design.options.length, 'option'))),
-    el('section', {}, el('h3', { class: 'kicker' }, 'Options'), options),
-    el('section', {}, el('h3', { class: 'kicker' }, `Comments on Option ${o.n}`), notes));
+  })) : el('p', { class: 'empty' }, 'No comments yet. Press ', el('span', { class: 'tool' }, icon('comment'), 'Comment'), ', then click a spot on the design.');
+  const options = optionList();
+  const side = el('aside', { id: 'studio-side', class: 'side', 'aria-label': 'Brief' },
+    el('div', { class: 'side-scroll' },
+      el('section', {}, el('h2', { class: 'kicker' }, 'Options', el('span', { class: 'mono' }, String(design.options.length))), options),
+      el('section', {}, el('h2', { class: 'kicker' }, `Comments · Option ${o.n}`, el('span', { class: 'mono' }, String(all.length))), notes)),
+    ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]));
 
-  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, tools, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), stage), ...(o.error ? [] : [brief(o)]));
+  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), stage));
   const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };
   tool.onclick = () => commenting(!studio.classList.contains('commenting'));
-  add.onclick = () => { menu.hidePopover(); commenting(true); };
+  add.onclick = () => { moreMenu.hidePopover(); commenting(true); };
   done.onclick = () => commenting(false);
   stopCommenting = () => {
     if (document.querySelector('.comment-box')) close?.();
@@ -353,23 +429,29 @@ function canvas(o, device) {
     const row = hint.offsetHeight && getComputedStyle(hint).position === 'static' ? hint.offsetHeight + 12 : 0;
     const scale = fitDevice(dev, stage.clientWidth, stage.clientHeight - row, gutter);
     art.rescale(scale);
-    zoom.textContent = `${dev === 'both' ? 'Side by side' : `${f.width} × ${f.height}`} · ${Math.round(scale * 100)}%`;
+    zoom.textContent = `${Math.round(scale * 100)}%`;
   });
-  // Wide screens only (view.css): the canvas takes the column's room; under 860px the column is below the canvas and the brief is docked.
-  const fold = el('button', { type: 'button', class: 'button fold', 'aria-controls': 'studio-side', 'aria-expanded': String(column) }, column ? 'Hide brief' : 'Show brief');
+  // Wide screens only (view.css): the canvas takes the panel's room; under 860px the panel is below the canvas and the brief is docked.
   fold.onclick = () => {
     column = !column;
     studio.classList.toggle('folded', !column);
     fold.setAttribute('aria-expanded', String(column));
-    fold.textContent = column ? 'Hide brief' : 'Show brief';
+    fold.setAttribute('aria-label', column ? 'Hide brief' : 'Show brief');
+    fold.title = fold.getAttribute('aria-label');
     fit?.();
   };
-  const body = [el('header', { class: 'bar' }, brand(), el('h1', {}, design.name, el('span', { class: 'muted' }, ` · Option ${o.n}`)), fold, link('#/', 'All options', 'button')), studio];
-  return { body, dev, fit };
+  refreshStudio = () => {
+    side.querySelector('.list').replaceWith(optionList());
+    side.querySelector('form.brief')?.replaceWith(brief(o));
+    const [b, m] = switcher(o, dev);
+    bar.querySelector('.switch').replaceWith(b);
+    bar.querySelector('#option-menu').replaceWith(m);
+  };
+  return { body: [bar, studio], dev, fit };
 }
 
 function full(o) {
-  const exit = el('a', { href: `#/o/${o.n}`, class: 'button exit', 'aria-label': 'Exit fullscreen' }, '✕ Exit');
+  const exit = el('a', { href: `#/o/${o.n}`, class: 'exit', 'aria-label': 'Exit fullscreen' }, 'Exit', el('kbd', {}, 'Esc'));
   document.documentElement.requestFullscreen?.().catch(() => {}); // iPhone has no element fullscreen; the page still fills the viewport.
   return { body: [el('main', { class: 'full' }, frame(o, `Option ${o.n} fullscreen`)), exit] };
 }
@@ -380,14 +462,14 @@ let playing = null; // { iframe, screens, current, canBack } while the Play page
 function playControls() {
   const { iframe, screens, current, canBack } = playing;
   const tell = (msg) => iframe.contentWindow?.postMessage({ __firstDraft: true, ...msg }, '*'); // the sandboxed option has an opaque origin, so no origin can be named
-  const back = el('button', { type: 'button', class: 'button', disabled: canBack ? undefined : '' }, '← Back');
+  const back = el('button', { type: 'button', class: 'button icon', 'aria-label': 'Back', title: 'Back', disabled: canBack ? undefined : '' }, icon('back'));
   back.onclick = () => tell({ type: 'BACK' });
   const chips = screens.map((id) => {
-    const b = el('button', { type: 'button', class: 'button chip', 'aria-current': id === current ? 'true' : undefined }, id);
+    const b = el('button', { type: 'button', class: 'chip', 'aria-current': id === current ? 'true' : undefined }, id);
     b.onclick = () => tell({ type: 'GO', id });
     return b;
   });
-  return [back, ...(chips.length ? chips : [el('span', { class: 'muted' }, 'Single screen')])];
+  return [back, chips.length ? el('div', { class: 'seg', role: 'group', 'aria-label': 'Screens' }, ...chips) : el('span', { class: 'muted' }, 'Single screen')];
 }
 
 function play(o, device) {
@@ -398,27 +480,41 @@ function play(o, device) {
   const controls = el('div', { class: 'play-controls' }, ...playControls());
   const pins = pinsOn(o, dev), art = artFor(dev, iframe, pins);
   const stage = el('main', { class: 'stage' }, art);
-  return { body: [el('header', { class: 'bar' }, link(back, '✕ Exit', 'button'), el('h1', {}, `Option ${o.n}`, el('span', { class: 'muted' }, ` ${o.label} · Play`)), devices(`#/o/${o.n}/play`, dev)),
-    controls, errorBar(o.n), ...pinsNotice(), stage], dev: want, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight, pins.length ? PIN_GUTTER : 0)) };
+  const bar = el('header', { class: 'bar' },
+    el('div', { class: 'bar-l' }, el('a', { href: back, class: 'button icon', 'aria-label': 'Exit Play', title: 'Exit Play' }, icon('close')),
+      el('h1', { class: 'play-title' }, el('b', {}, `Option ${o.n}`), el('span', {}, o.label), el('span', { class: 'badge' }, icon('play', 'fill'), 'Play'))),
+    el('div', { class: 'bar-c' }, controls),
+    el('div', { class: 'bar-r' }, devices(`#/o/${o.n}/play`, dev)));
+  return { body: [bar, errorBar(o.n), ...pinsNotice(), stage], dev: want, fit: () => art.rescale(fitDevice(dev, stage.clientWidth, stage.clientHeight, pins.length ? PIN_GUTTER : 0)) };
 }
 
 function render() {
   const [, n, mode, device] = location.hash.match(/^#\/o\/(\d+)(?:\/(full|play))?(?:\/(phone|desktop|both))?$/) ?? [];
   const o = n && option(Number(n));
-  const page = pageFor(o, mode);
+  const kind = pageFor(o, mode);
   playing = null;
   stopCommenting = null;
-  if (page !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  refreshStudio = null;
+  if (kind !== 'full' && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   frames = [];
   resize?.disconnect();
-  const view = page === 'grid' ? grid() : page === 'full' ? full(o) : page === 'play' ? play(o, device) : canvas(o, device);
+  const view = kind === 'grid' ? grid() : kind === 'full' ? full(o) : kind === 'play' ? play(o, device) : canvas(o, device);
   document.title = o ? `Option ${o.n} · ${design.name}` : design.name;
-  app.className = `page-${page}`;
+  app.className = `page-${kind}`;
   app.replaceChildren(...view.body);
-  if (page === 'canvas') lastCanvas = location.hash;
+  if (kind === 'canvas') lastCanvas = location.hash;
   if (openPin !== null) { const i = openPin; openPin = null; requestAnimationFrame(() => document.querySelector(`.pin[data-i="${i}"]`)?.click()); }
+  // Under 860px the canvas fills the first screen above the docked brief, whose height (one line, or taller with a status) is --dock.
+  const dock = document.querySelector('form.brief');
   // The page follows the window: a resize past the phone width, or below the width for Both, switches the device.
-  if (view.fit) { resize = new ResizeObserver(() => (view.dev && deviceFor(device, innerWidth) !== view.dev ? render() : view.fit())); resize.observe(app); }
+  if (view.fit) {
+    resize = new ResizeObserver(() => {
+      if (dock) document.documentElement.style.setProperty('--dock', `${dock.offsetHeight + 16}px`);
+      return view.dev && deviceFor(device, innerWidth) !== view.dev ? render() : view.fit();
+    });
+    resize.observe(app);
+    if (dock) resize.observe(dock);
+  }
 }
 
 const current = () => Number(location.hash.match(/^#\/o\/(\d+)/)?.[1]);
@@ -438,14 +534,14 @@ window.addEventListener('message', (e) => {
     const d = e.data;
     Object.assign(playing, { screens: Array.isArray(d.screens) ? d.screens.filter((id) => typeof id === 'string') : [], current: String(d.current ?? ''), canBack: d.canBack === true });
     document.querySelector('.play-controls')?.replaceChildren(...playControls());
-    if (playing.current && playing.current.length <= 200 && !/[\u0000-\u0020\u007f]/.test(playing.current) && new URLSearchParams(location.search).get('screen') !== playing.current) {
+    if (playing.current && playing.current.length <= 200 && !/[\u0000- \u007f]/.test(playing.current) && new URLSearchParams(location.search).get('screen') !== playing.current) {
       const url = new URL(location.href);
       url.searchParams.set('screen', playing.current);
       history.replaceState(null, '', url); // Hash-only device links keep the selected screen.
     }
   }
 });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !stopCommenting?.()) leaveFull(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.querySelector('.menu:popover-open') && !stopCommenting?.()) leaveFull(); });
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveFull(); });
 window.addEventListener('hashchange', render);
 document.addEventListener('touchstart', () => {}, { passive: true }); // iOS Safari shows :active (the press states) only on a page that listens for touches

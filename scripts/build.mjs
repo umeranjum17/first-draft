@@ -10,7 +10,9 @@ const raw = { name: 'raw', setup(b) {
 await build({ stdin: { contents: `export { generateViaAgent, composeSystemPrompt, collectResourceManifest, loadDesignSkills, loadFrameTemplates, makeDoneTool } from './${root}/core/src/index.ts';\nexport { buildPreviewDocument, buildStandaloneDocument } from './${root}/runtime/src/index.ts';`, resolveDir: process.cwd() },
   outfile: 'dist/engine.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external', tsconfigRaw: {}, plugins: [raw],
   alias: { '@open-codesign/shared/workspace-file-lock': resolve(root, 'shared/src/workspace-file-lock.ts'), '@open-codesign/shared/html-utils': resolve(root, 'shared/src/html-utils.ts'), '@open-codesign/providers': resolve(root, 'providers/src/index.ts'), '@open-codesign/shared': resolve(root, 'shared/src/index.ts') } });
-await build({ entryPoints: { view: 'src/view/app.js' }, outdir: 'dist/view', bundle: true, platform: 'browser', format: 'iife', minify: true, tsconfigRaw: {} });
+await build({ entryPoints: { view: 'src/view/app.js' }, outdir: 'dist/view', bundle: true, platform: 'browser', format: 'iife', minify: true, tsconfigRaw: {}, external: ['/fonts/*'] });
+// The view's typefaces (view.css loads them from /fonts/), with their licence.
+cpSync('src/view/fonts', 'dist/view/fonts', { recursive: true });
 mkdirSync('dist', { recursive: true });
 cpSync(`${root}/core/src/prompts/sections`, 'dist', { recursive: true, filter: (p) => !p.endsWith('.ts') });
 // The engine's templates tree: method skills, design starters, scaffolds, frames and brand references, read by its skill and scaffold tools.

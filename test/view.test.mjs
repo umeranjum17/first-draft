@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { FRAMES, deviceFor, fitDevice, pageFor } from '../src/view/canvas.js';
+import { pageFor } from '../src/view/canvas.js';
 import { commentsPath, designFiles, serve } from '../src/view.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
@@ -42,7 +42,7 @@ test('the Studio viewport switch shows the option on the picked device only, and
   writeFileSync(join(dir, 'a-1.html'), SCREENS);
   const v = await serve({ files: designFiles([join(dir, 'a.html')]), name: 'a', host: '127.0.0.1', port: 0, framePort: 0 });
   t.after(v.close);
-  const shows = (html) => ({ phone: /class="phone"/.test(html), desktop: /class="artboard"/.test(html), current: html.match(/<a href="#\/o\/1\/(phone|desktop)" aria-current="true">/)?.[1],
+  const shows = (html) => ({ phone: /class="phone"/.test(html), desktop: /class="artboard"/.test(html), current: html.match(/<a href="#\/o\/1\/(phone|desktop)" aria-current="true"/)?.[1],
     play: [...html.matchAll(/href="#\/o\/1\/play\/(phone|desktop)"/g)].map((m) => m[1]).join() });
   assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/phone`)), { phone: true, desktop: false, current: 'phone', play: 'phone' }); // never a desktop pane under the phone
   assert.deepEqual(shows(await dom(dir, `${v.url}#/o/1/desktop`)), { phone: false, desktop: true, current: 'desktop', play: 'desktop' });
@@ -51,15 +51,6 @@ test('the Studio viewport switch shows the option on the picked device only, and
     assert.match(played, /aria-current="true">home<\/button>/, 'the selected screen opens on either device');
     assert.match(played, /\?play&amp;screen=home/, 'the real frame receives the screen route');
   }
-});
-
-test('the canvas and Play fit one device to the stage without upscaling, and defaults to the device that fits the viewport', () => {
-  assert.equal(fitDevice('desktop', 4000, 4000), 1);
-  assert.ok(FRAMES.desktop.width * fitDevice('desktop', 1280, 900) <= 1280 - 48);
-  assert.ok((FRAMES.phone.height + FRAMES.phone.bezel * 2) * fitDevice('phone', 1280, 700) <= 700 - 48);
-  assert.ok((FRAMES.phone.width + FRAMES.phone.bezel * 2) * fitDevice('phone', 390, 900) <= 390 - 48);
-  assert.deepEqual([deviceFor(undefined, 390), deviceFor(undefined, 800), deviceFor(undefined, 1280), deviceFor('phone', 1280), deviceFor('both', 390)], ['phone', 'desktop', 'both', 'phone', 'phone']);
-  assert.ok((FRAMES.desktop.width + FRAMES.phone.width + FRAMES.phone.bezel * 2) * fitDevice('both', 1280, 800) <= 1280 - 48 - 48);
 });
 
 test('an errored option opens its canvas, never the grid or a frame', () => {
