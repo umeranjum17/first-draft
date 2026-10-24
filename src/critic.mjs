@@ -43,7 +43,7 @@ export async function openCritic({ c, brief, references = [], plainOut }) {
   const add = (r) => { used.tokens_in += r.tokens_in ?? 0; used.tokens_out += r.tokens_out ?? 0; };
   let plain, plainFile;
   const plainPage = () => plain ??= (async () => {
-    const page = await ask(c, { system: 'You are a product designer who also writes front-end code.', user: `Build one self-contained HTML page for this brief:\n\n${brief}`, tool: PAGE, maxTokens: 32000 },
+    const page = await ask(c, { system: 'You are a product designer who also writes front-end code.', user: `Build one self-contained HTML page for this brief:\n\n${brief}`, tool: PAGE },
       (v) => typeof v?.html === 'string' && /<html|<body|<!doctype/i.test(v.html) ? [] : ['html must be one complete HTML document']);
     add(page);
     mkdirSync(dirname(plainOut), { recursive: true }); writeFileSync(plainOut, page.value.html); plainFile = plainOut;

@@ -72,10 +72,10 @@ const CRITIQUE = { name: 'critique_marks', description: 'The critique of every m
     fix: { type: 'string', maxLength: 800, description: 'redo: exactly what to change in the drawing; drop: why the idea cannot work; keep: empty or a note' } } } } } } };
 
 // One structured call on the person's own route and model; an answer that does not fit is sent back once with what is wrong.
-export async function ask(c, { system, user, tool, images = [], maxTokens = 16000 }, problemsOf) {
+export async function ask(c, { system, user, tool, images = [] }, problemsOf) {
   let tokens_in = 0, tokens_out = 0, problems = [];
   for (let round = 0; round < 2; round++) {
-    const answer = await respond({ route: routeOf(c.agent), model: c.model, timeoutMs: c.timeoutMs, maxTokens, singleCall: true, images, signal: AbortSignal.timeout(c.timeoutMs ?? 600_000),
+    const answer = await respond({ route: routeOf(c.agent), model: c.model, timeoutMs: c.timeoutMs, maxTokens: 16000, singleCall: true, images, signal: AbortSignal.timeout(c.timeoutMs ?? 600_000),
       context: { systemPrompt: system, tools: [tool], messages: [{ role: 'user', timestamp: Date.now(), content: round ? `${user}\n\nYour last ${tool.name} call was not usable: ${problems.join('; ')}. Call ${tool.name} again with every field as its schema says.` : user }] } });
     tokens_in += answer.usage?.input ?? 0; tokens_out += answer.usage?.output ?? 0;
     if (answer.stopReason === 'error' || answer.stopReason === 'aborted') throw new Error(answer.errorMessage || answer.stopReason);
