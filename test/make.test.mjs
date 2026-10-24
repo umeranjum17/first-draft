@@ -344,6 +344,9 @@ test('make writes each option as one page from one call, with the frontend-desig
   assert.match(sent, /# Frontend Design.*Ground your designs in the subject matter/); // Anthropic's frontend-design guidance is the system prompt
   assert.match(sent, /Facts: .*no invented customer logos, testimonials, quotes/); // the one wrapper rule on content
   assert.match(sent, /Design what the brief names/);
+  assert.match(sent, /one accent colour, used on one thing per screen/); // restraint: one accent, faint grids, no controls without a job
+  assert.match(sent, /barely visible/);
+  assert.match(sent, /no close \(x\)/);
   assert.match(sent, /Write no script/); // no browser to draw the page once, so the page must be static
   assert.match(sent, /Brief: A notes app for Umer/);
   assert.equal(seen[0].tools, undefined, 'the page comes back as text, not inside a tool call');

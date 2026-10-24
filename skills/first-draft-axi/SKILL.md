@@ -13,9 +13,9 @@ Every command prints JSON; its `help` list says what to do next, and a failure i
 1. **init**, once per repo (safe to re-run; writes only inside the repo):
    `first-draft-axi init`
    Makes `.first-draft/` (ignored by git, so it never dirties the repo) and installs this skill for claude (`.claude/skills`), codex and pi (`.agents/skills`). `--harness claude` limits it; `--global` also links the skill from your home folder.
-2. **make**, options for a new screen or page (one engine run per option, 10-30 minutes in all: start it in the background, then read its JSON):
+2. **make**, options for a new screen or page (one page per option from one model call plus one critic revision, a few minutes in all: start it in the background, then read its JSON):
    `first-draft-axi make "A settings page for a podcast app: profile, notifications, billing" --out .first-draft/designs/settings.html --options 3 --model claude-sonnet-5-5`
-   Writes `settings-1.html` … `settings-3.html`. Add `--direction editorial` (see `first-draft-axi styles`) or `--screens "Settings,Billing"`; `--options 1` for one.
+   Writes `settings-1.html` … `settings-3.html`. Add `--direction editorial` (see `first-draft-axi styles`) or `--screens "Settings,Billing"`; `--options 1` for one. With several options and no `--direction`, the model plans a direction per option for the brief. `--critic 0` skips the scored revision, `--engine` uses the older multi-turn engine loop.
 3. **redesign**, an existing screen, from a URL or a screenshot:
    - URL (anonymous, scripts off; follows links to the same site, 6 pages by default): `first-draft-axi redesign https://example.com/pricing "Clearer plans, one obvious call to action" --out .first-draft/designs/pricing --model claude-sonnet-5-5` (add `--max-pages 1` for just that page, `--ref shot.png` to also show it a screenshot)
    - A folder of exported HTML: `first-draft-axi redesign ./site-export "<what to change>" --out .first-draft/designs/site`

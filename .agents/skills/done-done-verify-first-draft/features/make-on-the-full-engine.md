@@ -4,7 +4,7 @@ Part of the first-draft verification map. Source: `src/make.mjs`, `src/render-ch
 
 ## How to get to it (user POV)
 
-Run `first-draft-axi make "<prompt>" --out <file.html>` on the real model route with Chrome or Chromium installed. The engine runs with every upstream tool (`set_todos`, `skill`, `scaffold`, the editor, `done`, `tweaks` ...), its templates tree (method skills including first-draft's `interaction-motion` and `motion-sites`, the 12 design starters under `skills/*.jsx`, scaffolds, frames, brand references) and writes its usual `App.jsx`; the host draws it once headless and writes the static, script-free page it drew. Google Fonts it names are embedded as `data:` fonts. When a run ends with no version passing `done`, make sends `done`'s errors back as the next message, at most three times. A run is bounded at 60 model turns.
+Run `first-draft-axi make "<prompt>" --out <file.html> --engine` (the default make is one call + critic, `src/draft.mjs`; `--assets` also uses the engine) on the real model route with Chrome or Chromium installed. The engine runs with every upstream tool (`set_todos`, `skill`, `scaffold`, the editor, `done`, `tweaks` ...), its templates tree (method skills including first-draft's `interaction-motion` and `motion-sites`, the 12 design starters under `skills/*.jsx`, scaffolds, frames, brand references) and writes its usual `App.jsx`; the host draws it once headless and writes the static, script-free page it drew. Google Fonts it names are embedded as `data:` fonts. When a run ends with no version passing `done`, make sends `done`'s errors back as the next message, at most three times. A run is bounded at 60 model turns.
 
 ## Driving it
 

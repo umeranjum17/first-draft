@@ -2,6 +2,10 @@
 
 Part of the first-draft verification map. Source: `src/styles.mjs` (the 26 named styles) and `src/cli.mjs` (`--direction`, `styles`).
 
+## With no `--direction`
+
+Several options with no direction named: the model plans one direction per option for the brief (name, who to learn from, layout, type, palette, signature detail), so the options differ in layout first. `--options 1` plans nothing. A `--direction` (named style or free text) is every option's direction.
+
 ## How to get to it (user POV)
 
 Run `first-draft-axi styles` to list the named styles, then `first-draft-axi make "<prompt>" --out <tmp>/a.html --direction editorial`, or `--direction "<own words>"`, or `--count 3` with no direction.

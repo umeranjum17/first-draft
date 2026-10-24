@@ -200,7 +200,7 @@ if (command === 'references') {
   }
   const amount = values.options ?? values.count ?? (redesign ? '1' : '3'), count = Number(amount);
   if (!/^[1-5]$/.test(amount)) fail('USAGE', '--options / --count must be an integer from 1 to 5 (default 3)');
-  if (values.critic !== undefined && !/^[0-3]$/.test(values.critic)) fail('USAGE', '--critic must be an integer from 0 to 3 (default 2)');
+  if (values.critic !== undefined && !/^[0-3]$/.test(values.critic)) fail('USAGE', '--critic must be an integer from 0 to 3 (default 1)');
   let prompt = positionals.join(' ').trim();
   if (values['brief-file']) {
     let brief;

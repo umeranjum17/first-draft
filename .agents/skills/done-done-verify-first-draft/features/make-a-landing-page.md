@@ -2,6 +2,8 @@
 
 Part of the first-draft verification map. Source: `src/make.mjs`, `src/media.mjs` (the landing-page brief added when the prompt says "landing page", the project's screenshots offered as the hero visual), `src/clarity.mjs`, `src/render-check.mjs` (the clarity rubric and the eight host checks for a landing, home, marketing or company page).
 
+The default make (one call + critic, `src/draft.mjs`) embeds the project's screenshots the same way (steps 1-5) but does not run the engine's `done` self-check or clarity repair (steps 6-7): run with `--engine` to prove those. Its restraint rules (one accent, faint grids) are proven by the page contract in `test/make.test.mjs` and by reading the page.
+
 ## How to get to it (user POV)
 
 Run make with a prompt that asks for a landing page and carries the product's README: `first-draft-axi make "Make a landing page for my tool <name>. Its README is below; use only it as the source.\n\n<README>" --out <tmp>/landing.html`.
