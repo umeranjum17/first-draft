@@ -155,8 +155,8 @@ const directionOf = (k, total, picture) => `Concept ${k.id} of the ${total} expl
 export const conceptSummary = ({ concepts }) => concepts.map(({ id, round, kind, name, idea, palette, status, verdict, score, reads_as, flaws, fix }) => ({ id, round, kind, name, idea, palette: palette.light.primary, status, verdict, score, reads_as, flaws, fix }));
 
 // One option: its concept drawn by the engine (make), then critiqued at 16 and 32 px. A redo goes back to the engine once with the
-// critique; a concept that still fails, or is dropped, gives way to a reserve concept (the reserves are shared by the options being
-// drawn, and no option takes a chosen concept of another). An option is never lost to the critique: when no attempt is kept, the
+// critique; a concept whose idea the critic drops gives way to a reserve concept (the reserves are shared by the options being
+// drawn, and no option takes a chosen concept of another); one whose redo still fails stays, flagged. An option is never lost to the critique: when no attempt is kept, the
 // best-scored one is the option, with passed false. With explore, each concept is first shown to an image model, and the raster it
 // returns goes to the engine as a reference to redraw as SVG; no image (no provider, or a failed call) draws from the idea alone.
 // Returns the option with its concept's critiques up to the attempt it shows, every other attempt (kept beside the output for review),
@@ -181,6 +181,7 @@ export async function logoOption({ concept: first, reserves, total, prompt, make
         ...c, references: refs, seed: logoSeed(made.html, made.logo), logo: { files: made.logo.files, idea: concept.idea, palette: concept.palette } });
     }
     dropped.push({ concept: concept.id, name: concept.name, critique: attempts.at(-1).verdict });
+    if (attempts.at(-1).verdict.verdict !== 'drop') break; // the idea held but the redo did not fix the drawing: another idea would cost a whole chain of engine runs; the second round is for that
   }
   const seconds = Math.round((Date.now() - started) / 1000);
   if (!attempts.length) return { made: null, attempts, dropped, seconds, tokens_in, tokens_out };

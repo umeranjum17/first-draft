@@ -15,7 +15,7 @@ test('installed Claude: no-paid doctor, account launch, engine make/refine and s
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-claude-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   writeFileSync(join(dir, 'claude'), `#!${process.execPath}
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2), root = process.env.FIRST_DRAFT_HOME;
 appendFileSync(root + '/calls', JSON.stringify(args) + '\\n');
 if (args.includes('auth')) {
@@ -25,6 +25,11 @@ if (args.includes('auth')) {
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) throw Error('API credential reached child');
   if (!args.includes('--safe-mode') || !args.includes('--strict-mcp-config')) throw Error('unsafe execution');
   if (args[args.indexOf('--model') + 1] !== 'claude-opus-5-5') throw Error('model changed');
+  if (process.env.FD_BAD_ONCE && !existsSync(root + '/bad-once')) { // the model breaks the JSON of a call's arguments once
+    writeFileSync(root + '/bad-once', '1');
+    console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: '', calls: [{ name: 'done', arguments: '{"path": "index.h' }] }, usage: { input_tokens: 7, output_tokens: 8 } }));
+    process.exit(0);
+  }
   const envelope = JSON.parse(input), { messages, tools } = JSON.parse(envelope.message.content.at(-1).text);
   const images = envelope.message.content.filter(c => c.type === 'image');
   if (images.length !== 3 || images.some(c => c.source.media_type !== 'image/png' || !Buffer.from(c.source.data, 'base64').subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))) throw Error('reference images were not sent natively');
@@ -118,6 +123,10 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
     assert.equal(generated(), 10, 'no forbidden model can reach generation');
   }
   writeFileSync(config, original);
+  env.FD_BAD_ONCE = '1';
+  await run('make', 'Notes for Umer', '--out', join(dir, 'retried.html'), ...refs);
+  assert.equal(generated(), 16, 'an answer whose call arguments were not JSON was asked again once, and the five turns then ran');
+  delete env.FD_BAD_ONCE;
   env.PATH = dir + '/missing';
   await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /needs ImageMagick/.test(e.stdout));
   await assert.rejects(run('doctor'), e => /claude is not installed/.test(e.stdout));
