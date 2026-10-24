@@ -15,13 +15,14 @@ import { PLAIN, images, standIn, userText } from '../journeys/fixtures/critic-mo
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const make = async (t, dir, scores, ...more) => {
+  const brief = typeof more[0] === 'string' && !more[0].startsWith('--') ? more.shift() : 'A notes app for Umer';
   const seen = [], server = await standIn(seen, scores);
   t.after(() => server.close());
   const env = { ...process.env, CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
   await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
   const out = join(dir, `notes-${scores.length}.html`);
-  return { out, seen, result: JSON.parse((await run(['make', "A notes app for Umer", '--out', out, '--options', '1', ...more])).stdout) };
+  return { out, seen, result: JSON.parse((await run(['make', brief, '--out', out, '--options', '1', ...more])).stdout) };
 };
 
 test('the critic scores each option against real products and a plain page, and an option under 9 goes back for another round', async (t) => {
@@ -78,4 +79,39 @@ test('the critic revises the default one-call page from a seed: the scored versi
   assert.ok(revision, 'the page call was sent the critic\'s score');
   assert.match(userText(revision)[0], /Notes, version 1/, 'with the version it scored');
   assert.equal(JSON.parse(revision).tools, undefined);
+});
+
+// A company, product or landing page is also asked which side it reads as and how its hero meets the nine points, in the same review.
+test('the critic asks a landing page which side it reads as and for its nine hero points; one that reads as the AI side goes back with the tells', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-critic-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { seen, result: { made } } = await make(t, dir, [[8, 5], [9, 5]], 'a landing page for a small accounting software company for teams');
+  const [file] = made.files;
+  assert.deepEqual([file.critique.score, file.critique.passed, file.critique.scores], [9, true, [8, 9]]);
+  assert.deepEqual([file.critique.ai_side.reads_as_ai, file.critique.hero.met, file.critique.hero.of, file.critique.hero.points.length], [false, 9, 9, 9], 'the kept version is the human side with every point met');
+  const asked = seen.filter((b) => b.includes('"review_designs"'));
+  assert.equal(asked.length, 2, 'one critic call per version, no second pass');
+  assert.match(asked[0], /AI-side tells are: soft pastel on everything.*nine points in order.*a small indicator pill above the title/s);
+  const revision = seen.find((b) => !b.includes('"review_designs"') && userText(b)[0]?.includes('The critic scored this design 8/10'));
+  assert.ok(revision, 'the page call was sent the critic\'s score');
+  assert.match(userText(revision)[0], /reads as the AI side of an AI-versus-human comparison: version 1: soft pastel on every section and a card grid after a card grid.*Hero points not met: 6\. subtext naming the main features and the audience: version 1: point 6 is missing/s);
+  // The human-side guidance rides in the page call's system prompt for a landing page, the revision included, and for no other brief.
+  const system = (b) => b; // the request body holds the system prompt
+  assert.match(system(revision), /# Human side, not AI side[\s\S]*nine-point hero/);
+  assert.match(system(revision), /one bold brand colour and one accent/);
+  const notes = await make(t, dir, [[9, 7]]);
+  assert.equal(notes.result.made.files[0].critique.ai_side, undefined, 'a notes app is not asked');
+  assert.doesNotMatch(notes.seen.map(system).join('\n'), /Human side, not AI side/);
+  assert.doesNotMatch(notes.seen.filter((b) => b.includes('"review_designs"')).join('\n'), /ai_side/);
+});
+
+// Even at 10, a page that says it reads as the AI side does not pass.
+test('a landing page the critic says reads as the AI side does not pass at 9', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-critic-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { result: { made } } = await make(t, dir, [[8, 5], [8, 5], [8, 5]], 'a landing page for a small accounting software company for teams');
+  const [file] = made.files;
+  assert.deepEqual([file.critique.passed, file.critique.ai_side.reads_as_ai, file.critique.rounds], [false, true, 3]);
 });

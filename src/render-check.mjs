@@ -9,6 +9,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clarityPage } from './clarity.mjs';
+import { CARD_RUN, HUES, TITLE_WORDS, humanSidePage } from './human-side.mjs';
 
 const VIEWPORTS = [[390, 844], [1280, 800]];
 const DARK_BELOW = 0.18; // a page background lighter than this (0 black, 1 white) is a light page
@@ -227,7 +228,7 @@ const unreadable = () => {
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
-  constructor(bin, onWarn, dark, clarity, pageChecks) { this.pageChecks = pageChecks; this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
+  constructor(bin, onWarn, dark, clarity, pageChecks, humanSide) { this.humanSide = humanSide; this.pageChecks = pageChecks; this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
@@ -282,7 +283,8 @@ export class Renderer {
     const stray = this.pageChecks && screen === null ? await this.eval(c, `(${strayClose.toString()})()`) : [];
     const faint = this.pageChecks && screen === null ? await this.eval(c, `(${unreadable.toString()})()`) : [];
     const clarity = this.clarity && screen === null ? await this.eval(c, `(${clarityPage.toString()})(${this.clarity.flash})`) : []; // the clarity page is the whole page, not one screen
-    return { measured, sig, lightness, visible, covered, stray, faint, clarity, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    const human = this.humanSide && screen === null ? await this.eval(c, `(${humanSidePage.toString()})(${CARD_RUN}, ${HUES}, ${JSON.stringify(TITLE_WORDS)})`) : []; // the human-side checks are the whole page's too
+    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -421,6 +423,7 @@ export class Renderer {
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
         for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
+        for (const message of shot.human ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'human-side', message: `human side, ${context}: ${message}` });
         if (shot.stray?.length && theme === 'light') errors.push({ source: 'restraint', message: `${context}: a close control is on screen with nothing open: ${shot.stray.join('; ')}. Show it only while its drawer, dialog or banner is open (hide it by default and at this width), or remove it.` });
         if (shot.faint?.length) errors.push({ source: 'render', message: `${context} in ${theme}: text that cannot be read, colour against its own background: ${shot.faint.join('; ')}. Give it at least 4.5:1 contrast (an active or selected state needs its own text colour on its fill).` });
         if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
@@ -443,15 +446,16 @@ export class Renderer {
 
 // The render check for one run: the browser starts with the first done and stops with the run.
 // dark: the named style is dark-first, so the page must be dark in both renders instead of different in each.
+// humanSide: the brief is a landing, marketing, product or company page (human-side.mjs).
 // clarity: { flash } when the brief asks for a company or product page (clarity.mjs); flash waives the colour and motion checks.
-export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity, pageChecks } = {}) => {
+export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity, pageChecks, humanSide } = {}) => {
   const bin = findBrowser();
   if (!bin) {
     const warning = 'no Chrome or Chromium was found on this machine, so the 390px/1280px light/dark render checks were skipped';
     onWarn(warning);
     return { status: 'skipped', warning, drawing: false, verify: async () => [], close: () => {} };
   }
-  const render = new Renderer(bin, onWarn, dark, clarity, pageChecks);
+  const render = new Renderer(bin, onWarn, dark, clarity, pageChecks, humanSide);
   return {
     drawing: true, // this machine can draw an App.jsx into static HTML
     get status() { return render.state === 'ready' ? 'checked' : 'skipped'; },

@@ -2,7 +2,7 @@
 
 Part of the first-draft verification map. Source: `src/make.mjs`, `src/media.mjs` (the landing-page brief added when the prompt says "landing page", the project's screenshots offered as the hero visual), `src/clarity.mjs`, `src/render-check.mjs` (the clarity rubric and the eight host checks for a landing, home, marketing or company page).
 
-The default make (one call + critic, `src/draft.mjs`) embeds the project's screenshots the same way (steps 1-5) but does not run the engine's `done` self-check or clarity repair (steps 6-7): run with `--engine` to prove those. Its restraint rules (one accent, faint grids) are proven by the page contract in `test/make.test.mjs` and by reading the page.
+The default make (one call + critic, `src/draft.mjs`) embeds the project's screenshots the same way (steps 1-5) but does not run the engine's `done` self-check or clarity repair (steps 6-7): run with `--engine` to prove those. Its human-side guidance (`src/taste/human-side.md`) and the host checks for it (`src/human-side.mjs`: two hues, one filled primary, a pill, a 5 to 8 word centred title, a hero picture, at most two card-grid sections in a row, one colour or dark band) are proven by `test/human-side.test.mjs` and `done-done run human-side-recapture`; the live before/after of one run is a report, not a gate. Its restraint rules (one accent, faint grids) are proven by the page contract in `test/make.test.mjs` and by reading the page.
 
 ## How to get to it (user POV)
 
