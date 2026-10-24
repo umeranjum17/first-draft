@@ -374,6 +374,14 @@ export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages } =
       if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to draw the design: ${e.message}`); });
       return render.snapshot(doc);
     },
+    // An expression evaluated on a blank page of the same browser (logo mode parses and draws its SVG files here); a browser that cannot start is the failure.
+    evaluate: async (expression) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to check the logo files: ${e.message}`); });
+      const loaded = render.client.once('Page.loadEventFired');
+      await render.client.send('Page.navigate', { url: 'about:blank' });
+      await loaded;
+      return render.eval(render.client, expression);
+    },
     close: () => render.close(),
   };
 };

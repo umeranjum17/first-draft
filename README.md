@@ -84,6 +84,21 @@ first-draft-axi make "Umer's plant shop with a photo of the shop window and a le
 
 The adapter contract is `detect()`, `estimate() → {amount,unit,detail}` for one image, `use` (what the provider is good at, shown to the agent) and `generate({prompt,aspectRatio,dir}) → local raster path` in `src/assets.mjs`. New providers use that same boundary; the host handles approval, image budget, optimization and embedding. No account switching or host retries; the agent may ask again within the budget. A failed design can leave a paid asset on disk; the error is reported, not silently retried.
 
+## Logos (first slice)
+
+```sh
+first-draft-axi logo "Umer's tea shop, calm and modern" --out tea.html --options 3
+first-draft-axi view tea.html
+```
+
+Each option is a brand sheet, `tea-1.html`, and a folder beside it, `tea-1.logo/`, with clean SVG files: `mark.svg`, `wordmark.svg`, `lockup-horizontal.svg` and `lockup-stacked.svg`, each with a `-dark` twin, and `icon.svg`, the app icon. The folder also holds the icon as PNG at 16, 32, 48, 180, 192, 512 and 1024 px, `favicon.ico` (16, 32 and 48 px) and `logo.json` (brief, model, palette, files and check results). The sheet shows the mark, the wordmark, both lockups on light and dark tiles, the icon at its real sizes and in context, and the palette. The logo files are embedded in it, so it opens offline like any option, in the Studio, with comments, `refine` and `post`.
+
+With `--options` above 1 and no `--direction`, each option takes a different kind of logo (`first-draft-axi styles --logo` lists them: geometric symbol, lettermark, negative space, wordmark, emblem, abstract); `--direction` takes one of those ids or your own words. `--model` works as in `make`.
+
+The host checks the files, not the model's word. Every SVG must have a viewBox (square for the mark and the icon), be 20 KB or less, and use only plain shapes: no `<text>` (letters are drawn as paths, so the logo carries no font), `<image>`, `foreignObject`, script, filter, event handler, or link or `url()` outside the file. Chrome, the one already on the machine, then draws `icon.svg` at every size. It refuses an icon that is not full-bleed, paints outside the maskable safe zone (the central circle, 80% of the side), is almost blank or under 3:1 contrast at 16 px, and a light or dark file that does not reach 3:1 on a white or near-black tile. Each finding goes back to the model to fix; nothing is silently fixed. `logo` needs Chrome or Chromium and refuses to start without one.
+
+`refine tea-1.html "<change>" --out tea-round.html`, or the brief in the Studio, starts from the option's logo files and writes a new sheet with its own `.logo/` folder; the original stays. This first slice has no font list, no `--ref` or `--like` inspiration and no raster exploration yet. Marks are model-drawn: judge them, and check any name you adopt for trademark conflicts yourself.
+
 ## Real visual references
 
 ```sh

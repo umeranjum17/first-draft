@@ -16,6 +16,7 @@ import { STYLES } from './styles.mjs';
 import { redesignSource } from './redesign.mjs';
 import { makeRedesign } from './redesign-writer.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
+import { LOGO_DIRECTIONS, logoDirection, readLogo, writeLogo } from './logo.mjs';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
@@ -106,9 +107,16 @@ const prepareReferences = async (values, prompt, c, images = [], inherited = nul
   return { images, metadata, tokens_in, tokens_out };
 };
 // The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
-const refineHtml = async (seed, change, inherited) => {
+// A logo option (a sheet with its .logo/ folder) is refined with its logo files, and the new option gets its own folder.
+const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
   const c = await agentOrThrow();
   try {
+    const logo = from && readLogo(from, seed);
+    if (logo) {
+      const made = await make({ prompt:change,...c,seed:logo.seed,logo });
+      writeLogo(to, made.logo, { brief:change, refined_from:from, agent:c.agent, model:c.model });
+      return { html:made.html, reference:null };
+    }
     const refs = await prepareReferences({},change,c,[],inherited);
     return { html:(await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief })).html, reference:refs.metadata };
   } catch (e) {
@@ -118,7 +126,7 @@ const refineHtml = async (seed, change, inherited) => {
 };
 
 const HELP = `usage: first-draft-axi <command> [flags]
-commands[10]:
+commands[11]:
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
@@ -131,7 +139,8 @@ commands[10]:
     --model <id>       override the configured model for this run only (same BYOKit route)
     --out <file.html>  output file; multiple options add -1, -2, etc.; {i} is replaced by the option number
     --out-dir <folder> alternative to --out; writes option-1.html, option-2.html, etc.
-  styles                              list the named design styles that make --direction <id> takes (or write your own direction in words)
+  logo "<brief>" (--out <file.html> | --out-dir <folder>) [--options 1-5] [--direction <kind>] [--model <id>]   make logo options: each is a brand sheet (file.html) and a file.logo/ folder with mark, wordmark and two lockups as SVG, each with a -dark twin, icon.svg, the app icon as PNG at 16, 32, 48, 180, 192, 512 and 1024 px, favicon.ico and logo.json; needs Chrome or Chromium
+  styles [--logo]                     list the named design styles that make --direction <id> takes (or write your own direction in words); --logo lists the logo kinds logo --direction takes
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
@@ -163,11 +172,14 @@ if (command === 'references') {
   } catch (e) { fail(e.help ? e.code : values.capture ? 'REFERENCE_CAPTURE_FAILED' : 'REFERENCE_DISCOVERY_FAILED', e.message, e.help ?? [discoveryHelp]); }
 } else if (command === 'assets') {
   console.log(JSON.stringify({ providers: await detectAssets(), help: [assetHelp] }));
+} else if (command === 'styles' && rest.includes('--logo')) {
+  console.log(JSON.stringify({ logo_directions: LOGO_DIRECTIONS, help: ['Run `first-draft-axi logo "<brief>" --out <file.html> --direction <id>`, or write your own direction in words'] }));
 } else if (command === 'styles') {
   console.log(JSON.stringify({ styles: STYLES.map((s) => ({ id: s.id, name: s.name, family: s.family, vibe: s.vibe })), help: ['Run `first-draft-axi make "<prompt>" --out <file.html> --direction <id>`'] }));
-} else if (command === 'make' || command === 'redesign') {
-  const redesign = command === 'redesign';
-  const { values, positionals } = flags(rest, { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
+} else if (command === 'make' || command === 'redesign' || command === 'logo') {
+  const redesign = command === 'redesign', logo = command === 'logo';
+  const { values, positionals } = flags(rest, logo ? Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model'].map((name) => [name, { type: 'string' }]))
+    : { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file');
   if (redesign && values['max-pages'] !== undefined && !/^(?:[1-9]|1[0-2])$/.test(values['max-pages'])) fail('USAGE', '--max-pages must be 1-12');
@@ -189,7 +201,7 @@ if (command === 'references') {
     if (!brief.length || brief.length > 100_000 || !brief.toString('utf8').trim() || !isUtf8(brief)) fail('USAGE', '--brief-file must be nonempty UTF-8 text, at most 100 KB');
     prompt = [prompt, brief.toString('utf8')].filter(Boolean).join('\n\n');
   }
-  if (!prompt || !(values.out || values['out-dir'])) fail('USAGE', 'make needs a prompt or --brief-file, and --out <file.html> or --out-dir <folder>');
+  if (!prompt || !(values.out || values['out-dir'])) fail('USAGE', `${logo ? 'logo needs a brief' : 'make needs a prompt or --brief-file'}, and --out <file.html> or --out-dir <folder>`);
   let screens = values.screens?.split(',').map((s) => s.trim());
   if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
   if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
@@ -205,7 +217,7 @@ if (command === 'references') {
   const c = await agentOrAsk(values.model);
   const started = Date.now();
   let refs;
-  try { refs = await prepareReferences(values,prompt,c,images); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
+  try { refs = logo ? { images:[], tokens_in:0, tokens_out:0 } : await prepareReferences(values,prompt,c,images); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
   let inventory;
   if (redesign) {
     try {
@@ -221,18 +233,20 @@ if (command === 'references') {
   let render_check = 'checked';
   for (let i = 0; i < count; i++) {
     const numbered = outPath.includes('{i}') ? outPath.replaceAll('{i}', String(i + 1)) : count > 1 ? outPath.slice(0, -extname(outPath).length || undefined) + `-${i + 1}` + extname(outPath) : outPath;
-    let made;
+    let made, written;
+    const direction = logo ? logoDirection(values.direction ?? (count > 1 ? LOGO_DIRECTIONS[i % LOGO_DIRECTIONS.length].id : undefined)) : values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined);
     try {
       const assets = assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) };
-      made = await (redesign ? makeRedesign : make)({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction:values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined) });
-    } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+      made = await (redesign ? makeRedesign : make)({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction, logo: logo && {} });
+    } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     const out = resolve(numbered);
     try {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, made.html);
       writeOptionReferences(out,refs.metadata);
+      if (logo) written = writeLogo(out, made.logo, { brief: prompt, direction: direction ?? null, agent: c.agent, model: c.model });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
-    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}) });
+    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, palette: written.logo.palette, checks: written.logo.checks }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}) });
     tokens_in += made.tokens_in;
     tokens_out += made.tokens_out;
     made.remote.forEach((r) => blocked.add(r));
@@ -272,14 +286,16 @@ if (command === 'references') {
   const started = Date.now();
   let made;
   const images = await readReferences(values.ref);
-  let refs;
-  try { refs = await prepareReferences(values,change,c,images,readOptionReferences(file)); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
-  try { made = await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+  let refs, logo;
+  try { logo = readLogo(resolve(file), seed); } catch (e) { fail('NO_OPTIONS', `cannot read the logo files of ${file}: ${e.message}`, ['Pass a logo option file made by `first-draft-axi logo`, with its .logo folder beside it']); }
+  try { refs = logo ? { images:[], tokens_in:0, tokens_out:0 } : await prepareReferences(values,change,c,images,readOptionReferences(file)); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
+  try { made = await make({ prompt:change,...c,seed:logo?.seed ?? seed,logo,references:refs.images,referenceBrief:refs.metadata?.brief }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
   const out = resolve(values.out);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, made.html);
   writeOptionReferences(out,refs.metadata);
-  console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in + refs.tokens_in, tokens_out: made.tokens_out + refs.tokens_out },
+  const written = logo && writeLogo(out, made.logo, { brief: change, refined_from: resolve(file), agent: c.agent, model: c.model });
+  console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in + refs.tokens_in, tokens_out: made.tokens_out + refs.tokens_out, ...(written && { logo_dir: written.dir, checks: written.logo.checks }) },
     ...(made.remote.length && { blocked_remote: made.remote }),
     help: [`See both: first-draft-axi view ${resolve(file)} ${out}`] }));
 } else if (command === 'doctor') {

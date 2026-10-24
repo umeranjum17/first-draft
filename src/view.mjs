@@ -159,8 +159,8 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     running = true;
     try {
       const inherited=readOptionReferences(from.file);
-      const made = await refine(readFileSync(from.file, 'utf8'),text,inherited);
       const file = refinedPath(from.file);
+      const made = await refine(readFileSync(from.file, 'utf8'),text,inherited,{ from: from.file, to: file });
       writeFileSync(file,typeof made === 'string' ? made : made.html);
       writeOptionReferences(file,typeof made === 'string' ? inherited : made.reference);
       const added = { n: options.length + 1, label: basename(file, extname(file)), file };
