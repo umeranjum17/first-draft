@@ -23,7 +23,7 @@ On a ChatGPT subscription, use your installed, signed-in Codex CLI instead: `fir
 ## Choose a direction, not just a screenshot
 
 - **Make options.** `make` generates three directions by default; use `--options 1` for one or `--options 5` for five. Each is a self-contained HTML file, not app code, and with no `--direction` each takes a different named style (`first-draft-axi styles` lists them).
-- **Open one on the canvas.** Studio shows one option at desktop (1280px) and phone (390px) side by side, each with its own Play, beside its options, comments and a brief for your next change. Desktop or Phone shows one device; a phone-width window shows the phone.
+- **Open one on the canvas.** Studio shows one option beside its options, comments and a brief for your next change, as large as the window allows. On a laptop it opens on Desktop (1280px); where there is room it opens on Both, the desktop and the phone (390px) side by side, each with its own Play. Both, Desktop and Phone are one click away and your pick is remembered; a phone-width window shows the phone.
 - **Comment on it.** Press Comment (in the ⋯ menu on a phone) and tap the spot you mean: your comment is saved next to the design and shows as a numbered pin beside the frame.
 - **Look closer.** Fullscreen gives the option the whole window; Play is one tap away.
 - **Refine the one you like.** A follow-up prompt writes a new option; your original stays untouched.

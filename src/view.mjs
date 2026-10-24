@@ -69,10 +69,11 @@ export async function viewHost(flag) {
   return { given, host, advertise: wildcard ? tailnet : host, tailnet, wildcard };
 }
 
-export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+export const viewPolicy = (frames) => `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-src ${frames}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 // Scripts run only inside this sandbox: inline only, nothing loaded or sent over the network.
 export const framePolicy = (view) => `sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors ${view}`;
-const ASSETS = { '/view.js': 'text/javascript', '/view.css': 'text/css', '/favicon.svg': 'image/svg+xml', '/favicon-32.png': 'image/png', '/apple-touch-icon.png': 'image/png' };
+const ASSETS = { '/view.js': 'text/javascript', '/view.css': 'text/css', '/favicon.svg': 'image/svg+xml', '/favicon-32.png': 'image/png', '/apple-touch-icon.png': 'image/png',
+  '/fonts/instrument-sans.woff2': 'font/woff2', '/fonts/instrument-serif.woff2': 'font/woff2', '/fonts/jetbrains-mono.woff2': 'font/woff2' };
 const COMMON = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store' };
 
 // Play only: the screens are the upstream overlay's `data-oc-screen` sections. This reports the active one to the view page and,

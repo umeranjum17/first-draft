@@ -27,7 +27,7 @@ journeys:
     timeout: 40m
   studio:
     command: node journeys/studio.mjs
-    timeout: 10m
+    timeout: 25m
 
 # This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
 # agent: opencode
