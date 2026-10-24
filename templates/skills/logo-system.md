@@ -28,7 +28,11 @@ The host has already explored 6 to 8 rough concepts, had a critic look at
 their sketches at 16 and 32 px, and handed you one: its idea in one line, how
 it is built, what it must not read as, what the critic saw, and the rough
 sketch it started as. Refine that concept; do not swap it for another. The
-sketch is a starting point, not a drawing to keep: rebuild it on the grid.
+sketch is a starting point, not a drawing to keep: rebuild it on the grid. When an
+image is attached, an image model drew a raster exploration of the concept: read how
+it composes and shapes the idea, keep what works, and redraw it as clean geometry.
+Never trace it or copy its pixels; it is rough and may be wrong, and the concept is
+the brief.
 
 A mark carries one idea. If you need two, choose one. Never redraw or echo a
 logo you know: learn how good marks are built, never what a known mark looks
@@ -92,14 +96,15 @@ The files carry no font, so every letter is drawn.
 
 ## Colour
 
-- A small palette in `logo/palette.json`: primary (the brand colour), accent
+- The palette is the concept's own and is already in `logo/palette.json`: view it
+  and draw with exactly its colours (done refuses a changed file). Otherwise
+  write a small palette there: primary (the brand colour), accent
   (a second colour, used sparingly) and neutral (the ink for type and quiet
   parts, such as a warm charcoal), and their dark-mode counterparts. Flat
   fills: no gradient, glow or shadow the mark depends on.
-- Give it one line of reason tied to the brief: what in the brief each colour
-  answers (calm: a muted green and warm clay; modern: a crisp near-black ink,
-  not a heritage brown). The host shows that line and each colour's measured
-  contrast in the sheet.
+- Its one line of reason ties it to the concept (what in the idea each colour
+  answers). The host shows that line and each colour's measured contrast in the
+  sheet.
 - Each light colour reads on white at 3:1 or more; each dark colour on
   near-black at 3:1 or more. The `-dark` files keep the geometry and use the
   dark set: the neutral ink becomes near-white and the brand colour is

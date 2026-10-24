@@ -196,7 +196,8 @@ export class Renderer {
     this.proc = spawn(this.bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--no-proxy-server', `--user-data-dir=${this.dir}`, '--remote-debugging-port=0', '--remote-allow-origins=*', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
     this.proc.stderr.on('data', b => { startupLog = (startupLog + b.toString()).slice(-4000); });
     this.proc.on('exit', () => { exited = true; });
-    process.once('exit', () => this.proc?.kill()); // Ctrl-C or a failed run must not leave the browser behind
+    this.onExit = () => this.proc?.kill(); // Ctrl-C or a failed run must not leave the browser behind; close() takes the listener off, so many browsers in one run do not pile them up
+    process.once('exit', this.onExit);
     this.proc.on('error', e => { exited = true; spawnError = e; });
     const portFile = join(this.dir, 'DevToolsActivePort');
     let port = 0;
@@ -218,6 +219,7 @@ export class Renderer {
   close() {
     try { this.client?.close(); } catch { /* the browser is going away anyway */ }
     this.client = null;
+    if (this.onExit) process.off('exit', this.onExit);
     if (this.proc) { try { this.proc.kill(); } catch { /* already gone */ } this.proc = null; }
     if (this.dir) { try { rmSync(this.dir, { recursive: true, force: true }); } catch { /* scratch */ } this.dir = null; }
   }

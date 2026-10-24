@@ -18,15 +18,16 @@ async function installed(route) {
   cli.set(route, value);
   return value;
 }
-async function launch(route) {
-  if (launched.has(route)) return launched.get(route);
-  const { bin, accounts } = await installed(route);
-  const account = await accounts.launch(`installed-${route}`);
-  if (!account.ok) throw new Error(account.message);
-  if (route === 'claude' && account.account.method !== 'subscription') throw new Error('Claude must be signed in with a Claude subscription, not an API key or another billing route');
-  const value = { bin, account };
-  launched.set(route, value);
-  return value;
+// One launch per route, shared by calls that overlap (logo draws its options in parallel); a failed launch is tried again by the next call.
+function launch(route) {
+  if (!launched.has(route)) launched.set(route, (async () => {
+    const { bin, accounts } = await installed(route);
+    const account = await accounts.launch(`installed-${route}`);
+    if (!account.ok) throw new Error(account.message);
+    if (route === 'claude' && account.account.method !== 'subscription') throw new Error('Claude must be signed in with a Claude subscription, not an API key or another billing route');
+    return { bin, account };
+  })().catch((e) => { launched.delete(route); throw e; }));
+  return launched.get(route);
 }
 export const installedCodex = () => launch('codex'); // Asset adapter reuses BYOKit's installed account by path.
 const MEMBER = 'first-draft';
@@ -97,13 +98,21 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
     const schema = { type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
       text: { type: 'string' }, calls: { type: 'array', ...(singleCall && { minItems: 1, maxItems: 1 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
-    const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({
-      system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
-    if (!answer.data) throw new Error('BYOKit returned no structured engine response');
-    const { text, calls } = answer.data;
-    return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
-      content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: JSON.parse(c.arguments) }))],
-      stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
+    // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes): asked again once.
+    for (let attempt = 0; ; attempt++) {
+      const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({
+        system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
+      if (!answer.data) throw new Error('BYOKit returned no structured engine response');
+      const { text, calls } = answer.data;
+      let args;
+      try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
+        if (attempt) throw new Error(`the model's tool call was not valid JSON twice: ${e.message}`);
+        continue;
+      }
+      return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
+        content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: args[i] }))],
+        stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
+    }
   }
   const key = await planKey(route);
   const secret = process.env[key.upstream.method];
