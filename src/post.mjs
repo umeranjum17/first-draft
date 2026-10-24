@@ -4,15 +4,32 @@
 import { execFile, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { viewHost } from './view.mjs';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 
-const CLI = new URL('./cli.mjs', import.meta.url).pathname;
+const CLI = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const LETTERS = 'abcdef'; // sign-off's design card shows up to 6 options
 export class PostError extends Error {
   constructor(code, message, help = []) { super(message); this.code = code; this.help = help; }
 }
+
+// Secrets must never come back out of this command: a sign-off or view line that carries one is masked before it is printed.
+export const redact = (text) => String(text).replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, '$1 [redacted]').replace(/([?&;\s](?:token|secret|password|passwd|authorization|api[_-]?key|access[_-]?key)[\w-]*[=:]\s?)[^\s&"'#]+/gi, '$1[redacted]');
+
+// The board file: --board (a board file, or a .sign-off folder), else $FIRST_DRAFT_BOARD, else the nearest .sign-off/ from here upward.
+const findBoard = (board) => {
+  const given = board ?? process.env.FIRST_DRAFT_BOARD;
+  if (given) {
+    const at = resolve(given);
+    return existsSync(at) && statSync(at).isDirectory() ? join(at, 'decisions.json') : at;
+  }
+  for (let d = resolve('.'); ; d = dirname(d)) {
+    if (existsSync(join(d, '.sign-off')) && statSync(join(d, '.sign-off')).isDirectory()) return join(d, '.sign-off', 'decisions.json');
+    if (dirname(d) === d) throw new PostError('NO_BOARD', 'no .sign-off board folder here or above', ['Run `sign-off-axi init`, pass --board <board.json>, or set FIRST_DRAFT_BOARD=<board.json>']);
+  }
+};
 
 // The design the running view serves, read from its own page, so a view on this port for another design is not mistaken for ours.
 const served = async (url) => {
@@ -52,11 +69,7 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   if (evidence && !media.length) throw new PostError('USAGE', '--evidence needs --media <screenshot>: an Evidence card shows captures of the options', ['Run `first-draft-axi post <design> --title "<what this shows>" --evidence --media shot.png`']);
   const rec = /^\d+$/.test(recommend) ? LETTERS[Number(recommend) - 1] : recommend;
   if (!evidence && (!rec || !LETTERS.slice(0, files.length).includes(rec))) throw new PostError('USAGE', `--recommend is the option you would pick: a-${LETTERS[files.length - 1]} or 1-${files.length}`, ['Run `first-draft-axi post <design> --title "<question>" --recommend a`', 'Journeys, tests and demos pick nothing: use --evidence']);
-  let boardFile = board && resolve(board);
-  for (let d = resolve('.'); !boardFile; d = dirname(d)) {
-    if (existsSync(join(d, '.sign-off')) && statSync(join(d, '.sign-off')).isDirectory()) boardFile = join(d, '.sign-off', 'decisions.json');
-    else if (dirname(d) === d) throw new PostError('NO_BOARD', 'no .sign-off board folder here or above', ['Run `sign-off-axi init`, or pass --board <board.json>']);
-  }
+  const boardFile = findBoard(board);
   const { host, advertise, given } = await viewHost(hostFlag);
   if (!advertise || (!given && host === '127.0.0.1')) throw new PostError('NO_TAILNET', 'tailscale ip -4 found no tailnet address, and the link must not point at localhost', ['Pass --host <tailnet address>']);
   const view = await ensureView({ files, host: advertise, port });
@@ -64,22 +77,23 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   if (!evidence) mkdirSync(dir, { recursive: true });
   const options = files.map((file, i) => {
     const link = `${new URL(view.url).origin}/#/o/${i + 1}/play`;
-    const variants = { desktop: `${link}/desktop`, phone: `${link}/phone` };
+    const variants = { canvas: `${new URL(view.url).origin}/#/o/${i + 1}`, desktop: `${link}/desktop`, phone: `${link}/phone` };
     if (evidence) return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, link, ...variants };
     const copy = join(dir, `option-${i + 1}.html`);
     if (resolve(file) === copy) throw new PostError('USAGE', `${file} is already the board copy; post the original option files`);
     copyFileSync(file, copy);
-    writeOptionReferences(copy,readOptionReferences(file));
+    writeOptionReferences(copy, readOptionReferences(file));
     return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link, ...variants };
   });
-  const open = `Open in first-draft: ${options.map((o) => `${o.label} ${o.link} (Desktop ${o.desktop}; Phone ${o.phone})`).join(' · ')}`;
+  // The canvas url shows phone 390 and desktop 1280 side by side; Play (the Open link under each mock) runs one. The board clips long text, so the one-device urls stay in this command's JSON.
+  const open = `Phone and desktop side by side: ${options.map((o) => `${o.label} ${o.canvas}`).join(' · ')}`;
   const args = evidence ? ['post', boardFile, '--type', 'evidence', '--title', title, ...(key ? ['--key', key] : []), '--about', tradeoff ? `${tradeoff} ${open}` : open, ...media.flatMap((m) => ['--media', m])]
     : ['post', boardFile, '--type', 'design', '--title', title, ...(key ? ['--key', key] : []), '--tradeoff', tradeoff ? `${tradeoff} ${open}` : open, '--recommend', rec,
     ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`, '--link', `${o.option}=${o.link}`])];
   try {
     const { stdout } = await promisify(execFile)('sign-off-axi', args, { maxBuffer: 1e7 });
-    return { board: boardFile, view, options, sign_off: stdout.trim() };
+    return { board: boardFile, view, options, sign_off: redact(stdout.trim()) };
   } catch (e) {
-    throw new PostError('POST_FAILED', `sign-off-axi post failed: ${(e.stderr || e.stdout || e.message).trim()}`, ['Run `sign-off-axi doctor`']);
+    throw new PostError('POST_FAILED', `sign-off-axi post failed: ${redact((e.stderr || e.stdout || e.message).trim())}`, ['Run `sign-off-axi doctor`']);
   }
 }
