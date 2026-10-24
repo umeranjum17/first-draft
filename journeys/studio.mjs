@@ -325,8 +325,8 @@ try {
     await click('form.brief textarea');
     await c('Input.insertText', { text: 'Umer: make the next iteration feel a little calmer.' });
     await click('form.brief button[type=submit]');
-    // The view first looks for the installed subscriptions to name in the hint, which takes a few seconds on a loaded machine.
-    await until("document.querySelector('.run.failed')?.textContent.includes('init --agent')", 'the set-up hint after Send with no agent', 30_000);
+    // The view first looks for the installed subscriptions to name in the hint: a few seconds, and up to about 30 on a loaded machine.
+    await until("document.querySelector('.run.failed')?.textContent.includes('init --agent')", 'the set-up hint after Send with no agent', 90_000);
     await shot(`studio-send-no-agent-${w}`, extra);
     if (w < 700) {
       // Fullscreen from the More menu, and back.
