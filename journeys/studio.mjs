@@ -112,10 +112,12 @@ try {
   const box = (selector) => evaluate(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{top:b.top,bottom:b.bottom,height:b.height,left:b.left,right:b.right,width:b.width}})()`);
   // No pin covers a frame's screen: each sits in the margin beside it, level with its point.
   const pinsClear = () => evaluate("(()=>{const hit=(a,b)=>a.left<b.right-1&&b.left<a.right-1&&a.top<b.bottom-1&&b.top<a.bottom-1;const screens=[...document.querySelectorAll('.artboard,.phone-screen')].map(e=>e.getBoundingClientRect());return [...document.querySelectorAll('.pin')].filter(p=>p.getClientRects().length).every(p=>screens.every(s=>!hit(p.getBoundingClientRect(),s)))})()");
-  // Fit to space: what the canvas shows sits inside it and covers at least 85% of the canvas on its limiting side (the side it
-  // reaches first as it grows). Returns that cover.
+  // Fit to space: what the canvas shows (the frames and the comment pins beside them) sits inside it and covers at least 85% of the
+  // canvas on its limiting side (the side it reaches first as it grows). Returns that cover.
   const fills = async (selector, what) => {
-    const [a, st] = [await box(selector), await box('.stage')];
+    const a = await evaluate(`(()=>{const r=[document.querySelector(${JSON.stringify(selector)}),...document.querySelectorAll('.pin')].filter(e=>e?.getClientRects().length).map(e=>e.getBoundingClientRect());
+      const b={left:Math.min(...r.map(x=>x.left)),right:Math.max(...r.map(x=>x.right)),top:Math.min(...r.map(x=>x.top)),bottom:Math.max(...r.map(x=>x.bottom))};return{...b,width:b.right-b.left,height:b.bottom-b.top}})()`);
+    const st = await box('.stage');
     assert.ok(a.left >= st.left - 1 && a.right <= st.right + 1 && a.top >= st.top - 1 && a.bottom <= st.bottom + 1, `${what} fits inside the canvas: ${JSON.stringify({ a, st })}`);
     const cover = Math.max(a.width / st.width, a.height / st.height);
     assert.ok(cover >= 0.85, `${what} covers ${Math.round(cover * 100)}% of the canvas's limiting side, under 85%: ${JSON.stringify({ a, st })}`);
