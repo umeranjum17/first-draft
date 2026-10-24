@@ -81,7 +81,7 @@ try {
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const settle = () => evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
-  const until = async (expression, what) => { for (let i = 0; i < 100; i++) { if (await evaluate(expression)) return; await wait(50); } throw new Error(`Timed out: ${what}`); };
+  const until = async (expression, what, ms = 5000) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await evaluate(expression)) return; await wait(50); } throw new Error(`Timed out after ${ms / 1000}s: ${what}`); };
   // A fresh page each time: a navigation that changes only the hash would keep the last page's state (its brief draft, the folded column).
   const open = async (hash) => { await c('Page.navigate', { url: 'about:blank' }); await c('Page.navigate', { url: base + hash }); await until("document.readyState==='complete' && !!document.querySelector('#app>*')", `open ${hash}`); await settle(); };
   const point = (selector) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing ${selector.replaceAll("'", '')}');e.scrollIntoView({block:'center'});const b=e.getBoundingClientRect();return{x:b.x+b.width/2,y:b.y+b.height/2}})()`);
@@ -310,7 +310,8 @@ try {
     await click('form.brief textarea');
     await c('Input.insertText', { text: 'Umer: make the next iteration feel a little calmer.' });
     await click('form.brief button[type=submit]');
-    await until("document.querySelector('.run.failed')?.textContent.includes('init --agent')", 'the set-up hint after Send with no agent');
+    // The view first looks for the installed subscriptions to name in the hint, which takes a few seconds on a loaded machine.
+    await until("document.querySelector('.run.failed')?.textContent.includes('init --agent')", 'the set-up hint after Send with no agent', 30_000);
     await shot(`studio-send-no-agent-${w}`, extra);
     if (w < 700) {
       // Fullscreen from the More menu, and back.
