@@ -4,7 +4,7 @@
 
 For developers and coding agents: pick a design **before writing app code**.
 
-[![First Draft's viewer showing one generated notes-app option at desktop width, with the Desktop and Phone switch, Fullscreen and Play](docs/media/hero.webp)](https://umeranjum17.github.io/first-draft/)
+<a href="https://umeranjum17.github.io/first-draft/"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/studio-dark.webp"><img src="docs/media/studio.webp" alt="The first-draft Studio in a 1920px-wide window, where it opens on Both: a notes app's first option at desktop and phone width side by side, with two comments pinned beside the frames, and the options, comments and brief composer in the panel"></picture></a>
 
 ### Start in three steps
 
@@ -28,11 +28,11 @@ On a ChatGPT subscription, use your installed, signed-in Codex CLI instead: `fir
 - **Look closer.** Fullscreen gives the option the whole window; Play is one tap away.
 - **Refine the one you like.** A follow-up prompt writes a new option; your original stays untouched.
 
-![First Draft's grid of three notes-app options from one prompt, each in a different style](docs/media/grid.webp)
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/options-dark.webp"><img src="docs/media/options.webp" alt="The option picker: each option of the notes design at desktop and phone width, with its comment count"></picture>
 
-<img src="docs/media/canvas-390.webp" width="200" alt="The viewer in a 390px-wide window: the option on a phone canvas">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/studio-390-dark.webp"><img src="docs/media/studio-390.webp" width="200" alt="The Studio in a 390px-wide window: the option switcher and Play above the phone, the brief composer docked below"></picture>
 
-The screenshots come from one real run of `first-draft-axi make "A notes app for Umer with a sign-in screen and a notes dashboard" --count 3` (first-draft-axi 0.2.4, no `--direction`, so each option took a different named style), with no editing. Options 2 and 3 hit the engine's turn cap, and `make` said so: they hold the screens written so far. The large screenshot at the top is option 1. Generating needs your chosen model; viewing does not call it. These are prototypes, not production apps.
+The screenshots show one real run, unedited: `first-draft-axi make "A compact notes list screen: a title, a search field and a short list of notes. Keep the page short." --out compact.html`, then `first-draft-axi refine compact.html "warmer palette, add an empty state" --out compact-warm.html`. That gives two options, the original and its refinement, both opened with `first-draft-axi view`. The two comments are Umer's, added in the Studio. Generating needs your chosen model; viewing does not call it. These are prototypes, not production apps.
 
 ## Works alone, or with sign-off
 
