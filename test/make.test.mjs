@@ -360,7 +360,7 @@ test('make writes each option as one page from one call, with the frontend-desig
   seen.length = 0;
   const two = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'two.html'), '--options', '2')).stdout).made;
   assert.deepEqual(two.files.map((f) => f.direction), ['Direction 1', 'Direction 2']);
-  assert.deepEqual(seen.map((b) => JSON.stringify(b).match(/Direction: (Direction \d)/)[1]), ['Direction 1', 'Direction 2'], 'each option is made from its own planned direction');
+  assert.deepEqual(seen.map((b) => JSON.stringify(b).match(/Direction: (Direction \d)/)[1]).sort(), ['Direction 1', 'Direction 2'], 'each option is made from its own planned direction (the options are drawn at once, so the requests arrive in either order)');
 });
 
 // The host measures what the critic should not have to find; the model gets one call to fix exactly that (draft.mjs, restraint.mjs, render-check.mjs).

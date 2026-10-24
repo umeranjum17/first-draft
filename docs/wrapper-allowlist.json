@@ -1,0 +1,282 @@
+{
+  "about": "Every addition first-draft makes to a plain model call, with the paired, rendered comparison that justifies it. tests/e2e/wrapper-baseline.test.mjs fails when the prompt, the call shape or the extra calls of the default make contain something that is not listed here. See CONTRIBUTING.md.",
+  "model": "claude-sonnet-5-5",
+  "baseline": "A plain call: one model call, the brief as the whole prompt, no system prompt of ours, no tools, the platform's own output limit, no style or direction.",
+  "verdicts": {"accepted": "Repeated paired comparisons (same brief, same model) on at least two briefs, every one up, none down; or a delivery or policy reason.", "provisional": "In the default make on a measured but mixed, bundled or missing comparison. Named with who decided it and the comparison still needed; the test prints these."},
+  "entries": [
+  {
+    "id": "frontend-design-guidance",
+    "source": "taste",
+    "kind": "quality",
+    "what": "Anthropic's frontend-design guidance, unmodified (src/taste/frontend-design.md), as the system prompt.",
+    "sha256": "9a431b51da4772b4",
+    "verdict": "accepted",
+    "note": "Same model, same brief; the only difference is the guidance as the system prompt. Two briefs, both up, none down.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "plain-sonnet-landing", "plain": 6.5, "with_run": "skill-sonnet-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "A notes app", "model": "claude-sonnet-5-5", "plain_run": "plain-sonnet-notes", "plain": 3, "with_run": "skill-sonnet-notes", "with": 5.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "human-side-guidance",
+    "source": "taste",
+    "kind": "quality",
+    "what": "For a landing, home, marketing, product or company brief: first-draft's own guidance after the frontend-design guidance (the human side, not the AI side; one bold brand colour and one accent; the nine-point hero; the facts rule).",
+    "sha256": "304ae37a08b8871e",
+    "verdict": "provisional",
+    "note": "PR 76 reports one live run each way on one landing brief (not named there): the critic scored 8/10 before and after, hero 9 of 9 and not the AI side after, 4 host findings before and 0 after. The critic is the same model and PR 76 itself says it is not proof of a gain.",
+    "decided_by": "human-side lane, 2026-10-24 (PR 76)",
+    "needed": "Plain model plus the frontend-design guidance against the same plus this one, on at least two landing briefs, scored by a reviewer beside each other.",
+    "evidence": []
+  },
+  {
+    "id": "reply-format",
+    "source": "contract",
+    "kind": "delivery",
+    "what": "Reply is one complete, self-contained HTML document with its CSS inside.",
+    "sha256": "686e73fde9164394",
+    "verdict": "accepted",
+    "reason": "The host saves and draws one HTML file; any other reply is not a page."
+  },
+  {
+    "id": "design-what-the-brief-names",
+    "source": "contract",
+    "kind": "quality",
+    "what": "An app, tool or product is shown as its own screens in use, not as a page that markets it, unless the brief asks for one.",
+    "sha256": "20ccb289e17b7e87",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. The notes app went from 5.5 to 7.5 and stopped marketing itself; the landing brief tied at 8.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 73)",
+    "needed": "The same brief with and without this one rule, on at least two briefs.",
+    "evidence": [
+      {"brief": "A notes app", "model": "claude-sonnet-5-5", "plain_run": "skill-sonnet-notes", "plain": 5.5, "with_run": "strip-notes", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "A notes app", "model": "claude-sonnet-5-5", "plain_run": "skill-sonnet-notes", "plain": 5.5, "with_run": "strip2-notes", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "skill-sonnet-landing", "plain": 8, "with_run": "strip-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "one-accent",
+    "source": "contract",
+    "kind": "quality",
+    "what": "One accent colour, used on one thing per screen; everything else neutral.",
+    "sha256": "963f0a914f6be8b7",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. Added with the layout and fill rules and the host repair in PR 74. Landing 8 to 8 with the strong grid gone, dashboard 8 to 7 (an unreadable active tab on the phone), onboarding 7 to 7.5. The dashboard still used an electric-blue accent, so this is guidance, not a guarantee.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "Each rule alone against the page without it, on three briefs; the dashboard regression explained or fixed.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "brand-and-accent",
+    "source": "contract",
+    "kind": "quality",
+    "what": "For a landing, home or company page the one-accent rule becomes one bold brand colour in big full-width bands and one accent on the primary action.",
+    "sha256": "310d6da86663f586",
+    "verdict": "provisional",
+    "note": "PR 76 reports one live run each way on one landing brief (not named there): the critic scored 8/10 before and after, hero 9 of 9 and not the AI side after, 4 host findings before and 0 after. The critic is the same model and PR 76 itself says it is not proof of a gain.",
+    "decided_by": "human-side lane, 2026-10-24 (PR 76)",
+    "needed": "Plain model plus the frontend-design guidance against the same plus this one, on at least two landing briefs, scored by a reviewer beside each other.",
+    "evidence": []
+  },
+  {
+    "id": "faint-patterns",
+    "source": "contract",
+    "kind": "quality",
+    "what": "Background patterns, grids and rules are barely visible (about 4-6% contrast).",
+    "sha256": "fa423aa3554f3896",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. The landing grid lines the owner complained about are gone in the after cell; the score stayed 8.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "This rule alone against the page without it.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "controls-have-a-job",
+    "source": "contract",
+    "kind": "quality",
+    "what": "No control without a job: no close (x), menu or badge with nothing to close, open or count.",
+    "sha256": "9445f0ce9d01e4f3",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. The stray x on the notes page was removed by the host repair, but the notes brief was not re-run.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "This rule alone, and the notes brief re-run.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "fill-each-screen",
+    "source": "contract",
+    "kind": "quality",
+    "what": "Fill each screen for its purpose: related text beside its headline, a decision at each step, frames of one height, nothing half-built.",
+    "sha256": "ae31f436243706d0",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. The landing still left a void beside its feature blocks.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "This rule alone against the page without it.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "phone-layout-designed",
+    "source": "contract",
+    "kind": "quality",
+    "what": "The phone layout is designed: navigation that fits, no fixed bar over content, two-line table rows, 44px targets, 4.5:1 secondary text.",
+    "sha256": "9690f650e0cf48fd",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. The dashboard phone still had an active tab with dark text on a dark fill; the host check for that came after the cell.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "This rule alone, and the dashboard re-run with the host repair.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "design-both-widths",
+    "source": "contract",
+    "kind": "quality",
+    "what": "Design both the phone (390px) and the desktop (1280px) width.",
+    "sha256": "9ee6240a779671e9",
+    "verdict": "provisional",
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. People compare at both widths; nothing measured this sentence alone.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "This sentence alone against the page without it.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "fonts-embedded",
+    "source": "contract",
+    "kind": "delivery",
+    "what": "Google Fonts named in a link or @import are embedded by the host.",
+    "sha256": "a3c006f943ab1896",
+    "verdict": "accepted",
+    "reason": "States what the host does with fonts so the page does not need the network; it restricts nothing."
+  },
+  {
+    "id": "images-inline",
+    "source": "contract",
+    "kind": "delivery",
+    "what": "Images are inline SVG, CSS or data: URIs; a remote image is blocked.",
+    "sha256": "f351c0c7f4479993",
+    "verdict": "accepted",
+    "reason": "The exported page loads nothing from the network, so a remote image shows empty (test/make.test.mjs)."
+  },
+  {
+    "id": "facts",
+    "source": "contract",
+    "kind": "policy",
+    "what": "The product's own data is specific and believable; claims about the product (logos, testimonials, ratings, counts) are never invented, or are labelled as a sample.",
+    "sha256": "db2244954b055bc5",
+    "verdict": "accepted",
+    "reason": "An owner decision about honesty, not a design restriction (2026-10-24). It replaced the engine rule that labelled all sample content, which produced \"Placeholder quote\" and \"concept design\" copy (bake-off cause 2)."
+  },
+  {
+    "id": "script-drawn-once",
+    "source": "contract",
+    "kind": "delivery",
+    "what": "Script may run once; the host keeps what the first render shows, without the script.",
+    "sha256": "17b216e97598b4f5",
+    "verdict": "accepted",
+    "reason": "Where Chrome is installed the host draws the page once into a static document; the sentence says what survives."
+  },
+  {
+    "id": "no-script",
+    "source": "contract",
+    "kind": "delivery",
+    "what": "Write no script: the page is shown as a static document.",
+    "sha256": "63d1c2d956a51103",
+    "verdict": "accepted",
+    "reason": "Without Chrome the page cannot be drawn, so script would not run in the exported document."
+  },
+  {
+    "id": "direction-plan",
+    "source": "step",
+    "kind": "quality",
+    "what": "With several options and no direction named, one extra call plans a direction per option for the brief; each draw is told its direction.",
+    "verdict": "provisional",
+    "calls": {"per": "make", "max": 1},
+    "note": "It replaced a fixed list of novelty styles (editorial, oled-neon, bento), which the bake-off named as cause 1 of the weak notes app. No paired plain-vs-planned comparison exists.",
+    "decided_by": "quality bake-off lane, 2026-10-24",
+    "needed": "Three options with planned directions against three plain draws of the same brief, scored side by side.",
+    "evidence": []
+  },
+  {
+    "id": "host-repair",
+    "source": "step",
+    "kind": "quality",
+    "what": "The host measures the drawn page (overflow at 390px, text under a fixed bar, clipped or unreadable text, a stray close control, a strong grid, more than three hues) and sends the model back once with exactly those findings.",
+    "verdict": "provisional",
+    "calls": {"per": "option", "max": 1},
+    "note": "Measured only as a bundle against plain Sonnet 5.5 with the same guidance. Runs only when a check finds something. In the retained dashboard cell it fired once, on text under the tab bar in light and dark; that cell scored 7 against 8 before, for a phone defect the host now also measures.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 74)",
+    "needed": "Pages with and without the repair call, on the briefs where a check fires.",
+    "evidence": [
+      {"brief": "a landing page for a small accounting software company for teams", "model": "claude-sonnet-5-5", "plain_run": "strip-landing", "plain": 8, "with_run": "g2-fd-landing", "with": 8, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "an analytics dashboard", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-dash", "plain": 8, "with_run": "g2-fd-dash", "with": 7, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"},
+      {"brief": "a mobile onboarding flow", "model": "claude-sonnet-5-5", "plain_run": "gen-fd-onb", "plain": 7, "with_run": "g2-fd-onb", "with": 7.5, "scored_by": "lane reviewer, beside reference products", "report": "quality bake-off, 2026-10-24"}
+    ]
+  },
+  {
+    "id": "critic-plain-page",
+    "source": "step",
+    "kind": "measure",
+    "what": "The critic writes one plain page for the brief, once per make, to score the design beside it.",
+    "verdict": "provisional",
+    "calls": {"per": "make", "max": 1},
+    "reason": "A measuring step: it changes no option by itself. It is written while the options are drawn, so it adds no waiting time.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 72)",
+    "needed": "The judge needs a plain page to score beside; keep it or drop it with the judge."
+  },
+  {
+    "id": "critic-review",
+    "source": "step",
+    "kind": "measure",
+    "what": "One review of each option at 1280 and 390 beside the plain page and the reference products; a low score stays flagged and is never revised.",
+    "verdict": "provisional",
+    "calls": {"per": "option", "max": 1},
+    "reason": "A measuring step: it changes no option. It is the independent subscription judge when one is set up (src/judge.mjs), else the same model scoring itself, labelled as such.",
+    "decided_by": "quality bake-off lane, 2026-10-24 (PR 72)",
+    "needed": "A comparison of the judge's scores with a reviewer's on retained pages."
+  },
+  {
+    "id": "host-human-side-checks",
+    "source": "step",
+    "kind": "quality",
+    "what": "On a landing page the host also measures two hues at most, one filled primary in the hero, a pill above the title, a centred 5 to 8 word title, a hero product screen or picture, at most two card-grid sections in a row and one full-width colour or dark band, and sends the findings in the same one repair call.",
+    "verdict": "provisional",
+    "note": "PR 76 reports one live run each way on one landing brief (not named there): the critic scored 8/10 before and after, hero 9 of 9 and not the AI side after, 4 host findings before and 0 after. The critic is the same model and PR 76 itself says it is not proof of a gain.",
+    "decided_by": "human-side lane, 2026-10-24 (PR 76)",
+    "needed": "Plain model plus the frontend-design guidance against the same plus this one, on at least two landing briefs, scored by a reviewer beside each other.",
+    "evidence": []
+  },
+  {
+    "id": "critic-human-side-check",
+    "source": "step",
+    "kind": "measure",
+    "what": "In the same single review, a landing page is also asked which side it reads as and for its nine hero points; one that reads as the AI side does not pass (and is flagged, never revised).",
+    "verdict": "provisional",
+    "reason": "Part of the one review call, so no extra call; it adds a reason not to pass beside the score.",
+    "decided_by": "human-side lane, 2026-10-24 (PR 76)",
+    "needed": "An independent judge in place of the same model scoring itself."
+  }
+  ]
+}

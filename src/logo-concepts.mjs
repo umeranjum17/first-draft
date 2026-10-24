@@ -159,7 +159,7 @@ async function drawMarks(rows) {
 }
 
 // n tasks at a time over the items, results in order.
-const pool = async (n, items, task) => {
+export const pool = async (n, items, task) => {
   const out = []; let next = 0;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (next < items.length) { const i = next++; out[i] = await task(items[i], i); } }));
   return out;

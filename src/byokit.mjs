@@ -31,6 +31,8 @@ function launch(route) {
 }
 export const installedCodex = () => launch('codex'); // Asset adapter reuses BYOKit's installed account by path.
 const MEMBER = 'first-draft';
+// The most a subscription CLI route lets one reply write (BYOKit's own limit): a page call asks for all of it, never less (wrapper-baseline test).
+export const OUTPUT_CAP = 16_384;
 
 const KEY_VIA = ['plan_key', 'key'];
 
@@ -145,7 +147,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
 
 // One page in one reply: the model answers with the document itself, not a tool call whose arguments carry it as JSON inside JSON.
 // A subscription CLI still answers through a schema, so the page is one JSON string there; a key route answers in plain text.
-export async function writePage({ route, model, system, prompt, images = [], signal, timeoutMs, maxTokens = 16_000 }) {
+export async function writePage({ route, model, system, prompt, images = [], signal, timeoutMs, maxTokens = OUTPUT_CAP }) {
   const problem = await check(route, model);
   if (problem) throw new Error(problem);
   if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);

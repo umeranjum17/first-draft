@@ -13,7 +13,7 @@ import { judgeRouteProblem } from './judge.mjs';
 import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { planDirections } from './direct.mjs';
-import { draft } from './draft.mjs';
+import { OPTIONS_AT_ONCE, draft } from './draft.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 import { HARNESSES, InitError, initProject } from './init.mjs';
@@ -22,7 +22,7 @@ import { redesignSource } from './redesign.mjs';
 import { makeRedesign } from './redesign-writer.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
 import { LOGO_DIRECTIONS, logoDirection, readLogo, writeLogo } from './logo.mjs';
-import { conceptSummary, drawLogos } from './logo-concepts.mjs';
+import { conceptSummary, drawLogos, pool } from './logo-concepts.mjs';
 import { PASS, openCritic } from './critic.mjs';
 import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
@@ -307,17 +307,22 @@ if (command === 'refs') {
   // options the view lists), once; low scores stay flagged (critic.mjs).
   const critic = logo || redesign ? null : values['no-critic'] ? { off: '--no-critic: no option was scored' }
     : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.judge, plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
-  for (let i = 0; i < count; i++) {
-    const numbered = numberedOf(files.length + 1);
+  // The default one-call options are independent, so they are drawn and judged OPTIONS_AT_ONCE at a time, and the critic's plain page is written
+  // beside them. A logo's options were drawn already; redesign pages, the engine loop (--engine) and generated assets (paid, one budget) keep their order.
+  const slots = [], stages = {}; // stages: the seconds each kind of work took, summed over the options (the critic reports its own)
+  let logos = 0;
+  const one = async (i) => {
     let made, written, option;
     const direction = directionOf(i);
-    try {
-      if (logo) {
-        option = drawn.options[i];
-        if (!option.made) continue; // no concept was left to try for this option; concepts says why
-      }
-      made = option?.made ?? await build(i, numbered);
-    } catch (e) { critic?.close?.(); fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+    if (logo) {
+      option = drawn.options[i];
+      if (!option.made) return; // no concept was left to try for this option; concepts says why
+    }
+    const numbered = numberedOf(logo ? ++logos : i + 1);
+    const opened = Date.now();
+    try { made = option?.made ?? await build(i, numbered); }
+    catch (e) { critic?.close?.(); fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+    for (const [stage, took] of Object.entries(made.timing ?? {})) stages[stage] = (stages[stage] ?? 0) + took;
     let critique;
     if (critic?.judge) {
       try { ({ made, critique } = await critic.judge(made)); }
@@ -341,17 +346,22 @@ if (command === 'refs') {
         ...(drawn.second_round && { second_round: drawn.second_round }), critic: 'the same model, against written principles and the person\'s --ref images; not an independent judgement or trademark clearance', agent: c.agent, model: c.model },
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
-    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.repaired && { repaired: made.repaired }), ...(made.unrepaired && { unrepaired: made.unrepaired, repair_failed: made.repair_failed }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }) });
+    slots[i] = { file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.repaired && { repaired: made.repaired }), ...(made.unrepaired && { unrepaired: made.unrepaired, repair_failed: made.repair_failed }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }), ...(made.timing && { seconds: Math.round((Date.now() - opened) / 1000) }) };
     if (!logo) { tokens_in += made.tokens_in; tokens_out += made.tokens_out; }
     made.remote.forEach((r) => blocked.add(r));
     if (made.render_check === 'skipped') render_check = 'skipped';
     if (made.truncated) cut.push(numbered);
-  }
+  };
+  const inOrder = logo || redesign || engine;
+  if (!inOrder) critic?.warm?.();
+  await pool(inOrder ? 1 : OPTIONS_AT_ONCE, Array.from({ length: count }, (_, i) => i), one);
+  files.push(...slots.filter(Boolean));
+  cut.sort();
   critic?.close?.();
   if (logo && !files.length) fail('MAKE_FAILED', `the concept critique left no concept to draw: ${drawn.concepts.map((k) => `${k.name} (${k.verdict}; ${(k.flaws ?? []).join('; ')})`).join(', ')}`, ['Run logo again, or name a --direction in your own words']);
   if (critic?.used) { tokens_in += critic.used.tokens_in; tokens_out += critic.used.tokens_out; }
   const low = files.filter((f) => f.critique && !f.critique.passed);
-  console.log(JSON.stringify({ made: { command, at: new Date(started).toISOString(), files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check,
+  console.log(JSON.stringify({ made: { command, at: new Date(started).toISOString(), files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check, ...(Object.keys(stages).length && { timing: { options: stages, ...(critic?.timing && { critic: critic.timing() }) } }),
       ...(critic && { critic: critic.off ? { off: critic.off } : { pass: PASS, ...(critic.plainFile() && { plain: critic.plainFile() }), judge: critic.judged } }) },
     ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, baseline: drawn.baseline.file ? { file: drawn.baseline.file, logo_dir: drawn.baseline.logo_dir } : { error: drawn.baseline.error }, ...(drawn.kinds_missing && { kinds_missing: drawn.kinds_missing }), ...(drawn.second_round && { second_round: drawn.second_round }),
       exploration: exploration.provider ? { provider: exploration.provider, images: drawn.options.filter((o) => o.made).map((o) => o.picture?.error ? { error: o.picture.error } : o.picture && { concept: o.concept.name, seconds: o.picture.seconds }) } : { off: exploration.off }, timing: drawn.timing }),
