@@ -1,7 +1,8 @@
 // Journey: the Studio in headless Chromium over CDP (no packages, no model call, no installed browser state), at 1280 and 390, light and dark.
 // A two-option design with comments is served from a temporary folder with its own FIRST_DRAFT_HOME (no agent set): the notes fixture,
 // or the HTML files of a real run's folder named by $FD_STUDIO_SOURCE (copied, never changed). Each width and theme is captured whole
-// (studio-<width>-<theme>.png); then the journey runs at both widths: every kind of button shows a press state, each device fills the
+// (studio-<width>-<theme>.png), and so is the option picker at the root (picker-<width>-<theme>.png: a card per option with its desktop
+// and phone, a card opens the Studio); then the journey runs at both widths: every kind of button shows a press state, each device fills the
 // canvas at the largest scale that fits, the desktop and the phone show side by side at one scale (desktop), a comment added by tapping
 // a point on the phone is saved to the comments file and shows as a pin clear of the frames, Hide brief collapses and reopens the panel
 // (desktop), the composer is docked at the bottom one line high with the whole phone above it, the bar is the option switcher with
@@ -205,6 +206,16 @@ try {
   for (const theme of ['light', 'dark']) for (const w of [1280, 390]) {
     writeFileSync(commentsFile, seed); // each run starts from the same two comments
     await viewport(w, theme);
+    // The option picker (the root): every option as a card showing it at desktop and phone width, its comment count, and a way into the Studio.
+    await open('#/');
+    assert.equal(await evaluate("document.querySelectorAll('.grid .card').length"), 2, 'the picker shows a card for each option');
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.grid .card')].map(c=>[!!c.querySelector('.artboard')?.getClientRects().length,!!c.querySelector('.phone')?.getClientRects().length])"), [[true, true], [true, true]], 'each card shows the option at desktop and phone width');
+    assert.equal(await evaluate("document.querySelector('.grid .card .muted').textContent"), '2 comments', 'a card counts its option\'s comments');
+    await shot(`picker-${w}-${theme}`, out);
+    await state(`picker-${w}-${theme}.png`);
+    await press('.grid .card');
+    await click('.grid .card');
+    assert.match(await evaluate('location.hash'), /^#\/o\/1$/, 'a card opens its option in the Studio');
     await open('#/o/1');
     const before = await shot(`studio-${w}-${theme}`, out);
     await state(w > 700 ? `hide-brief-${w}-${theme}.png (before)` : `studio-${w}-${theme}.png, phone-row-390.png (${theme}), press-play-390.png (${theme}, at rest), composer-390.png (${theme}, one line)`);
@@ -375,7 +386,8 @@ try {
   const version = `${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version} at ${execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).toString().trim()}`;
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${version}` },
     start: `The Studio in first-draft view, the app frame around a user's design: the two-option '${name}' design (${source ? 'from a real run' : 'the notes sign-in fixture'}) with two comments and no agent set, in headless Chromium`,
-    steps: ["At 1280 and 390 px wide, in light and in dark, the whole Studio is captured as it opens: studio-1280-light.png, studio-1280-dark.png, studio-390-light.png and studio-390-dark.png",
+    steps: ["At 1280 and 390 px wide, in light and in dark, open the view's root: the option picker shows the design's name and one card per option, each showing the option at desktop and phone width with its number, name and comment count; picker-1280-light.png, picker-1280-dark.png, picker-390-light.png and picker-390-dark.png show it. Click a card: the option opens in the Studio",
+      "At 1280 and 390 px wide, in light and in dark, the whole Studio is captured as it opens: studio-1280-light.png, studio-1280-dark.png, studio-390-light.png and studio-390-dark.png",
       "At 1280 px wide, in light and in dark: one top bar holds the panel toggle, the design's name and the option switcher, the Both/Desktop/Phone switch with the zoom, Comment, Fullscreen and Play; the Studio opens on Desktop, filling the canvas width; Both shows the desktop and the phone side by side at one scale, as large as the canvas fits, each captioned with its own Play; canvas-both-1280.png shows Both in light and dark",
       "At 1280 px, press Comment, tap the phone's screen, type a comment and press Save: the box opens below the tapped point; after Save the comment is a numbered pin in the margin beside the phone (never over a frame), it is listed in the panel and it is the last entry of the comments file with device 'phone'; add-comment-1280-light.png and add-comment-1280-dark.png show the box and the saved pin",
       "At 1280 px, the panel with the options, the comments and the brief box shows, and the panel toggle is labelled 'Hide brief'",
@@ -391,7 +403,7 @@ try {
       'Switch Phone/Desktop and back: each device fills the canvas; click a comment in the panel and its pin opens on the canvas',
       "At 1280 px hide the panel and switch device: it stays hidden until 'Show brief'",
       'Open Option 2 (from the panel at 1280, from the option switcher at 390); type a change in the brief box and press Send with no agent set: the set-up hint shows; at 390 open Fullscreen from More and Exit; press Play, then Exit'],
-    result: "The Studio opens in one top bar with the option switcher beside the design's name and Play as its one filled button; at 1280 px it opens on Desktop filling the canvas width (studio-1280-*.png), and Both shows the desktop and the phone side by side as large as the canvas fits, each with its own Play (canvas-both-1280.png); Both, Desktop and Phone each cover at least 85% of the canvas available to them at 1280 and 1440 (fit-*.png), and Both is the default only where it fits large, at 1920 (default-*.png); at 390 px the switcher, Play and More sit above Desktop/Phone and the whole phone shows above a one-line brief box (studio-390-*.png, phone-row-390.png). A person adds a comment by tapping a point on the phone and it is saved to the comments file and shows as a pin beside the frame (add-comment-*.png); 'Hide brief' removes the panel and the design fills the canvas (hide-brief-*.png); More opens a menu with Fullscreen, Play changes colour while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, panel, composer position, canvas width, zoom label and toggle label" }, null, 2));
+    result: "The option picker shows each option at desktop and phone width with its comment count, and a card opens it in the Studio (picker-*.png). The Studio opens in one top bar with the option switcher beside the design's name and Play as its one filled button; at 1280 px it opens on Desktop filling the canvas width (studio-1280-*.png), and Both shows the desktop and the phone side by side as large as the canvas fits, each with its own Play (canvas-both-1280.png); Both, Desktop and Phone each cover at least 85% of the canvas available to them at 1280 and 1440 (fit-*.png), and Both is the default only where it fits large, at 1920 (default-*.png); at 390 px the switcher, Play and More sit above Desktop/Phone and the whole phone shows above a one-line brief box (studio-390-*.png, phone-row-390.png). A person adds a comment by tapping a point on the phone and it is saved to the comments file and shows as a pin beside the frame (add-comment-*.png); 'Hide brief' removes the panel and the design fills the canvas (hide-brief-*.png); More opens a menu with Fullscreen, Play changes colour while held, and the brief box opens up when tapped. studio-states.json records each state's measured width, theme, panel, composer position, canvas width, zoom label and toggle label" }, null, 2));
   console.log('PASS: Studio at 1280 and 390, light and dark: each device fills the canvas, desktop and phone side by side, add a comment on the canvas, pins clear of the frames, Brief collapse, docked one-line composer clear of the phone, the phone control row and its More menu, press states, device switch, pins, option switch, Send hint, Fullscreen, Play and back');
 } finally {
   if (ws?.readyState === 1) ws.close();

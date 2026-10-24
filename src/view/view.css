@@ -99,13 +99,28 @@ svg.i.fill { fill: currentColor; stroke: none; }
 .menu .item.making { color: var(--text-2); cursor: default; }
 .menu hr { height: 1px; margin: 6px 4px; border: 0; background: var(--border); }
 
-/* The option picker (the root): every option's thumbnail. */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 20px; padding: 12px 20px 32px; }
-.card { display: block; overflow: hidden; padding: 8px; border-radius: 16px; background: var(--surface); color: inherit; text-decoration: none; box-shadow: var(--shadow-1); transition: box-shadow 160ms var(--ease), transform 160ms var(--ease); }
-.card:hover { box-shadow: 0 0 0 1px var(--border-2), 0 18px 36px -18px rgb(29 28 25 / 0.35); transform: translateY(-1px); }
-.thumb { aspect-ratio: 1280 / 800; overflow: hidden; border-radius: 10px; background: #fff; pointer-events: none; }
-.thumb-error { display: grid; place-items: center; padding: 16px; color: var(--error); background: var(--error-soft); text-align: center; font: 500 12px/1.5 var(--font-mono); }
-.card-label { display: flex; align-items: center; gap: 10px; padding: 10px 6px 4px; overflow-wrap: anywhere; font-weight: 560; }
+/* The option picker (the root): every option at desktop and phone width on a sheet of canvas, the design's name in the display face above. */
+.picker { width: 100%; max-width: 1360px; margin: 0 auto; padding: 24px 32px 56px; }
+.picker-head { margin: 8px 4px 22px; }
+.picker-head h1 { font: 400 40px/1 var(--font-display); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.picker-head p { margin-top: 8px; color: var(--text-2); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); gap: 20px; }
+.card { display: flex; flex-direction: column; padding: 8px; border-radius: 18px; background: var(--surface); color: inherit; text-decoration: none; box-shadow: var(--shadow-1); transition: box-shadow 160ms var(--ease), transform 160ms var(--ease); }
+.card:hover { box-shadow: 0 0 0 1px var(--border-2), 0 18px 36px -18px rgb(29 28 25 / 0.35); transform: translateY(-2px); }
+.mat { position: relative; aspect-ratio: 16 / 10.4; overflow: hidden; border-radius: 12px; background: var(--canvas); pointer-events: none; }
+.mat-desktop { position: absolute; left: 6%; top: 9%; }
+.mat-phone { position: absolute; right: 6%; top: 15%; }
+.mat .phone { --radius-phone: 48px; }
+.mat.broken { display: grid; place-items: center; }
+.mat .blank { padding: 16px; }
+.card-label { display: flex; align-items: center; gap: 10px; padding: 12px 8px 6px; }
+.card-label .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 580; }
+.card-label .muted { font-size: 12px; white-space: nowrap; }
+.card-label .broken { color: var(--error); }
+.open { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 540; transition: color 160ms var(--ease); }
+.open svg { width: 14px; height: 14px; transition: translate 160ms var(--ease); }
+.card:hover .open { color: var(--accent); }
+.card:hover .open svg { translate: 2px 0; }
 
 .scaled { position: relative; flex-shrink: 0; }
 .scaled-inner { transform-origin: top left; }
@@ -251,10 +266,10 @@ svg.i.fill { fill: currentColor; stroke: none; }
 
 /* Press states: whatever is pressed changes colour and sinks a pixel (translate, so it adds to a transform such as the hint's centring).
    Last in the file, so a press shows over a selected row or device too. */
-:is(.button, .card):active:not([disabled]) { translate: 0 1px; }
+.button:active:not([disabled]) { translate: 0 1px; }
 .button:active:not([disabled]), .devices a:active, .seg > button:active, .list :is(a, button):active, .menu .item:active { background: var(--press); }
 .button.primary:active:not([disabled]) { background: color-mix(in oklab, var(--text) 70%, var(--accent)); color: var(--bg); }
-.card:active { box-shadow: 0 0 0 1px var(--accent-line); }
+.card:active { transform: translateY(0); background: var(--surface-2); box-shadow: 0 0 0 1px var(--accent-line); }
 .exit:active { background: rgb(24 23 21 / 0.96); translate: 0 1px; }
 .pin:active { scale: 0.92; }
 
@@ -296,7 +311,10 @@ svg.i.fill { fill: currentColor; stroke: none; }
   .page-play .bar .devices .label { display: none; }
   .page-play .bar .devices a { padding: 0 10px; }
   .page-play .play-controls { width: 100%; }
-  .grid { padding: 8px 12px 24px; gap: 14px; }
+  .picker { padding: 16px 12px 40px; }
+  .picker-head { margin: 4px 4px 16px; }
+  .picker-head h1 { font-size: 32px; }
+  .grid { gap: 14px; }
 }
 
 /* PinOverlay.tsx: warning-soft note pins, 26px for a thumb, in the margin beside the frame. The layer sits over the frame, in this page, never inside the iframe. */
