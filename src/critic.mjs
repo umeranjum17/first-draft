@@ -6,6 +6,7 @@ import { humanSideOf } from './human-side.mjs';
 import { AXES, openJudge } from './judge.mjs';
 import { ask } from './logo-concepts.mjs';
 import { findBrowser, renderCheck } from './render-check.mjs';
+import { stopwatch } from './timing.mjs';
 
 export const PASS = 9;
 export const REFERENCES = 'Linear, Stripe, Vercel, Notion and Raycast';
@@ -68,17 +69,19 @@ export async function openCritic({ c, brief, references = [], plainOut, plainSou
   const landing = humanSideOf({ prompt: brief });
   const used = { tokens_in: 0, tokens_out: 0 };
   const add = (r) => { used.tokens_in += r.tokens_in ?? 0; used.tokens_out += r.tokens_out ?? 0; };
-  let plain, plainFile;
-  const plainPage = () => plain ??= (async () => {
-    if (plainSource) return { file: plainSource, shots: await render.shoot(readFileSync(plainSource, 'utf8'), 800) };
+  const { timed, seconds } = stopwatch();
+  let busy = Promise.resolve(), plain, plainFile;
+  const shoot = (html) => { const run = busy.then(() => render.shoot(html, 800)); busy = run.catch(() => {}); return run; }; // options are judged at once: one browser page, one shot at a time
+  const plainPage = () => plain ??= timed('plain', async () => {
+    if (plainSource) return { file: plainSource, shots: await shoot(readFileSync(plainSource, 'utf8')) };
     const page = await ask(c, { system: 'You are a product designer who also writes front-end code.', user: `Build one self-contained HTML page for this brief:\n\n${brief}`, tool: PAGE },
       (v) => typeof v?.html === 'string' && /<html|<body|<!doctype/i.test(v.html) ? [] : ['html must be one complete HTML document']);
     add(page);
     mkdirSync(dirname(plainOut), { recursive: true }); writeFileSync(plainOut, page.value.html); plainFile = plainOut;
-    return { file: plainOut, shots: await render.shoot(page.value.html, 800) };
-  })();
+    return { file: plainOut, shots: await shoot(page.value.html) };
+  });
   const review = async (html) => {
-    const theirs = await plainPage(), mine = await render.shoot(html, 800); // one browser page: one shot at a time
+    const theirs = await plainPage(), mine = await shoot(html);
     const shots = [...mine, ...theirs.shots].map((s, i) => ({ id: `shot-${i + 1}`, mime: 'image/png', dataUrl: s.dataUrl }));
     let r;
     if (judge.c) try {
@@ -91,8 +94,8 @@ export async function openCritic({ c, brief, references = [], plainOut, plainSou
   };
   const passes = (r) => r.design.score >= PASS && r.design.score >= r.plain.score && !r.ai_side?.reads_as_ai;
   const judgeOne = async (made) => {
-    const started = Date.now(), r = await review(made.html);
+    const started = Date.now(), r = await timed('review', () => review(made.html));
     return { made, critique: { score: r.design.score, passed: passes(r), plain_score: r.plain.score, rounds: 1, scores: [r.design.score], against: r.against, reads_as: r.reads_as, gaps: r.design.gaps, fix: r.fix, ...(r.axes && { axes: r.axes }), ...(r.ai_side && { ai_side: r.ai_side, hero: { met: r.hero.filter((h) => h.met).length, of: 9, points: r.hero } }), seconds: (Date.now() - started) / 1000, judge: judge.c ? judge.label : `${JUDGE}; the independent judge was off: ${judge.off}` } };
   };
-  return { judge: judgeOne, get judged() { return judge.c ? { model: judge.c.model, agent: judge.c.agent, kind: judge.kind, references: judge.refs.shown } : { off: judge.off, kind: judge.kind }; }, used, plainFile: () => plainFile, close: () => render.close() };
+  return { judge: judgeOne, warm: () => plainPage().catch(() => {}), /* the plain page is written while the options are drawn; the first review reports a failure */ timing: seconds, get judged() { return judge.c ? { model: judge.c.model, agent: judge.c.agent, kind: judge.kind, references: judge.refs.shown } : { off: judge.off, kind: judge.kind }; }, used, plainFile: () => plainFile, close: () => render.close() };
 }
