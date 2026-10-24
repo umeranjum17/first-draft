@@ -7,7 +7,7 @@ import { respond, routeOf } from './byokit.mjs';
 import { embedFonts } from './fonts.mjs';
 import { embedMedia, mediaBrief, projectMedia } from './media.mjs';
 import { findBrowser, renderCheck } from './render-check.mjs';
-import { LOGO_CONTRACT, SVGS, checkLogo, logoMedia, sheetErrors } from './logo.mjs';
+import { FILES, LOGO_CONTRACT, checkLogo, fillSheet, logoMedia, sheetErrors } from './logo.mjs';
 import { checkRedesign } from './redesign-check.mjs';
 import { directionText, styleOf } from './styles.mjs';
 const engine = () => import('../dist/engine.mjs');
@@ -45,7 +45,8 @@ export function staticExport(html) {
   return {html:page,errors,remote:[...new Set([...page.matchAll(REMOTE)].map(m=>m[1]??m[2]??m[3]??m[4]??'').filter(v=>!v.trim().startsWith('data:')).flatMap(v=>[...v.matchAll(REMOTE_URL)].map(u=>u[0])))]};
 }
 
-// logo: a logo option (logo.mjs): the engine writes logo/*.svg and a brand sheet; on refine, logo.svgs are the option's files.
+// logo: a logo option (logo.mjs): the engine writes logo/*.svg, logo/palette.json and a brand sheet; logo.idea is the concept's one line
+// the host writes into the sheet, and on refine or a redo logo.files are the option's files.
 export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets, references = [], referenceBrief, redesignPages, logo }) {
   if (screens?.length) prompt += `\nRequired screens/pages: ${screens.join(', ')}. Include every named screen, with distinct ids and links between them.`;
   const { generateViaAgent, composeSystemPrompt, collectResourceManifest, loadDesignSkills, loadFrameTemplates, makeDoneTool, buildStandaloneDocument } = await engine();
@@ -57,8 +58,8 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   const bare = (h) => h.replace(POLICY, '').replace(/<head>\s*<\/head>/i, '').replace(/\s+/g, '');
   const start = seed?.replace(POLICY, ''); // refine: the chosen option is the starting index.html, without the policy make adds back
   if (start !== undefined) files.set('index.html', start);
-  for (const [name, text] of Object.entries(logo?.svgs ?? {})) files.set(`logo/${name}`, text);
-  const logoFiles = () => logo ? Object.fromEntries(SVGS.map((name) => [name, files.get(`logo/${name}`)])) : null;
+  for (const [name, text] of Object.entries(logo?.files ?? {})) files.set(`logo/${name}`, text);
+  const logoFiles = () => logo ? Object.fromEntries(FILES.map((name) => [name, files.get(`logo/${name}`)])) : null;
   const put = (path, content) => {
     if (Buffer.byteLength(content) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
     files.set(key(path), content); return { path: key(path) };
@@ -82,17 +83,19 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   const semanticChecks = [];
   const failed = new AbortController(), signal = failed.signal;
   // The page a source becomes, drawn once per version: the board's static HTML with the policy, its fonts and media inside, and the errors done reports for it.
-  // A logo option's version is its sheet and its logo files: the files are checked and drawn first, and the sheet shows them embedded.
+  // A logo option's version is its sheet and its logo files: the files are checked and drawn first, and the sheet shows them embedded,
+  // with the idea and the palette written into its slots.
   const pages = new Map();
-  const pageOf = (path, source, svgs = logoFiles()) => {
-    const version = svgs ? JSON.stringify([source, svgs]) : source;
+  const pageOf = (path, source, logoed = logoFiles()) => {
+    const version = logoed ? JSON.stringify([source, logoed]) : source;
     if (!pages.has(version)) pages.set(version, (async () => {
       let html = source, errors = [], drawnLogo;
-      if (svgs) { drawnLogo = await checkLogo(svgs, render.evaluate); errors.push(...drawnLogo.errors); }
+      if (logoed) { drawnLogo = await checkLogo(logoed, render.evaluate); errors.push(...drawnLogo.errors); }
       else if (render.drawing) ({ html, errors } = await render.snapshot(buildStandaloneDocument(source, { path })));
       const exported=staticExport(html);errors.push(...exported.errors);
-      if (svgs) errors.push(...sheetErrors(exported.html));
-      const page = embedMedia(await embedFonts(exported.html, warn), drawnLogo?.svgs ? [...media, ...logoMedia(drawnLogo)] : media);
+      if (logoed) errors.push(...sheetErrors(exported.html, logo));
+      const embedded = embedMedia(await embedFonts(exported.html, warn), drawnLogo?.svgs ? [...media, ...logoMedia(drawnLogo)] : media);
+      const page = drawnLogo?.svgs ? fillSheet(embedded, { idea: logo.idea, palette: drawnLogo.palette }) : embedded;
       errors.push(...unplaced(page).map((a) => ({ source: 'assets', message: `the generated image ${a.path} is not shown: place it in its screen as <img src="${a.path}" alt="...">` })));
       if (!errors.length) errors.push(...await render.verify(page, { signal }));
       if (redesignPages && render.status === 'skipped') throw new Error('Redesign checks require a working browser; render verification was skipped');
@@ -178,11 +181,11 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
       const { status, path, errors } = e.result.details ?? {};
       if (status !== 'ok' && status !== 'has_errors') return; // A protocol-blocked done has no verifier path and verifies nothing.
       lastDone = key(path);
-      if (status === 'ok' && key(path) !== 'DESIGN.md') verified = { path: key(path), source: files.get(key(path)), svgs: logoFiles() };
+      if (status === 'ok' && key(path) !== 'DESIGN.md') verified = { path: key(path), source: files.get(key(path)), logoed: logoFiles() };
       lastErrors = status === 'ok' ? '' : (errors ?? []).map((x) => x.message).join('; ');
     } };
-  const current = () => verified !== null && verified.source === files.get(verified.path) && JSON.stringify(verified.svgs) === JSON.stringify(logoFiles());
-  let next = start !== undefined && logo ? `Revise this logo option: ${prompt}\nIts files are in the workspace: the brand sheet index.html and ${SVGS.map((n) => `logo/${n}`).join(', ')}. View the files the change touches first and change only what it asks; a change to the mark goes into every file that carries it, light and dark. Keep the sheet showing every file, then call done(path="index.html").`
+  const current = () => verified !== null && verified.source === files.get(verified.path) && JSON.stringify(verified.logoed) === JSON.stringify(logoFiles());
+  let next = start !== undefined && logo ? `Revise this logo option: ${prompt}\nIts files are in the workspace: the brand sheet index.html and ${FILES.map((n) => `logo/${n}`).join(', ')}. View the files the change touches first and change only what it asks; a change to the mark goes into every file that carries it, light and dark. Keep the sheet showing every file, then call done(path="index.html").`
     : start !== undefined ? (start.length <= 20_000 // ponytail: a small option is rewritten in one create (fits the 16k output budget); a bigger one is edited, which costs more turns
       ? `Revise this index.html: ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Call the editor once with command "create", path "index.html" and the complete revised file, then done(path="index.html").\n\nCurrent index.html:\n${start}`
       : `Revise the existing index.html (read it first): ${prompt}\nKeep every screen, id, link and all copy and layout this change does not touch. Make the change in a few str_replace edits (each old_str one distinctive line, new_str may be long), then call done(path="index.html") as your last step.`) : direction ? `${prompt}\n${logo ? 'Logo direction' : 'Design direction'}: ${directionText(direction)}` : prompt;
@@ -207,13 +210,13 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
     if (!path) throw reason;
     const { details } = await makeDoneTool(fs, runtimeVerify).execute('turn-cap', { path });
     if (details.status !== 'ok') throw new Error(`${reason.message}, and the design so far fails done: ${details.errors.map((x) => x.message).join('; ')}`);
-    verified = { path, source: files.get(path), svgs: logoFiles() };
+    verified = { path, source: files.get(path), logoed: logoFiles() };
     return used;
   }).finally(() => { render.close(); rmSync(work, { recursive: true, force: true }); }); // the browser the render check used goes with the run
   const main = verified?.path ?? (render.drawing && !logo ? 'App.jsx' : 'index.html');
   if (verified === null || (capped === null && verified.source !== files.get(main))) throw new Error(`engine did not verify ${main} with done${lastErrors ? `; the last done check failed: ${lastErrors}` : ''}`);
-  if (start !== undefined && main === 'index.html' && bare(verified.source) === bare(start) && (!logo || JSON.stringify(verified.svgs) === JSON.stringify(logo.svgs))) throw new Error('the engine left the option unchanged');
-  const { html, errors, logo: drawnLogo } = await pageOf(main, verified.source, verified.svgs);
+  if (start !== undefined && main === 'index.html' && bare(verified.source) === bare(start) && (!logo || JSON.stringify(verified.logoed) === JSON.stringify(logo.files))) throw new Error('the engine left the option unchanged');
+  const { html, errors, logo: drawnLogo } = await pageOf(main, verified.source, verified.logoed);
   if (errors.length) throw new Error(`engine output fails the export: ${errors.map((x) => x.message).join('; ')}`);
   if (unplaced(html).length) throw new Error(`The design did not place every generated image into its screens: ${unplaced(html).map((a) => a.path).join(', ')}`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
