@@ -1,6 +1,6 @@
 // make's create path: the plain call that beat the full engine loop in the 2026-10-24 bake-off. One prompt (the brief, Anthropic's
 // frontend-design guidance and the page contract) gives one complete HTML page; the host draws it once into a static page. The critic
-// (critic.mjs, run by the cli) scores it and sends it back as a seed with its fixes. Logo, redesign and generated assets still run the
+// (critic.mjs, run by the cli) scores it once; a low score stays flagged, not revised. Logo, redesign and generated assets still run the
 // full engine (make.mjs).
 import { readFileSync } from 'node:fs';
 import { writePage } from './byokit.mjs';

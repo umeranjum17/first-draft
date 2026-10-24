@@ -42,6 +42,7 @@ export const writeOptionReferences = (file, r) => {
 // shot is a PNG of that viewport.
 export async function shootPublic({ page, network, renderer, views, loadMs = 25_000, assets = [], from }) {
   const url=page.url;
+  if (/<input\b[^>]*type\s*=\s*["']?password\b|\bcaptcha\b/i.test(page.data.toString('utf8')) || /\/(?:login|signin|sign-in|auth)(?:\/|$)/i.test(new URL(url).pathname)) throw new Error('Login/challenge page refused; references never sign in');
   await renderer.start();
   network.abort.signal.throwIfAborted();
   const c=renderer.client, blocked=new Set();

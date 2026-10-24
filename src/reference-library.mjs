@@ -3,21 +3,20 @@
 // robots must allow the page. The shots go to a local cache ($FIRST_DRAFT_HOME/refs-library), never into the package; every other
 // entry stays notes and a link.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { shootPublic } from './reference-capture.mjs';
 import { ReferenceNetwork, referenceUrl } from './reference-network.mjs';
 import { Renderer, findBrowser } from './render-check.mjs';
 
 export const KINDS = ['landing', 'app', 'dashboard', 'notes', 'docs'];
-// The kinds a design is judged against, nearest first: no notes app permits capture, so a notes app meets app screens.
-const NEAR = { landing: ['landing'], app: ['app', 'dashboard'], dashboard: ['dashboard', 'app'], notes: ['notes', 'app'], docs: ['docs'] };
 const VIEWS = [{ name: 'desktop', width: 1280, height: 800 }, { name: 'phone', width: 390, height: 844 }];
 const NOT_PERMITTED = 'no licence or terms found that explicitly permit automated screenshots, so it is kept as notes and a link';
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 export const libraryCache = (home) => join(home, 'refs-library');
 
 export function readLibrary(file = new URL('./reference-library.json', import.meta.url)) {
+  if (statSync(file).size > 200_000) throw new Error('Reference library exceeds 200 KB');
   const lib = JSON.parse(readFileSync(file, 'utf8')), ids = new Set();
   if (lib.version !== 1 || !Array.isArray(lib.entries)) throw new Error('a reference library is {"version": 1, "entries": [...]}');
   for (const e of lib.entries) {
@@ -65,7 +64,7 @@ export async function pullLibrary({ home, library, kind }) {
       })();
       const { views, shots } = await Promise.race([work, new Promise((_, no) => { timer = setTimeout(() => no(new Error('capture took over 3 minutes')), 180_000); })]);
       mkdirSync(join(dir, e.id), { recursive: true });
-      rows.push({ ...row, captured: true, captured_at: at, licence: e.permission, shots: views.map((v, i) => {
+      rows.push({ ...row, captured: true, captured_at: at, licence: e.permission, sources: network.sources, robots: [...network.robots.keys()].map((origin) => `${origin}/robots.txt`), shots: views.map((v, i) => {
         const file = `${e.id}/${v.name}-${v.theme}.png`;
         writeFileSync(join(dir, file), shots[i]);
         return { file, width: v.width, height: v.height, theme: v.theme, sha256: sha(shots[i]) };
@@ -80,8 +79,7 @@ export async function pullLibrary({ home, library, kind }) {
   return { cache: dir, entries: rows };
 }
 
-// The references for a design of `kind`: the two nearest captured products (light shots where there are any, desktop then phone,
-// each checked against the hash it was captured with) and the notes of the products that could not be shown.
+// At most two captured products of exactly the same kind, in one theme each (light where available), with complete viewport pairs.
 export function referencesFor(home, kind) {
   const dir = libraryCache(home);
   let lib;
@@ -89,16 +87,19 @@ export function referencesFor(home, kind) {
     if (e.code === 'ENOENT') return { pulled: false, images: [], shown: [], notes: [] };
     throw e;
   }
-  const near = NEAR[kind], rows = lib.entries.filter((r) => near.includes(r.kind)).sort((a, b) => near.indexOf(a.kind) - near.indexOf(b.kind));
+  const rows = lib.entries.filter((r) => r.kind === kind);
   const shown = rows.filter((r) => r.captured).slice(0, 2), images = [];
   for (const r of shown) {
-    const theme = r.shots.some((s) => s.theme === 'light') ? 'light' : r.shots[0].theme;
-    for (const s of r.shots.filter((x) => x.theme === theme)) {
+    const theme = r.shots.some((s) => s.theme === 'light') ? 'light' : r.shots[0]?.theme;
+    const pair = r.shots.filter((s) => s.theme === theme).sort((a, b) => b.width - a.width);
+    if (pair.length !== 2 || !VIEWS.every((v, i) => pair[i].width === v.width && pair[i].height === v.height)) throw new Error('Reference needs desktop 1280 and phone 390 captures');
+    for (const s of pair) {
+      if (!/^[a-z0-9-]+\/(desktop|phone)-(light|dark)\.png$/.test(s.file) || s.file.split('/')[0] !== r.id || statSync(join(dir, s.file)).size > 2_000_000) throw new Error('Invalid cached reference path or size');
       const png = readFileSync(join(dir, s.file));
       if (sha(png) !== s.sha256) throw new Error(`the cached reference ${s.file} changed since it was captured; run first-draft-axi refs pull again`);
       images.push({ id: `reference-${images.length + 1}`, mime: 'image/png', dataUrl: `data:image/png;base64,${png.toString('base64')}`, label: `${r.name}, ${s.width === 1280 ? 'desktop 1280' : 'phone 390'}, ${theme}` });
     }
   }
-  return { pulled: true, images, shown: shown.map((r) => ({ name: r.name, kind: r.kind, url: r.url, captured_at: r.captured_at, licence: r.licence.licence })),
-    notes: rows.filter((r) => !shown.includes(r)).map((r) => ({ name: r.name, url: r.url, notes: r.notes })) };
+  return { pulled: true, images, shown: shown.map((r) => ({ name: r.name, kind: r.kind, url: r.url, captured_at: r.captured_at, licence: r.licence.licence, notes: r.notes, capture_policy: 'Anonymous GETs; scripts, cookies and interactions disabled; viewport only' })),
+    notes: rows.filter((r) => !shown.includes(r)).map((r) => ({ name: r.name, url: r.url, notes: r.notes, why: r.why ?? 'not selected for this comparison' })) };
 }

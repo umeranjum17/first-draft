@@ -4,9 +4,7 @@
   "entries": [
     {
       "id": "supabase-home", "kind": "landing", "name": "Supabase", "url": "https://supabase.com/",
-      "permission": { "licence": "Apache-2.0", "url": "https://raw.githubusercontent.com/supabase/supabase/master/LICENSE", "quote": "Apache License Version 2.0, January 2004",
-        "basis": "The site's source (apps/www) is in this repository under this licence. Its terms (supabase.com/terms, read 2026-10-24) name no restriction on automated access or screenshots." },
-      "assets": ["https://frontend-assets.supabase.com"], "themes": { "dark": {} },
+      "why": "Source-code Apache-2.0 permission does not clearly resolve the hosted site's IP/copy restrictions at https://supabase.com/terms; explicit screenshot permission is unclear, so notes and link only (reviewed 2026-10-24).",
       "notes": "Developer platform landing: a short benefit headline, two clear actions, the real product (dashboard, code) shown early, customer logos, dense but calm dark surfaces with one green accent."
     },
     {
@@ -20,15 +18,15 @@
       "id": "shadcn-dashboard", "kind": "dashboard", "name": "shadcn/ui dashboard block", "url": "https://ui.shadcn.com/view/new-york-v4/dashboard-01",
       "permission": { "licence": "MIT", "url": "https://raw.githubusercontent.com/shadcn-ui/ui/main/LICENSE.md", "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy",
         "basis": "The site (apps/v4) is in this repository under this licence." },
-      "themes": { "light": {}, "dark": { "class": "dark" } },
-      "notes": "Admin dashboard: sidebar navigation, a row of four metric cards with trend, one large chart, a data table; neutral greys, one accent, 14 px type, tight 8 px rhythm."
+      "themes": { "light": {} },
+      "notes": "Admin dashboard: sidebar navigation and four metric cards. Scripts are disabled in capture: its client-rendered chart is absent, and dark styling is incomplete, so only light is admitted. Compare typography, navigation and metric hierarchy, not the chart's empty area."
     },
     {
-      "id": "shadcn-tasks", "kind": "app", "name": "shadcn/ui tasks example", "url": "https://ui.shadcn.com/examples/tasks", "from": ".theme-container",
+      "id": "shadcn-login", "kind": "app", "name": "shadcn/ui login screen", "url": "https://ui.shadcn.com/view/new-york-v4/login-01",
       "permission": { "licence": "MIT", "url": "https://raw.githubusercontent.com/shadcn-ui/ui/main/LICENSE.md", "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy",
         "basis": "The site (apps/v4) is in this repository under this licence." },
       "themes": { "light": {} },
-      "notes": "App screen: a titled list with filters, status and priority badges, row actions and pagination; real-looking task data, no decoration."
+      "notes": "A public app login screen, never submitted or signed in: simple form hierarchy, restrained type and spacing, phone layout. This is an authentication-screen reference, not a full productivity app."
     },
     {
       "id": "starlight-docs", "kind": "docs", "name": "Starlight docs", "url": "https://starlight.astro.build/getting-started/",
