@@ -200,6 +200,30 @@ const strayClose = () => {
   }
   return out;
 };
+// Text on screen that cannot be read: its colour against the box behind it (the nearest ancestor with a solid background; a gradient or
+// picture behind it is not judged) under 2.5:1, like an active tab painted in its own colour.
+const unreadable = () => {
+  const rgba = (c) => { const m = c.match(/[\d.]+/g)?.map(Number); return m ? { r: m[0], g: m[1], b: m[2], a: m[3] ?? 1 } : null; };
+  const lum = ({ r, g, b }) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((t, v, i) => t + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const out = [], seen = new Set(), walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode() && out.length < 3) {
+    const node = walker.currentNode, e = node.parentElement;
+    if (!node.textContent.trim() || !(e instanceof HTMLElement) || ['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(e.tagName)) continue;
+    const s = getComputedStyle(e), range = document.createRange();
+    range.selectNodeContents(node);
+    const r = range.getBoundingClientRect();
+    if (!r.width || !r.height || s.visibility === 'hidden' || Number(s.opacity) < 0.5 || r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;
+    const fg = rgba(s.color);
+    let bg = null, picture = false;
+    for (let p = e; p && !bg; p = p.parentElement) { const ps = getComputedStyle(p); if (ps.backgroundImage !== 'none') { picture = true; break; } const c = rgba(ps.backgroundColor); if (c && c.a > 0.9) bg = c; }
+    if (picture || !fg || fg.a < 0.5) continue;
+    bg ??= { r: 255, g: 255, b: 255, a: 1 };
+    const l1 = lum(fg), l2 = lum(bg), ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    const key = `${node.textContent.trim().slice(0, 40)}|${s.color}|${bg.r},${bg.g},${bg.b}`;
+    if (ratio < 2.5 && !seen.has(key) && seen.add(key)) out.push(`${JSON.stringify(node.textContent.trim().slice(0, 40))} in <${e.tagName.toLowerCase()}${typeof e.className === 'string' && e.className ? ` class="${e.className}"` : ''}> is ${s.color} on ${`rgb(${bg.r}, ${bg.g}, ${bg.b})`} (${ratio.toFixed(1)}:1)`);
+  }
+  return out;
+};
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
@@ -256,8 +280,9 @@ export class Renderer {
     const visible = screen === null || (layout.width > 0 && layout.height > 0 && layout.visible);
     const covered = (this.redesign && screen !== null) || (this.pageChecks && screen === null) ? await this.eval(c, `(${coveredText.toString()})()`) : [];
     const stray = this.pageChecks && screen === null ? await this.eval(c, `(${strayClose.toString()})()`) : [];
+    const faint = this.pageChecks && screen === null ? await this.eval(c, `(${unreadable.toString()})()`) : [];
     const clarity = this.clarity && screen === null ? await this.eval(c, `(${clarityPage.toString()})(${this.clarity.flash})`) : []; // the clarity page is the whole page, not one screen
-    return { measured, sig, lightness, visible, covered, stray, clarity, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    return { measured, sig, lightness, visible, covered, stray, faint, clarity, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -397,6 +422,7 @@ export class Renderer {
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
         for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
         if (shot.stray?.length && theme === 'light') errors.push({ source: 'restraint', message: `${context}: a close control is on screen with nothing open: ${shot.stray.join('; ')}. Show it only while its drawer, dialog or banner is open (hide it by default and at this width), or remove it.` });
+        if (shot.faint?.length) errors.push({ source: 'render', message: `${context} in ${theme}: text that cannot be read, colour against its own background: ${shot.faint.join('; ')}. Give it at least 4.5:1 contrast (an active or selected state needs its own text colour on its fill).` });
         if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
         if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;

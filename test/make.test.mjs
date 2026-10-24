@@ -364,11 +364,11 @@ test('make writes each option as one page from one call, with the frontend-desig
 });
 
 // The host measures what the critic should not have to find; the model gets one call to fix exactly that (draft.mjs, restraint.mjs, render-check.mjs).
-test('make sends a page with a strong grid, four hues, a stray close and a bar over its text back once with the findings', async (t) => {
+test('make sends a page with a strong grid, four hues, a stray close, unreadable text and a bar over its text back once with the findings', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [];
-  const bad = '<!doctype html><html><head><title>First</title><style>body{margin:0;background:#faf7f0;background-image:linear-gradient(rgba(0,0,0,.2) 1px,transparent 1px);background-size:100% 24px}a{color:#e11d48}b{color:#16a34a}i{color:#2563eb}u{color:#eab308}.close{display:block}</style></head><body><h1>First</h1><button class="close" aria-label="Close menu">×</button><p style="margin-top:760px">Flat 4B lease, due 30 Nov</p><div style="position:fixed;bottom:0;left:0;right:0;height:80px;background:#ddd">Home Notes Settings</div></body></html>';
+  const bad = '<!doctype html><html><head><title>First</title><style>body{margin:0;background:#faf7f0;background-image:linear-gradient(rgba(0,0,0,.2) 1px,transparent 1px);background-size:100% 24px}a{color:#e11d48}b{color:#16a34a}i{color:#2563eb}u{color:#eab308}.close{display:block}</style></head><body><h1>First</h1><a class="on" style="background:#14212b;color:#14212b">Overview</a><button class="close" aria-label="Close menu">×</button><p style="margin-top:760px">Flat 4B lease, due 30 Nov</p><div style="position:fixed;bottom:0;left:0;right:0;height:80px;background:#ddd">Home Notes Settings</div></body></html>';
   const good = '<!doctype html><html><head><title>Second</title><style>body{margin:0;background:#faf7f0}</style></head><body><h1>Second</h1><p>Flat 4B lease, due 30 Nov</p></body></html>';
   const server = createServer((req, res) => {
     let body = '';
@@ -400,6 +400,7 @@ test('make sends a page with a strong grid, four hues, a stray close and a bar o
   if (findBrowser()) { // the browser measures what only a browser can: text under a fixed bar, a close control on screen
     assert.match(asked, /covered by fixed or sticky navigation/);
     assert.match(asked, /close control is on screen with nothing open/);
+    assert.match(asked, /text that cannot be read.*"Overview"/);
   }
 });
 

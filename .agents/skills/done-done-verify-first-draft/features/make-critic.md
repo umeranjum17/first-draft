@@ -16,4 +16,4 @@ Harness: a shell runs the CLI with a throwaway FIRST_DRAFT_HOME; a browser opens
 4. Stop what you started.
 
 
-Before the critic, the default make measures the drawn page itself (`src/restraint.mjs` on its source; `src/render-check.mjs` in Chrome: overflow, text under a fixed bar, clipped text, a close control on screen with nothing open) and sends the model back once with those findings; `repaired` in each file's JSON lists them (`unrepaired` and `repair_failed` when the fix call fails). Deterministic proof: `node --test --test-name-pattern="strong grid" test/make.test.mjs`.
+Before the critic, the default make measures the drawn page itself (`src/restraint.mjs` on its source; `src/render-check.mjs` in Chrome: overflow, text under a fixed bar, clipped text, unreadable text, a close control on screen with nothing open) and sends the model back once with those findings; `repaired` in each file's JSON lists them (`unrepaired` and `repair_failed` when the fix call fails). Deterministic proof: `node --test --test-name-pattern="strong grid" test/make.test.mjs`.
