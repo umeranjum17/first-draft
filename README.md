@@ -18,7 +18,7 @@ Step 2 uses your Claude subscription (Pro or Max) through your installed, signed
 
 On a ChatGPT subscription, use your installed, signed-in Codex CLI instead: `first-draft-axi init --agent byokit:codex --model <model>`. Not sure which is ready? Run `first-draft-axi doctor`: it lists each ready subscription with its exact `init` line, with no paid call. [Other routes ↓](#models)
 
-[Landing page](https://umeranjum17.github.io/first-draft/) · [Vision](VISION.md) · [Agent skill](skills/first-draft-axi/SKILL.md), to hand the CLI to your coding agent · [CLI reference ↓](#reference)
+[Landing page](https://umeranjum17.github.io/first-draft/) · [Vision](VISION.md) · [Agent skill](skills/first-draft-axi/SKILL.md), to hand the CLI to your coding agent (`first-draft-axi init` in a repo installs it for Claude Code, Codex and pi) · [CLI reference ↓](#reference)
 
 ## Choose a direction, not just a screenshot
 
@@ -46,7 +46,7 @@ first-draft-axi post notes.html \
   --recommend a
 ```
 
-`post` copies the options into the board, starts `view` if it is not running, and posts one card with an **Open** link under each option. The link opens that option in Play in the viewer, and the card text repeats each one as "Open in first-draft". It needs `sign-off-axi` 0.5.0+ and a `.sign-off/` board in this folder or above (or `--board`). Links point at the viewer on its tailnet address, or at `--host`. Name options with `--option a=<label>`; demos that ask for no pick use `--evidence --media <shot>` instead of `--recommend`.
+`post` copies the options into the board, starts `view` if it is not running, and posts one card with an **Open** link under each option. The link opens that option in Play in the viewer, and the card text names each option's canvas link, which shows phone and desktop side by side. It needs `sign-off-axi` 0.5.0+ and a `.sign-off/` board in this folder or above, or `--board <board.json>`, or `$FIRST_DRAFT_BOARD`, so it runs from any repo. Links point at the viewer on its tailnet address, or at `--host`. Name options with `--option a=<label>`; demos that ask for no pick use `--evidence --media <shot>` instead of `--recommend`.
 
 ## Models
 
@@ -61,7 +61,7 @@ Every generation goes through [BYOKit](https://www.npmjs.com/package/@byokit/acc
 
 Subscriptions come first. They need no key: calls use your CLI's normal login without copying it. Claude models run only through the Claude subscription; any other route refuses them and points you to `byokit:claude`. Plan key and API key routes are still there for other providers.
 
-Run `first-draft-axi doctor` or `first-draft-axi init` with no flags to see your ready subscriptions, each with its exact `init` line. Set your route with `init --agent … --model …`, then run `first-draft-axi doctor` to check readiness **without a paid call**. MiniMax defaults to `MiniMax-M3.1-Flash-Preview` if `init` gets no `--model`.
+Run `first-draft-axi doctor` to see your ready subscriptions, each with its exact `init` line. Set your route with `init --agent … --model …`, then run `first-draft-axi doctor` to check readiness **without a paid call**. MiniMax defaults to `MiniMax-M3.1-Flash-Preview` if `init` gets no `--model`.
 
 Key routes read the environment variable named by `doctor`; keys are never saved in First Draft's config. Config lives at `$FIRST_DRAFT_HOME/config.json`, default `~/.first-draft/config.json`.
 

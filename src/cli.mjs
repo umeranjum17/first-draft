@@ -12,6 +12,7 @@ import { captureReference, optionReferenceImages, readOptionReferences, writeOpt
 import { make, engineDoctor } from './make.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
+import { HARNESSES, InitError, initProject } from './init.mjs';
 import { STYLES } from './styles.mjs';
 import { redesignSource } from './redesign.mjs';
 import { makeRedesign } from './redesign-writer.mjs';
@@ -146,14 +147,16 @@ commands[11]:
   styles [--logo]                     list the named design styles that make --direction <id> takes (or write your own direction in words); --logo lists the logo kinds logo --direction takes
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
-  post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
+  post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B|$FIRST_DRAFT_BOARD] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
   doctor                              show whether the configured agent is ready, with no paid call
+  init [--harness claude,codex,pi] [--global]   set this repo up: the .first-draft/ work folder and the first-draft-axi skill for claude, codex and pi (safe to re-run; --global links the skill from the home folder)
   init --agent byokit:<route> --model <model>   save the user's agent and model to the config
 The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key or api key route, or byokit:codex / byokit:claude for the installed subscription CLI (Claude example: init --agent byokit:claude --model claude-opus-5-5).
 Journeys, tests and demos post with --evidence --media <shot>... (an Evidence card: options and Play links, no pick asked), never --recommend: that files a Decide card for the owner.
+Agent quick start (the first-draft-axi skill has the same): \`init\` once per repo (installs the skill for claude, codex and pi); redesign a live page: \`redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5\`; from a screenshot only: \`make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html --model claude-sonnet-5-5\`; then \`view\` and \`post\`. --model names the model for one run on the configured BYOKit route (the fleet uses byokit:claude, the signed-in claude CLI: no key or token is ever needed or printed).
 A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
 view binds the tailnet address from \`tailscale ip -4\` (or --host / $FIRST_DRAFT_VIEW_HOST) on port 4430 (or --port / $FIRST_DRAFT_VIEW_PORT); options render from the next port.
-post copies the options into the board's mocks folder (the nearest .sign-off/, or --board), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) as that option's --link (a tappable Open under its mock; needs sign-off-axi 0.5.0+) and in the card's --tradeoff text as the fallback: the card's sandbox blocks a link inside the mock.
+post copies the options into the board's mocks folder (the nearest .sign-off/, or --board, or $FIRST_DRAFT_BOARD: a board file or its .sign-off folder, so it works from any repo), starts the view if it is not up, then runs sign-off-axi post with each option's Play url (<view>#/o/<n>/play) as that option's --link (a tappable Open under its mock; needs sign-off-axi 0.5.0+) and in the card's --tradeoff text as the fallback: the card's sandbox blocks a link inside the mock.
 ${assetHelp}
 ${exploreHelp}
 ${referenceHelp}
@@ -185,7 +188,8 @@ if (command === 'references') {
   const { values, positionals } = flags(rest, logo ? { ref: referenceFlags.ref, ...Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model', 'explore'].map((name) => [name, { type: 'string' }])) }
     : { ...referenceFlags, ...assetFlags, ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
-  if (redesign && (!source || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file');
+  if (redesign && (!source || !positionals.join(' ').trim() || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file',
+    ['Run `first-draft-axi redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5`', 'Only have a screenshot? Run `first-draft-axi make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html`']);
   if (redesign && values['max-pages'] !== undefined && !/^(?:[1-9]|1[0-2])$/.test(values['max-pages'])) fail('USAGE', '--max-pages must be 1-12');
   if (redesign && (values['used-screen-attempts'] !== undefined && !/^[0-2]$/.test(values['used-screen-attempts']) || values['used-plan-attempts'] !== undefined && !/^[01]$/.test(values['used-plan-attempts']))) fail('USAGE', 'Used attempts must be screen 0-2 and plan 0-1; budgets cannot be increased');
   for (const [name, value] of Object.entries(values)) if (typeof value === 'string' && !value.trim()) fail('USAGE', `--${name} must not be empty`);
@@ -346,17 +350,32 @@ if (command === 'references') {
   console.log(JSON.stringify({ subscriptions, ready, checks: rows, help: [ready ? 'Run `first-draft-axi make "<prompt>" --out <file.html>`' : 'Fix the failing checks, then run `first-draft-axi doctor` again'] }));
   if (!ready) process.exit(1);
 } else if (command === 'init') {
-  const { values } = flags(rest, { agent: { type: 'string' }, model: { type: 'string' } });
-  values.model ??= DEFAULT_MODEL[values.agent]; // only the routes named here have a shipped default
-  if (!values.agent || !values.model) {
-    const setup = (await readySubscriptions()).map((s) => `${s.label}: ${s.init}`);
-    fail('USAGE', 'Choose a model source and model.', setup.length ? setup : [ASK]);
+  const { values } = flags(rest, { agent: { type: 'string' }, model: { type: 'string' }, harness: { type: 'string' }, global: { type: 'boolean' } });
+  if (values.agent !== undefined || values.model !== undefined) {
+    // Saving the user's agent and model: config only, nothing in the repo.
+    if (values.harness !== undefined || values.global) fail('USAGE', '--harness and --global set up the repo; run them in a separate `first-draft-axi init`');
+    values.model ??= DEFAULT_MODEL[values.agent]; // only the routes named here have a shipped default
+    if (!values.agent || !values.model) {
+      const setup = (await readySubscriptions()).map((s) => `${s.label}: ${s.init}`);
+      fail('USAGE', 'Choose a model source and model.', setup.length ? setup : [ASK]);
+    }
+    if (!routeOf(values.agent)) fail('BAD_AGENT', `agent ${values.agent} is not byokit:<route>`, [ASK]);
+    const refusal = modelRouteProblem(routeOf(values.agent), values.model);
+    if (refusal) fail('SUBSCRIPTION_ONLY', refusal);
+    save(values);
+    console.log(JSON.stringify({ subscriptions: await readySubscriptions(), saved: { config: CONFIG(), agent: values.agent, model: values.model } }));
+  } else {
+    // Set up this repo: the .first-draft/ work folder and the skill for each coding agent.
+    let r;
+    try { r = initProject({ cwd: process.cwd(), harnesses: values.harness === undefined ? HARNESSES : values.harness.split(',').map((h) => h.trim()), global: values.global }); }
+    catch (e) { if (e instanceof InitError) fail(e.code, e.message, e.help); throw e; }
+    const configured = (() => { try { return read().agent; } catch { return null; } })();
+    console.log(JSON.stringify({ init: { repo: r.root, work: r.work, created: r.created.length ? r.created : 'nothing new (re-run is a no-op)', skills: r.skills, ...(r.linked.length && { linked: r.linked }) },
+      help: [configured ? 'Run `first-draft-axi doctor` to check the model is ready (no paid call)' : 'No model is saved: in the fleet run `first-draft-axi init --agent byokit:claude --model claude-sonnet-5-5`; otherwise ask the user which BYOKit route and model to use',
+        'Make options: first-draft-axi make "<prompt>" --out .first-draft/designs/<name>.html --options 3 --model claude-sonnet-5-5',
+        'Redesign a screen from a URL: first-draft-axi redesign <https-url> "<what to change>" --out .first-draft/designs/<name>',
+        'Show them: first-draft-axi view .first-draft/designs/<name>.html; ask for a pick: first-draft-axi post .first-draft/designs/<name>.html --title "<question>" --recommend a'] }));
   }
-  if (!routeOf(values.agent)) fail('BAD_AGENT', `agent ${values.agent} is not byokit:<route>`, [ASK]);
-  const refusal = modelRouteProblem(routeOf(values.agent), values.model);
-  if (refusal) fail('SUBSCRIPTION_ONLY', refusal);
-  save(values);
-  console.log(JSON.stringify({ subscriptions: await readySubscriptions(), saved: { config: CONFIG(), agent: values.agent, model: values.model } }));
 } else if (command === 'view') {
   const { values, positionals } = flags(rest, { host: { type: 'string' }, port: { type: 'string' } });
   if (!positionals.length) fail('USAGE', 'view needs a design', ['Run `first-draft-axi view <file.html|folder>`']);

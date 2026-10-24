@@ -55,7 +55,6 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args, ...(args[0] === 'make' ? ['--options', '1'] : [])], { env });
   await promisify(execFile)(join(dir, 'claude'), ['auth', 'status'], { env });
   const expected = ['Claude subscription: first-draft-axi init --agent byokit:claude --model <model>', 'ChatGPT subscription: first-draft-axi init --agent byokit:codex --model <model>'];
-  await assert.rejects(run('init'), e => { assert.deepEqual(JSON.parse(e.stdout).help, expected); return true; });
   await assert.rejects(run('make', 'Notes', '--out', join(dir, 'no-agent.html')), e => { assert.deepEqual(JSON.parse(e.stdout).help, expected); return true; });
   const init = JSON.parse((await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5')).stdout);
   assert.deepEqual(init.subscriptions.map(s => `${s.label}: ${s.init}`), expected);

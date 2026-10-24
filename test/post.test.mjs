@@ -39,13 +39,13 @@ test('post copies the options to the board, links each to its Play route in a vi
   assert.ok(args.includes('b=mocks/x/option-2.html') && args.includes('b=Bold') && args.includes('b'), 'recommend 2 is option b');
   assert.ok(args.includes(`a=http://127.0.0.1:${port}/#/o/1/play`) && args.includes(`b=http://127.0.0.1:${port}/#/o/2/play`), 'each option gets its own --link');
   const tradeoff = args[args.indexOf('--tradeoff') + 1];
-  assert.ok(tradeoff.includes(`Calm http://127.0.0.1:${port}/#/o/1/play`) && tradeoff.includes(`Bold http://127.0.0.1:${port}/#/o/2/play`));
-  assert.ok(tradeoff.includes(`Desktop ${first.posted.options[0].desktop}`) && tradeoff.includes(`Phone ${first.posted.options[0].phone}`));
+  assert.ok(tradeoff.includes(`Calm http://127.0.0.1:${port}/#/o/1 `) && tradeoff.endsWith(`Bold http://127.0.0.1:${port}/#/o/2`), 'the card text names each option\'s side-by-side canvas');
+  assert.equal(first.posted.options[0].canvas, `http://127.0.0.1:${port}/#/o/1`);
   assert.match(await (await fetch(`http://127.0.0.1:${port}/`)).text(), /x-1/);
 
   const again = JSON.parse((await post(['--tradeoff', 'B is bolder.'])).stdout);
   assert.equal(again.posted.view.started, false);
-  assert.ok(readFileSync(join(dir, 'args'), 'utf8').includes('B is bolder. Open in first-draft:'));
+  assert.ok(readFileSync(join(dir, 'args'), 'utf8').includes('B is bolder. Phone and desktop side by side:'));
 
   writeFileSync(join(dir, 'proj/design/y-1.html'), MOCK('Other'));
   const other = await run(['post', 'design/y-1.html', '--title', 'Other', '--recommend', 'a'], { cwd: join(dir, 'proj'), env });
@@ -59,8 +59,7 @@ test('post copies the options to the board, links each to its Play route in a vi
   assert.equal(JSON.parse((await ev(['--media', 'shot.png'])).stdout).posted.options.length, 2);
   const evArgs = readFileSync(join(dir, 'args'), 'utf8').split('\n');
   assert.deepEqual(evArgs.slice(0, 4), ['post', evArgs[1], '--type', 'evidence']);
-  assert.ok(evArgs.includes('shot.png') && evArgs[evArgs.indexOf('--about') + 1].includes(`Option 2 http://127.0.0.1:${port}/#/o/2/play`));
-  assert.ok(evArgs[evArgs.indexOf('--about') + 1].includes('/play/desktop') && evArgs[evArgs.indexOf('--about') + 1].includes('/play/phone'));
+  assert.ok(evArgs.includes('shot.png') && evArgs[evArgs.indexOf('--about') + 1].includes(`Option 2 http://127.0.0.1:${port}/#/o/2`));
   for (const f of ['--recommend', '--option', '--mock', '--link', '--tradeoff', '--default']) assert.ok(!evArgs.includes(f), `no ${f} on an evidence card`);
   assert.equal(JSON.parse((await run(['post', 'design/x.html', '--title', 'T'], { cwd: join(dir, 'proj'), env })).stdout).error.code, 'USAGE', 'a Decide post still needs --recommend');
 });
@@ -73,4 +72,36 @@ test('post stops with a cause when the recommended option is not an option or th
   const code = async (args) => JSON.parse((await run(['post', 'a.html', '--title', 'T', ...args], { cwd: dir, env })).stdout).error.code;
   assert.equal(await code(['--recommend', 'c']), 'USAGE');
   assert.equal(await code(['--recommend', 'a']), 'NO_BOARD');
+});
+
+test('post runs from any repo: the board comes from $FIRST_DRAFT_BOARD, and a token in the board tool\'s output or error never comes back', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-post-'));
+  const pids = [];
+  t.after(() => { pids.forEach((p) => { try { process.kill(p); } catch {} }); rmSync(dir, { recursive: true, force: true }); });
+  mkdirSync(join(dir, 'bin'));
+  mkdirSync(join(dir, 'elsewhere/some-board'), { recursive: true });
+  mkdirSync(join(dir, 'repo'));
+  writeFileSync(join(dir, 'repo/x-1.html'), MOCK('Option 1'));
+  const fake = (body) => { writeFileSync(join(dir, 'bin/sign-off-axi'), `#!/bin/sh\n${body}\n`); chmodSync(join(dir, 'bin/sign-off-axi'), 0o755); };
+  fake(`printf '%s\\n' "$@" > "${dir}/args"; echo "open: http://board.example/?token=SECRET123 and Authorization: Bearer abcdef123456"`);
+  const port = await freePort();
+  const env = { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, FIRST_DRAFT_VIEW_HOST: '127.0.0.1', FIRST_DRAFT_VIEW_PORT: String(port), FIRST_DRAFT_BOARD: join(dir, 'elsewhere/some-board') };
+  const post = (e = env) => run(['post', 'x.html', '--title', 'Pick', '--recommend', 'a'], { cwd: join(dir, 'repo'), env: e });
+
+  const ok = await post();
+  const out = JSON.parse(ok.stdout);
+  if (out.posted.view.pid) pids.push(out.posted.view.pid);
+  assert.equal(out.posted.board, join(dir, 'elsewhere/some-board/decisions.json'), 'a board folder in $FIRST_DRAFT_BOARD means its decisions.json, with no .sign-off above the repo');
+  assert.equal(readFileSync(join(dir, 'elsewhere/some-board/mocks/x/option-1.html'), 'utf8'), MOCK('Option 1'));
+  assert.ok(!ok.stdout.includes('SECRET123') && !ok.stdout.includes('abcdef123456'));
+  assert.match(out.sign_off, /token=\[redacted\]/);
+
+  fake(`echo "denied: token=SECRET123" >&2; exit 1`);
+  const failed = await post();
+  assert.equal(JSON.parse(failed.stdout).error.code, 'POST_FAILED');
+  assert.ok(!failed.stdout.includes('SECRET123'));
+
+  fake(`printf '%s\\n' "$@" > "${dir}/args"`);
+  await run(['post', 'x.html', '--title', 'Pick', '--recommend', 'a', '--board', join(dir, 'elsewhere/flag.json')], { cwd: join(dir, 'repo'), env });
+  assert.equal(readFileSync(join(dir, 'args'), 'utf8').split('\n')[1], join(dir, 'elsewhere/flag.json'), 'the --board flag wins over the variable');
 });
