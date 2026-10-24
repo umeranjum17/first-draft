@@ -52,7 +52,7 @@ export function staticExport(html) {
 }
 
 // logo: a logo option (logo.mjs): the engine writes logo/*.svg, logo/palette.json and a brand sheet; logo.idea is the concept's one line
-// the host writes into the sheet, and on refine or a redo logo.files are the option's files.
+// and logo.kind its kind of mark, which the host writes into the sheet, and on refine or a redo logo.files are the option's files.
 export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets, references = [], referenceBrief, redesignPages, logo }) {
   if (screens?.length) prompt += `\nRequired screens/pages: ${screens.join(', ')}. Include every named screen, with distinct ids and links between them.`;
   const { generateViaAgent, composeSystemPrompt, collectResourceManifest, loadDesignSkills, loadFrameTemplates, makeDoneTool, buildStandaloneDocument } = await engine();
@@ -102,7 +102,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
       const exported=staticExport(html);errors.push(...exported.errors);
       if (logoed) errors.push(...sheetErrors(exported.html, logo));
       const embedded = embedMedia(await embedFonts(exported.html, warn), drawnLogo?.svgs ? [...media, ...logoMedia(drawnLogo)] : media);
-      const page = drawnLogo?.svgs ? fillSheet(embedded, { idea: logo.idea, palette: drawnLogo.palette }) : embedded;
+      const page = drawnLogo?.svgs ? fillSheet(embedded, { idea: logo.idea, kind: logo.kind, palette: drawnLogo.palette }) : embedded;
       errors.push(...unplaced(page).map((a) => ({ source: 'assets', message: `the generated image ${a.path} is not shown: place it in its screen as <img src="${a.path}" alt="...">` })));
       if (!errors.length) errors.push(...await render.verify(page, { signal }));
       if (redesignPages && render.status === 'skipped') throw new Error('Redesign checks require a working browser; render verification was skipped');

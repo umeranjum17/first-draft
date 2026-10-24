@@ -171,6 +171,15 @@ export const board = async (rows) => {
   return out.toDataURL('image/png');
 };
 
+// In the page: the critic's boards one under the other, as one PNG data URL.
+export const stack = async (urls) => {
+  const imgs = await Promise.all(urls.map(async (u) => { const img = new Image(); img.src = u; await img.decode(); return img; }));
+  const out = document.createElement('canvas'), x = out.getContext('2d');
+  out.width = Math.max(...imgs.map((i) => i.width)); out.height = imgs.reduce((h, i) => h + i.height, 0);
+  let y = 0; for (const img of imgs) { x.drawImage(img, 0, y); y += img.height; }
+  return out.toDataURL('image/png');
+};
+
 // The palette's colours against the ground each set is for, and the findings for one that is missing, malformed or under 3:1.
 const GROUND = { light: '#ffffff', dark: '#121212' }, ROLES = ['primary', 'accent', 'neutral'];
 const luminance = (hex) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
@@ -253,12 +262,14 @@ export const sheetErrors = (html, { idea } = {}) => {
     .map((message) => ({ source: 'logo', message: `${message}, then call done again.` }));
 };
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// The kind of mark, as a small label over the idea on the sheet.
+const KIND_LABELS = { wordmark: 'Wordmark-led', abstract: 'Abstract mark', symbol: 'Symbol', 'negative-space': 'Negative space', letter: 'Lettermark', 'symbol+letter': 'Symbol and letter' };
 // The sheet with the host's text in its slots, each between markers so a refine can empty them again.
-export const fillSheet = (html, { idea, palette }) => {
+export const fillSheet = (html, { idea, kind, palette }) => {
   const swatches = (set) => `<div style="background:${palette.contrast[set].ground};color:${set === 'light' ? '#1b1b1a' : '#f2f1ee'};border:1px solid rgba(128,128,128,.35);border-radius:12px;padding:14px;display:grid;gap:10px;min-width:0">
 <strong style="font-size:12px;letter-spacing:.06em;text-transform:uppercase">${set === 'light' ? 'Light, on white' : 'Dark, on #121212'}</strong>${ROLES.map((role) => `
 <div style="display:flex;align-items:center;gap:10px;min-width:0"><span style="flex:none;width:28px;height:28px;border-radius:6px;background:${palette[set][role]}"></span><span style="min-width:0">${role[0].toUpperCase() + role.slice(1)} ${palette[set][role]}<br><small>${palette.contrast[set][role]}:1 contrast, ${palette.contrast[set][role] >= 3 ? 'passes' : 'fails'} 3:1</small></span></div>`).join('')}</div>`;
-  const text = { idea: idea && esc(idea), palette: palette && `<div style="display:grid;gap:12px;font-size:14px;line-height:1.4;min-width:0"><p style="margin:0">${esc(palette.reason)}</p>
+  const text = { idea: idea && `${kind ? `<small style="display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;opacity:.75">${esc(KIND_LABELS[kind] ?? kind)}</small>` : ''}${esc(idea)}`, palette: palette && `<div style="display:grid;gap:12px;font-size:14px;line-height:1.4;min-width:0"><p style="margin:0">${esc(palette.reason)}</p>
 <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))">${swatches('light')}${swatches('dark')}</div></div>` };
   return SLOTS.reduce((page, name) => text[name] ? page.replace(slot(name), (_, open, tag, close) => `${open}<!--logo:${name}-->${text[name]}<!--/logo:${name}-->${close}`) : page, html);
 };
@@ -312,5 +323,5 @@ export function readLogo(file, html) {
   const files = Object.fromEntries(FILES.filter((name) => name !== 'palette.json' || existsSync(`${dir}/${name}`)).map((name) => [name, readFileSync(`${dir}/${name}`, 'utf8')]));
   const pngs = Object.fromEntries(SIZES.filter((n) => existsSync(`${dir}/icon-${n}.png`)).map((n) => [n, readFileSync(`${dir}/icon-${n}.png`)]));
   const { concept } = existsSync(`${dir}/logo.json`) ? JSON.parse(readFileSync(`${dir}/logo.json`, 'utf8')) : {};
-  return { files, concept, idea: concept?.idea, seed: logoSeed(html, { svgs: Object.fromEntries(SVGS.map((name) => [name, files[name]])), pngs }) };
+  return { files, concept, idea: concept?.idea, kind: concept?.kind, seed: logoSeed(html, { svgs: Object.fromEntries(SVGS.map((name) => [name, files[name]])), pngs }) };
 }
