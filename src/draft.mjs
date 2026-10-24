@@ -1,10 +1,10 @@
 // make's create path: the plain call that beat the full engine loop in the 2026-10-24 bake-off. One prompt (the brief, Anthropic's
-// frontend-design guidance and the page contract) gives one complete HTML page; the host draws it once into a static page, and the
-// critic (critic.mjs) looks at it beside the best products of its kind and sends it back with its fixes, `critic` times at most.
-// refine, logo, redesign and generated assets still run the full engine (make.mjs).
+// frontend-design guidance and the page contract) gives one complete HTML page; the host draws it once into a static page. The critic
+// (critic.mjs, run by the cli) scores it and sends it back as a seed with its fixes. Logo, redesign and generated assets still run the
+// full engine (make.mjs).
 import { readFileSync } from 'node:fs';
 import { writePage } from './byokit.mjs';
-import { BAR, FACTS, critiqueDesign } from './critic.mjs';
+import { FACTS } from './direct.mjs';
 import { embedFonts } from './fonts.mjs';
 import { embedMedia, mediaBrief, projectMedia } from './media.mjs';
 import { staticExport } from './make.mjs';
@@ -18,10 +18,10 @@ const contract = (drawing) => `Page contract: reply with one complete, self-cont
   ? 'Script may run once: the host draws the page in a browser at 1280px and keeps what that first render shows, without the script, so the first render must show the whole design.'
   : 'Write no script, no on* event handler and no javascript: URL: the page is shown as a static document.'}`;
 
-export async function draft({ prompt, agent, model, timeoutMs, direction, screens, references = [], critic = 1 }) {
+export async function draft({ prompt, agent, model, timeoutMs, direction, screens, references = [], seed }) {
   const warn = (warning) => process.stderr.write(`first-draft-axi: ${warning}\n`);
   const render = renderCheck(warn);
-  const media = LANDING.test(prompt) && !references.length ? projectMedia(prompt) : []; // a landing page about this project gets its own screenshots
+  const media = LANDING.test(prompt) && !references.length && !seed ? projectMedia(prompt) : []; // a landing page about this project gets its own screenshots
   const system = `${TASTE}\n\n---\n\n${contract(render.drawing)}`;
   const brief = [`Brief: ${prompt}`, ...(direction ? [`Direction: ${directionText(direction)}`] : []),
     ...(screens?.length ? [`Screens: ${screens.join(', ')}. Put each in its own top-level <section id="..." data-oc-screen>, the first being the opening screen, linked with in-page hash links (<a href="#id">), each with a visible way back.`] : []),
@@ -40,24 +40,14 @@ export async function draft({ prompt, agent, model, timeoutMs, direction, screen
     if (exported.errors.length) throw new Error(`the page fails the export: ${exported.errors.map((e) => e.message).join('; ')}`);
     return { page: embedMedia(await embedFonts(exported.html, warn), media), remote: exported.remote };
   };
+  // A revision starts from the page people see: its embedded fonts and images are held back (the model gets a short placeholder in
+  // each data: URL) and put back in what it returns.
+  const held = [];
+  const lighter = (html) => html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\s*/i, '').replace(/(data:[\w/+.-]+;base64,)([A-Za-z0-9+/=]{200,})/g, (_, head, data) => `${head}@@held-${held.push(data) - 1}@@`);
+  const restored = (html) => html.replace(/@@held-(\d+)@@/g, (_, i) => held[i] ?? '');
   try {
-    let source = await ask(`${brief}\nReply with the complete HTML document.`, references), drawn = await finish(source);
-    const critiques = [];
-    let best = null;
-    if (render.drawing) for (let round = 0; ; round++) {
-      let shots, review;
-      try {
-        shots = await render.capture(drawn.page);
-        review = await critiqueDesign({ brief: prompt, shots, agent, model, timeoutMs });
-      } catch (e) { critiques.push({ round, error: e.message }); break; } // the page stays; the make JSON says why it was not critiqued
-      used.tokens_in += review.tokens_in; used.tokens_out += review.tokens_out; used.calls++;
-      critiques.push({ round, score: review.score, verdict: review.verdict, fixes: review.fixes });
-      if (!best || review.score >= best.score) best = { ...drawn, score: review.score }; // a tie keeps the revision
-      if (review.score >= BAR || round === critic) break;
-      source = await ask(`${brief}\n\nYour page is below; the attached images show it as drawn (${shots.map((s) => s.id).join(', ')}). A design director scored it ${review.score}/10 beside the best real products of its kind: ${review.verdict}\nFix these, and anything else that keeps it below 9/10:\n${review.fixes.map((f, i) => `${i + 1}. ${f}`).join('\n')}\nReply with the complete improved HTML document.\n\n${source}`, [...references, ...shots]);
-      drawn = await finish(source);
-    }
-    best ??= drawn; // no browser: nothing to draw for the critic
-    return { html: best.page, source: 'index.html', turns: used.calls, tools: {}, truncated: false, remote: best.remote, tokens_in: used.tokens_in, tokens_out: used.tokens_out, render_check: render.status, ...(critiques.length && { critique: critiques }) };
+    const source = restored(await ask(seed ? `${prompt}\n\nThe current page follows; change only what is asked and keep the rest.\nReply with the complete improved HTML document.\n\n${lighter(seed)}` : `${brief}\nReply with the complete HTML document.`, references));
+    const { page, remote } = await finish(source);
+    return { html: page, source: 'index.html', turns: used.calls, tools: {}, truncated: false, remote, tokens_in: used.tokens_in, tokens_out: used.tokens_out, render_check: render.status };
   } finally { render.close(); }
 }

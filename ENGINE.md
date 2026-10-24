@@ -44,8 +44,13 @@ sheet `index.html`, and `done`'s runtime check (`src/logo.mjs`) parses each SVG 
 an allow-list, checks the palette and draws the icon in the same headless browser,
 measuring its detail at 16 px, before the sheet's usual render check. Around the engine
 runs, `src/logo-concepts.mjs` makes two bounded calls of its own on the same route and
-model, as the redesign review does: one that proposes 6 to 8 rough concepts and one that
-critiques marks drawn at 16 and 32 px (for the sketches, then for each finished option). Each concept carries a palette
+model, as the redesign review does: one that proposes three rough concepts in a territory
+(wordmark-led, abstract and symbol, the three calls at once, each metaphor from the brief, never
+from the name's initials) and one that critiques marks drawn at 16 and 32 px (each territory's
+sketches, then each finished option). The options cover a wordmark-led and an abstract concept,
+never two of one base shape, and each takes at most two engine runs. A mark passes at 9 or more
+out of 10 beside the best products of its class and a baseline: one more engine run, the plain output of
+the same model on the same brief, drawn while the concepts are explored. Each concept carries a palette
 chosen with its idea, which the host writes to `logo/palette.json` and `done` refuses to see changed. The options are drawn in
 parallel, three at a time; the engine reaches the model through one global provider, so `src/make.mjs` gives each run an
 address of its own (`model.baseUrl`) that the provider uses to hand the call to that run. When the critic drops every drawn
@@ -88,6 +93,15 @@ reduced-motion still, and when not to animate), with a text-only reference set, 
 for first-draft from a study of public motionsites.ai examples with no text, code, media
 or pixels copied. Its description asks the engine to load it only when a brief asks for
 motion; that is a model instruction, not a host check.
+
+After the engine runs, make's critic (`src/critic.mjs`) makes bounded calls of its own on the same route and model, as the
+logo critic does: one plain page for the brief in one prompt (kept as `<out>.critic/plain.html`), then for each option one
+review that sees the option and the plain page drawn at 1280 and 390 (`render-check.mjs` `shoot`) and scores both 1 to 10
+against the best real products of the kind (Linear, Stripe, Vercel, Notion, Raycast class, as the model knows them, and the
+person's reference images). An option under 9, or under the plain page, is revised by the engine (the refine path) with the
+critic's gaps and fixes, twice at most, and the best-scored version is written; every option's score is in the output. It is
+the same model judging against references, not an independent judge, and it needs a browser and a model that takes images
+(`--no-critic` turns it off; the output then says no option was scored).
 
 `doctor` loads the actual built engine and prompt sections, validates plan-key
 and api-key model metadata, and checks the selected route locally. Installed-CLI readiness

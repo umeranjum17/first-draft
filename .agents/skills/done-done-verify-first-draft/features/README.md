@@ -13,5 +13,7 @@ The repo's maintained verification map; a proof that drives one entry point is i
 - [Make option count and brief controls](make-option-controls.md): Installed CLI, live 1/3/5 options, screen coverage, brief input, style, model override and output directory (`journeys/cli-controls.mjs`)
 - [Make with a named design style](make-with-a-named-design-style.md): Run `first-draft-axi styles`, then make with `--direction <id>`
 - [Make render check at 390 and in dark](make-render-check-390-and-dark.md): Run `first-draft-axi make` with Chrome or Chromium installed
+- [Design samples on the README and landing page](sample-provenance.md): `node scripts/check-samples.mjs`; each picture names its run, model, critic score and reviewer, at most 30 days old
+- [The critic: every make option scored against real products and a plain page](make-critic.md): Run make with Chrome and an image-capable model, read each file's `critique`; nonpaid `node --test test/critic.test.mjs`
 - [Make on the full engine: App.jsx drawn into a static page](make-on-the-full-engine.md): Run `first-draft-axi make` with Chrome or Chromium installed; the output names each file's source, turns and tools
 - [Logo mode: concepts with their own palettes, image-first exploration, parallel drawing, a second round from the critic's advice, self-critique, brand sheets and the app icon set](logo-mode.md): Run `first-draft-axi logo "<brief>" --out tea.html`; `test/logo.test.mjs`; `FD_LOGO_SOURCE=<out path> done-done run logo-recapture` (`journeys/logo.mjs`)
