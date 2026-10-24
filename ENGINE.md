@@ -23,7 +23,8 @@ which registers itself as the engine's model transport before the engine runs.
 (`apps/desktop/src/main/ipc/generate.ts`): the engine's own prompt for the mode,
 the resource manifest from the templates tree, and every default tool (`set_title`,
 `set_todos`, `skill`, `scaffold`, the editor, `done` with its DESIGN.md
-requirement, `tweaks` and the UI-kit tools). The workspace is in memory and is seeded
+requirement, `tweaks` and the UI-kit tools, and with `--assets` `generate_image_asset`, whose
+missing provider field our glue offers to the model at the transport boundary). The workspace is in memory and is seeded
 with `frames/*.jsx` and `skills/*.jsx` (the design starters) as upstream's
 `runtime-fs.ts` seeds it; `scaffold` copies into a temporary folder and the file
 joins the workspace through `onScaffolded`. One method skill is first-draft's own,
