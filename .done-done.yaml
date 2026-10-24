@@ -37,6 +37,9 @@ journeys:
   version:
     command: node journeys/version.mjs
     timeout: 8m
+  clarity-recapture:
+    command: node journeys/clarity.mjs
+    timeout: 8m
 
 # This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
 # agent: opencode

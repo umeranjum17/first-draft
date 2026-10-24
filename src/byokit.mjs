@@ -86,6 +86,13 @@ export async function imageSupport(route, model) {
   return key ? (await modelFor(key.upstream.id, model)).input?.includes('image') === true : false;
 }
 
+// A model sometimes writes a raw newline or tab inside a string of its JSON-encoded tool arguments (a long file_text): escape those and read it again.
+const parseArguments = (text) => {
+  try { return JSON.parse(text); } catch (e) {
+    try { return JSON.parse(text.replace(/"(?:[^"\\]|\\.)*"/gs, (str) => str.replace(/[\u0000-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`))); } catch { throw e; }
+  }
+};
+
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
 export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false }) {
   const problem = await check(route, model);
@@ -102,7 +109,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
     if (!answer.data) throw new Error('BYOKit returned no structured engine response');
     const { text, calls } = answer.data;
     return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
-      content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: JSON.parse(c.arguments) }))],
+      content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: parseArguments(c.arguments) }))],
       stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
   }
   const key = await planKey(route);

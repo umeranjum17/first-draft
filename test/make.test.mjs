@@ -457,7 +457,7 @@ test('a prompt that asks for a landing page carries the landing-page brief, anot
   await run('make', 'Make a landing page for my tool done-done. Its README is below.', '--out', join(dir, 'landing.html'));
   const sent = JSON.stringify(seen[0].body);
   assert.match(sent, /Landing page brief/);
-  assert.match(sent, /a hero .*about three benefit blocks.*how it works in three steps.*one proof block.*install .*closing call to action/); // the shape of the page
+  assert.match(sent, /a hero .*proof straight after it.*about three benefit blocks.*how it works in three steps.*install .*closing call to action/); // the shape of the page: a landing page is a clarity page, so proof comes second
   assert.match(sent, /about 6,000 px tall at 390/); // the length of the page
   assert.match(sent, /Do not mirror the source's headings/); // the source is summarised, not copied
   assert.match(sent, /doc paths, file names, maintainer commands, flags, config keys, release notes/);

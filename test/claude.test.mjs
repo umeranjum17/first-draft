@@ -37,7 +37,7 @@ if (args.includes('auth')) {
   // Real Opus may try done before the engine's mandatory plan: its blocked event has no path.
   const calls = !results.length ? [call('done', { path: 'index.html' })]
     : results.length === 1 ? [call('set_todos', { items: [{ text: 'Write notes', checked: false }] })]
-    : results.length === 2 ? [call('str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: ${JSON.stringify(DESIGN)} }), call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: page })]
+    : results.length === 2 ? [call('str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: ${JSON.stringify(DESIGN)} }), { ...call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: page }), arguments: JSON.stringify({ command: 'create', path: 'index.html', file_text: page }).replace('<h1>', '<h1>' + String.fromCharCode(10)) }]
     : results.length === 4 ? [call('done', { path: 'index.html' })] : [];
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: calls.length ? '' : 'Ready', calls }, usage: { input_tokens: 7, output_tokens: 8 } }));
 }
