@@ -72,7 +72,9 @@ function standIn(seen) {
       if (body.includes('"propose_concepts"')) calls = [['propose_concepts', { concepts: CONCEPTS }]];
       else if (body.includes('"critique_marks"')) {
         const { marks } = JSON.parse(user.slice(0, user.lastIndexOf('}') + 1));
-        calls = [['critique_marks', { marks: marks.length > 1 ? marks.map((m) => said(m, SAYS[m.name])) : [said(marks[0], FINAL[marks[0].name][(finals[marks[0].name] = (finals[marks[0].name] ?? -1) + 1)])] }]];
+        // The first look at the sketches overruns fix; the re-ask says exactly what is wrong and the second answer fits.
+        const first = marks.length > 1 && !user.includes('was not usable');
+        calls = [['critique_marks', { marks: marks.length > 1 ? marks.map((m) => said(m, { ...SAYS[m.name], ...(first && m.name === 'Leaf cup' && { fix: 'x'.repeat(900) }) })) : [said(marks[0], FINAL[marks[0].name][(finals[marks[0].name] = (finals[marks[0].name] ?? -1) + 1)])] }]];
       } else {
         if (!body.includes('function_call_output')) { start = seen.length - 1; script = body.includes('Revise this logo option') ? 'revise' : makes++ ? 'clean' : 'make'; }
         const n = seen.length - 1 - start;
@@ -124,10 +126,12 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.equal(made.files.length, 2);
   // Six concepts explored with the --ref image; the critic saw the five clean sketches drawn on one board beside it, and its verdicts
   // were overruled where the host found a flaw: a smiley is not a keep, nor is a mark whose detail dies at 16 px.
-  const proposeCall = seen.find((b) => b.includes('"propose_concepts"')), [conceptCritique, ...finalCritiques] = seen.filter((b) => b.includes('"critique_marks"'));
+  const proposeCall = seen.find((b) => b.includes('"propose_concepts"')), [overrun, conceptCritique, ...finalCritiques] = seen.filter((b) => b.includes('"critique_marks"'));
+  assert.ok(!userText(overrun).includes('not usable'));
+  assert.match(userText(conceptCritique), /Your last critique_marks call was not usable: mark 1 fix is 900 characters; keep it to 800 or less\./);
   assert.match(proposeCall, /input_image/);
   assert.equal((conceptCritique.match(/"type":"input_image"/g) ?? []).length, 2, 'the board and the --ref image');
-  assert.deepEqual(JSON.parse(userText(conceptCritique)).marks.map((m) => m.name), ['Leaf cup', 'U steam', 'Smile leaf', 'Hairline', 'Pebble']);
+  assert.deepEqual(JSON.parse(userText(overrun)).marks.map((m) => m.name), ['Leaf cup', 'U steam', 'Smile leaf', 'Hairline', 'Pebble']);
   const status = Object.fromEntries(result.concepts.map((k) => [k.name, k]));
   assert.deepEqual(Object.fromEntries(result.concepts.map((k) => [k.name, k.status])), { 'Leaf cup': 'dropped', 'U steam': 'chosen', 'Smile leaf': 'reserve', Hairline: 'reserve', 'Typed U': 'dropped', Pebble: 'chosen' });
   assert.equal(status['Smile leaf'].verdict, 'redo');

@@ -35,7 +35,7 @@ const CRITIQUE = { name: 'critique_marks', description: 'The critique of every m
     plain_letter: { type: 'boolean', description: 'a letter a typeface\'s letter would match, with no shape of its own' },
     resembles_reference: { type: 'string', maxLength: 120, description: 'the reference image or known logo it is close to, or empty' },
     score: { type: 'integer', minimum: 1, maximum: 10 }, verdict: { type: 'string', enum: ['keep', 'redo', 'drop'] },
-    fix: { type: 'string', maxLength: 400, description: 'redo: exactly what to change in the drawing; drop: why the idea cannot work; keep: empty or a note' } } } } } } };
+    fix: { type: 'string', maxLength: 800, description: 'redo: exactly what to change in the drawing; drop: why the idea cannot work; keep: empty or a note' } } } } } } };
 
 // One structured call on the person's own route and model; an answer that does not fit is sent back once with what is wrong.
 async function ask(c, { system, user, tool, images = [] }, problemsOf) {
@@ -52,13 +52,15 @@ async function ask(c, { system, user, tool, images = [] }, problemsOf) {
   throw new Error(`the model's ${tool.name} answer was not usable twice: ${problems.slice(0, 5).join('; ')}`);
 }
 
+// What is wrong with one text field, said so that the model can fix it: missing, not text, empty or too long.
+const wrong = (v, max, needed) => v === undefined || v === null ? 'is missing' : typeof v !== 'string' ? `is ${typeof v}, not text` : needed && !v.trim() ? 'is empty' : v.length > max ? `is ${v.length} characters; keep it to ${max} or less` : '';
 const conceptProblems = (direction) => (v) => {
   const list = v?.concepts;
   if (!Array.isArray(list) || list.length < 6 || list.length > EXPLORE) return [`concepts must hold 6 to ${EXPLORE} concepts`];
   return [...list.flatMap((k, i) => [
     ...(KINDS.includes(k?.kind) ? [] : [`concept ${i + 1} needs kind, one of ${KINDS.join(', ')}`]),
     ...Object.entries(PROPOSE.parameters.properties.concepts.items.properties).filter(([f]) => f !== 'kind')
-      .filter(([f, { maxLength }]) => typeof k?.[f] !== 'string' || !k[f].trim() || k[f].length > maxLength || (f !== 'sketch' && /\n/.test(k[f]))).map(([f, { maxLength }]) => `concept ${i + 1} needs ${f}: ${f === 'sketch' ? 'SVG' : 'one line'} of ${maxLength} characters or less`)]),
+      .map(([f, { maxLength }]) => [f, wrong(k?.[f], maxLength, true) || (f !== 'sketch' && /\n/.test(k[f]) ? 'is more than one line' : '')]).filter(([, w]) => w).map(([f, w]) => `concept ${i + 1} ${f} ${w}`)]),
     ...(new Set(list.map((k) => String(k?.name).trim().toLowerCase())).size === list.length ? [] : ['every concept needs a name of its own']),
     ...(direction || new Set(list.map((k) => k?.kind)).size >= 4 ? [] : ['the concepts must span at least four kinds of mark'])];
 };
@@ -66,7 +68,7 @@ const critiqueProblems = (ids) => (v) => {
   const list = v?.marks;
   if (!Array.isArray(list) || list.length !== ids.length || ids.some((id) => list.filter((m) => m?.id === id).length !== 1)) return [`marks must hold one entry for each id: ${ids.join(', ')}`];
   return list.flatMap((m) => [
-    ...['reads_as', 'cliche', 'resembles_reference', 'fix'].filter((f) => typeof m[f] !== 'string' || m[f].length > 400).map((f) => `mark ${m.id} needs ${f} as text`),
+    ...['reads_as', 'cliche', 'resembles_reference', 'fix'].map((f) => [f, wrong(m[f], CRITIQUE.parameters.properties.marks.items.properties[f].maxLength)]).filter(([, w]) => w).map(([f, w]) => `mark ${m.id} ${f} ${w}`),
     ...['intended', 'small', 'plain_letter'].filter((f) => typeof m[f] !== 'boolean').map((f) => `mark ${m.id} needs ${f} as true or false`),
     ...(Array.isArray(m.misreads) && m.misreads.every((x) => typeof x === 'string') ? [] : [`mark ${m.id} needs misreads as a list of text`]),
     ...(Number.isInteger(m.score) && m.score >= 1 && m.score <= 10 ? [] : [`mark ${m.id} needs score, a whole number from 1 to 10`]),
