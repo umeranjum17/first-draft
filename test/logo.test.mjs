@@ -124,13 +124,14 @@ function standIn(seen, world = WORLD1, trace = []) {
       const user = userText(body);
       let calls, delay = 0;
       if (body.includes('"propose_concepts"')) {
-        // Each territory is its own call (they overlap: `trace` counts the ones open at once). The first answer of the symbol territory
+        // Each territory is its own call (they overlap: `trace.peak` counts the most open at once). The first answer of the symbol territory
         // builds Leaf U on a letter and gives Last drop a pale accent on white; the re-ask names both and the second answer fits.
         const { territory } = JSON.parse(user.split('\n\nYour last')[0]), reasked = user.includes('was not usable');
         const list = world.proposals[user.includes('critic_advice') ? 1 : 0][territory].map((k) => world !== WORLD1 || reasked ? k
           : k.name === 'Leaf U' ? { ...k, base: 'letter' } : k.name === 'Last drop' ? { ...k, palette: { ...k.palette, light: { ...k.palette.light, accent: '#e9f0e6' } } } : k);
+        // Each first call waits until three are open at once (or 2 s pass, as calls made one by one would), whatever the runner's speed.
         trace.open = (trace.open ?? 0) + 1; trace.peak = Math.max(trace.peak ?? 0, trace.open);
-        await new Promise((r) => setTimeout(r, 40));
+        for (const until = Date.now() + 2000; !reasked && trace.peak < 3 && Date.now() < until;) await new Promise((r) => setTimeout(r, 10));
         trace.open--;
         calls = [['propose_concepts', { concepts: list }]];
       } else if (body.includes('"critique_marks"')) {
@@ -172,13 +173,16 @@ function standIn(seen, world = WORLD1, trace = []) {
   return new Promise((r) => server.listen(0, '127.0.0.1', () => r(server)));
 }
 const told = (bodies) => bodies.flatMap((s) => JSON.parse(s).input ?? []).filter((m) => m.type === 'function_call_output').map((m) => typeof m.output === 'string' ? m.output : JSON.stringify(m.output)).join('\n');
+// A test folder is removed last, after the processes that write to it are stopped, and retried: a headless browser the host has just
+// killed can still be writing its profile into TMPDIR, and a throwing after-hook would skip the ones after it and leave the view running.
+const clear = (dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 const png = (file) => { const b = readFileSync(file); assert.equal(b.subarray(1, 4).toString(), 'PNG'); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
 
 test('logo: concepts explored and critiqued at 16 and 32 px become options with their idea and palette; marks are redone or dropped; refine starts from the logo files', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-logo-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [], trace = [], server = await standIn(seen, WORLD1, trace);
-  t.after(() => server.close());
+  let view;
+  t.after(() => { view?.kill(); server.close(); clear(dir); });
   const env = { ...process.env, CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (args, more = {}) => promisify(execFile)(process.execPath, [CLI, ...args], { env: { ...env, ...more }, cwd: dir });
   await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
@@ -205,7 +209,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   // where the host found a flaw: a smiley is not a keep, nor a mark whose detail dies at 16 px, and an initial carved into a leaf is a drop.
   const proposals = seen.filter((b) => b.includes('"propose_concepts"')), reasked = proposals.filter((b) => userText(b).includes('not usable'));
   assert.deepEqual(proposals.map((b) => JSON.parse(userText(b).split('\n\nYour last')[0]).territory).sort(), ['abstract', 'symbol', 'symbol', 'wordmark']);
-  assert.ok(trace.peak >= 2, `the territory calls overlap: ${trace.peak} open at once`);
+  assert.equal(trace.peak, 3, 'the three territory calls are open at once');
   for (const b of proposals) assert.match(b, /input_image/);
   assert.match(proposals[0], /never from the name's initials/);
   // A concept built on a letter the brief does not ask for, and a pale accent on white, send the proposal back once, naming both.
@@ -329,8 +333,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.ok(!readFileSync(join(dir, 'tea-2.html'), 'utf8').includes(readFileSync(join(dir, 'tea-round.logo', 'mark.svg')).toString('base64')), 'the option it came from is untouched');
 
   // The Studio's brief runs the same refine: the new option joins the design with its own logo folder.
-  const view = spawn(process.execPath, [CLI, 'view', out, '--host', '127.0.0.1', '--port', '0'], { env });
-  t.after(() => view.kill());
+  view = spawn(process.execPath, [CLI, 'view', out, '--host', '127.0.0.1', '--port', '0'], { env });
   const url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
   const sent = await fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify({ option: 2, change: 'a rounder leaf' }) });
   assert.equal(sent.status, 200, await sent.clone().text());
@@ -342,7 +345,6 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
 test('logo: image-first exploration through the asset provider, and a second round from the critic\'s advice when it drops every drawn mark', async (t) => {
   if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-logo-images-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
   // A Higgsfield that is ready and makes one image (a real PNG that the host converts with ImageMagick), and a fetch that serves it.
   const bin = join(dir, 'bin'), log = join(dir, 'calls'), mark = join(dir, 'mark.png');
   mkdirSync(bin);
@@ -352,7 +354,7 @@ test('logo: image-first exploration through the asset provider, and a second rou
   const hook = join(dir, 'fetch.mjs');
   writeFileSync(hook, `const real=globalThis.fetch;globalThis.fetch=(url,options)=>url==='https://fixture.invalid/mark.png'?Promise.resolve(new Response(Buffer.from('${readFileSync(mark).toString('base64')}','base64'))):real(url,options);`);
   const seen = [], server = await standIn(seen, WORLD2);
-  t.after(() => server.close());
+  t.after(() => { server.close(); clear(dir); });
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, CI: '', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (args) => promisify(execFile)(process.execPath, ['--import', hook, CLI, ...args], { env, cwd: dir });
   await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
