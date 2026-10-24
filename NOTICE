@@ -11,3 +11,9 @@ published package carries them as dist/LICENSE and dist/NOTICE.
 The view's typefaces, Instrument Sans, Instrument Serif and JetBrains Mono, are
 included as latin-subset web fonts in src/view/fonts under the SIL Open Font
 License 1.1, with their copyright notices and the licence in src/view/fonts/OFL.txt.
+
+The planned directions and the design critic (src/critic.mjs) take ideas, not
+text or code, from these public projects, rewritten in first-draft's own words:
+anthropics/skills frontend-design (https://github.com/anthropics/skills),
+pbakaus/impeccable (https://github.com/pbakaus/impeccable, Apache-2.0) and
+abi/screenshot-to-code (https://github.com/abi/screenshot-to-code, MIT).

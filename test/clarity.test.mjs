@@ -118,7 +118,7 @@ test('a landing-page brief carries the rubric and a flashy first draft is repair
     t.after(() => server.close());
     await run(server, 'init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
     const out = join(dir, `${seen.length}-${prompt.length}.html`);
-    const { stdout } = await run(server, 'make', prompt, '--out', out, '--options', '1');
+    const { stdout } = await run(server, 'make', prompt, '--out', out, '--options', '1', '--engine');
     return { made: JSON.parse(stdout).made, seen, out, told: seen.slice(3).flatMap((s) => JSON.parse(s).input ?? []).filter((m) => m.type === 'function_call_output').map((m) => typeof m.output === 'string' ? m.output : JSON.stringify(m.output)).join('') };
   };
   const landing = await make('A landing page for a small accounting software company for teams', [FLASHY, CLEAR]);

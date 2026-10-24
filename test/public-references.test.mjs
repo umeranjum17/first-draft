@@ -161,7 +161,7 @@ else {
   const visualProbe=`import assert from 'node:assert/strict';import {reviewReferences} from ${JSON.stringify(new URL('../journeys/redesign-reference-check.mjs',import.meta.url).href)};const input={quality:[${JSON.stringify(join(captured.cache,'..',manifest.screenshots[0].file))}],diagnostics:[],captures:[{file:${JSON.stringify(join(captured.cache,'..',manifest.screenshots[1].file))},label:'fixture capture only'}],agent:'byokit:claude',model:'claude-opus-5-5'};if(process.env.FD_VISUAL_BAD)await assert.rejects(reviewReferences(input),/inconsistent visual benchmark/);else assert.equal((await reviewReferences(input)).verdict,'pass');`;
   for(const bad of ['', '1'])await promisify(execFile)(process.execPath,['--input-type=module','-e',visualProbe],{env:{...env,FD_VISUAL_BAD:bad},cwd:project,timeout:30000,maxBuffer:100000});
   const out=join(project,'notes.html'),warm=join(project,'warm.html');
-  const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--options','1','--out',out)).stdout);
+  const made=JSON.parse((await run('make','make it like Vercel; one notes page for Umer','--options','1','--engine','--out',out)).stdout);
   assert.equal(made.references.name,'Vercel');assert.equal(made.made.render_check,'checked');
   const reference=JSON.parse(readFileSync(out+'.refs.json','utf8'));
   assert.equal(reference.shots.length,2);assert.doesNotMatch(readFileSync(out,'utf8'),/data:image|Build something clear/);
@@ -180,7 +180,7 @@ else {
   const changed=await fetch(new URL('/refine',view),{method:'POST',headers:{origin:new URL(view).origin,'content-type':'application/json'},body:JSON.stringify({option:1,change:'warmer palette'})});
   assert.equal(changed.status,200);assert.equal((await changed.json()).option.references.name,'Vercel','viewer refinement preserves references');
   await assert.rejects(run('make','notes','--like','Vercel','--no-references','--out',join(project,'bad.html')),e=>/conflicts/.test(e.stdout));
-  await run('make','notes for Umer','--options','1','--no-references','--out',out);
+  await run('make','notes for Umer','--options','1','--engine','--no-references','--out',out);
   assert.equal(existsSync(out+'.refs.json'),false,'overwriting without references removes stale option provenance');
   writeFileSync(out+'.refs.json',JSON.stringify({...reference,shots:reference.shots.map(s=>({...s,dataUrl:'data:text/html,not an image'}))}));
   assert.equal((await fetch(new URL('/refs/1/0',view))).status,422,'malformed sidecars cannot serve arbitrary content');

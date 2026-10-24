@@ -143,6 +143,26 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
   }
 }
 
+// One page in one reply: the model answers with the document itself, not a tool call whose arguments carry it as JSON inside JSON.
+// A subscription CLI still answers through a schema, so the page is one JSON string there; a key route answers in plain text.
+export async function writePage({ route, model, system, prompt, images = [], signal, timeoutMs, maxTokens = 16_000 }) {
+  const problem = await check(route, model);
+  if (problem) throw new Error(problem);
+  if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
+  if (CLI_ROUTES.includes(route)) {
+    const { bin, account } = await launch(route);
+    const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
+    const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({ system, prompt, images, signal, maxOutputTokens: maxTokens,
+      schema: { type: 'object', additionalProperties: false, required: ['html'], properties: { html: { type: 'string', description: 'The complete HTML document, from <!doctype html> to </html>' } } } });
+    if (typeof answer.data?.html !== 'string') throw new Error('BYOKit returned no page');
+    return { html: answer.data.html, tokens_in: answer.usage?.input_tokens ?? 0, tokens_out: answer.usage?.output_tokens ?? 0 };
+  }
+  const message = await respond({ route, model, maxTokens, signal, timeoutMs, images, context: { systemPrompt: system, messages: [{ role: 'user', content: prompt, timestamp: Date.now() }], tools: [] } });
+  if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
+  const text = message.content.filter((c) => c.type === 'text').map((c) => c.text).join('');
+  return { html: text.match(/<!doctype[\s\S]*<\/html>|<html[\s\S]*<\/html>/i)?.[0] ?? text, tokens_in: message.usage?.input ?? 0, tokens_out: message.usage?.output ?? 0 };
+}
+
 // Local route readiness only: no paid model availability probe.
 export async function doctor(route, model) {
   const label = `byokit:${route}`;

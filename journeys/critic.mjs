@@ -24,7 +24,7 @@ try {
   const env = { ...process.env, CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (args) => promisify(execFile)(process.execPath, [join(root, 'src/cli.mjs'), ...args], { env, cwd: dir });
   await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
-  const { stdout } = await run(['make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1']);
+  const { stdout } = await run(['make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1', '--engine']);
   writeFileSync(join(out, 'make.json'), `${JSON.stringify(JSON.parse(stdout), null, 2).replaceAll(dir, '<run>')}\n`);
   const { made } = JSON.parse(stdout), [file] = made.files;
   assert.ok(made.critic?.plain, `the critic ran: ${JSON.stringify(made.critic)}`);

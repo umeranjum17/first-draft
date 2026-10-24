@@ -14,19 +14,20 @@ export const images = (body) => JSON.parse(body).input.flatMap((m) => Array.isAr
 // engine conversation (told apart by its first message) plans, writes DESIGN.md and version N of the page, runs done and stops.
 export function standIn(seen, scores) {
   const convo = new Map();
-  let reviews = 0;
+  let reviews = 0, drafts = 0;
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
       seen.push(body);
-      let calls;
+      let calls, text = 'The design is ready.';
       if (body.includes('"write_page"')) calls = [['write_page', { html: PLAIN }]];
       else if (body.includes('"review_designs"')) {
         const [design, plain] = scores[reviews++];
         calls = [['review_designs', { design: { score: design, gaps: design < 10 ? [`version ${reviews}: the hero has no picture and the list is a wall of grey`] : [] }, plain: { score: plain, gaps: ['generic'] },
           against: 'Notion: its calm page list and real content', reads_as: 'a list of notes', fix: design < 10 ? `Give version ${reviews} a real hero picture and tint each note by its tag.` : '' }]];
-      } else {
+      } else if (!JSON.parse(body).tools?.length) text = page(`Notes, version ${++drafts}`); // the one-call make asks for the page as text, no tools
+      else {
         const key = userText(body)[0];
         if (!convo.has(key)) convo.set(key, { n: 0, version: convo.size + 1 });
         const st = convo.get(key), n = st.n++;
@@ -35,7 +36,7 @@ export function standIn(seen, scores) {
           [['done', { path: 'index.html' }]]][n];
       }
       const items = calls ? calls.map(([name, args], i) => ({ type: 'function_call', id: `fc${seen.length}-${i}`, call_id: `c${seen.length}-${i}`, name, arguments: JSON.stringify(args) }))
-        : [{ type: 'message', id: 'm1', status: 'completed', content: [{ type: 'output_text', text: 'The design is ready.' }] }];
+        : [{ type: 'message', id: 'm1', status: 'completed', content: [{ type: 'output_text', text }] }];
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(items.map((item, output_index) => ev({ type: 'response.output_item.added', output_index, item }) + ev({ type: 'response.output_item.done', output_index, item })).join('')
         + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));

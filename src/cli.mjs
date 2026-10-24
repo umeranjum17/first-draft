@@ -10,6 +10,8 @@ import { referenceDoctor, referenceFlags, referenceHelp, references } from './re
 import { discoverReference, discoveryHelp, explicitReferenceUrl } from './reference-discovery.mjs';
 import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { make, engineDoctor } from './make.mjs';
+import { planDirections } from './direct.mjs';
+import { draft } from './draft.mjs';
 import { commentsPath, designFiles, serve, viewHost } from './view.mjs';
 import { post } from './post.mjs';
 import { HARNESSES, InitError, initProject } from './init.mjs';
@@ -28,8 +30,6 @@ const PICK = 'which BYOKit route and model to use (first-draft picks none), then
 const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
-// What each option takes when --options asks for several and the person names no direction: styles from different families, so options differ in kind.
-const DIRECTIONS = ['editorial', 'oled-neon', 'bento', 'organic', 'neobrutalism'];
 
 const read = () => {
   try {
@@ -136,9 +136,10 @@ commands[11]:
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
   assets                              detect installed asset providers without spending
-  make "<prompt>" (--out <file.html> | --out-dir <folder>) [flags]   make self-contained HTML design options (one engine run each)
+  make "<prompt>" (--out <file.html> | --out-dir <folder>) [flags]   make self-contained HTML design options (one model call each, then the critic)
     --options <n>      1-5 options (default 3); --count is an alias; cannot combine them
-    --direction <look> named style or free-text direction for all options; --style is an alias; otherwise options vary
+    --direction <look> named style or free-text direction for all options; --style is an alias; otherwise the model plans one direction per option for this brief
+    --engine           make each option with the Open CoDesign engine's multi-turn tool loop instead of one page from one call (--assets always does)
     --screens <names>  comma-separated screen/page names to cover (1-12); default: infer from brief
     --brief-file <file> append a nonempty UTF-8 brief (up to 100 KB); prompt may be omitted
     --model <id>       override the configured model for this run only (same BYOKit route)
@@ -188,7 +189,7 @@ if (command === 'references') {
 } else if (command === 'make' || command === 'redesign' || command === 'logo') {
   const redesign = command === 'redesign', logo = command === 'logo';
   const { values, positionals } = flags(rest, logo ? { ref: referenceFlags.ref, ...Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model', 'explore'].map((name) => [name, { type: 'string' }])) }
-    : { ...referenceFlags, ...assetFlags, ...(!redesign && { 'no-critic': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
+    : { ...referenceFlags, ...assetFlags, ...(!redesign && { engine: { type: 'boolean' }, 'no-critic': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !positionals.join(' ').trim() || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file',
     ['Run `first-draft-axi redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5`', 'Only have a screenshot? Run `first-draft-axi make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html`']);
@@ -259,26 +260,36 @@ if (command === 'references') {
     }
   }
   const png = (url) => Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  const numberedOf = (n) => outPath.includes('{i}') ? outPath.replaceAll('{i}', String(n)) : count > 1 ? outPath.slice(0, -extname(outPath).length || undefined) + `-${n}` + extname(outPath) : outPath;
+  // Several options with no direction named: the model plans one direction per option for this brief (direct.mjs), not a style from a fixed list.
+  let planned;
+  if (!logo && !redesign && count > 1 && !values.direction && !values.style && !refs.metadata) {
+    try { planned = await planDirections({ brief: prompt, count, ...c }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not plan the directions: ${e.message}`, ['Run `first-draft-axi doctor`, or name one with --direction']); }
+    tokens_in += planned.tokens_in; tokens_out += planned.tokens_out;
+  }
+  const directionOf = (i) => logo ? values.direction ?? null : values.direction ?? values.style ?? planned?.directions[i].text;
+  // A new option is one page from one call (draft.mjs); generated images and --engine use the engine's multi-turn tool loop. The critic's revision is the same call, seeded with the version it scored.
+  const engine = assetSession || values.engine;
+  const build = (i, numbered) => (redesign ? makeRedesign : engine ? make : draft)({ prompt, ...c, screens, assets: assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) }, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction: directionOf(i) });
   // make's critic: every option scored against real products and a plain page of the same brief (kept in <out>.critic/, outside the
   // options the view lists), and revised under PASS (critic.mjs).
   const critic = logo || redesign ? null : values['no-critic'] ? { off: '--no-critic: no option was scored' }
     : await openCritic({ c, brief: prompt, references: refs.images, plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
   for (let i = 0; i < count; i++) {
-    const n = files.length + 1, numbered = outPath.includes('{i}') ? outPath.replaceAll('{i}', String(n)) : count > 1 ? outPath.slice(0, -extname(outPath).length || undefined) + `-${n}` + extname(outPath) : outPath;
+    const numbered = numberedOf(files.length + 1);
     let made, written, option;
-    const direction = logo ? values.direction ?? null : values.direction ?? values.style ?? (!refs.metadata && count > 1 ? DIRECTIONS[i % DIRECTIONS.length] : undefined);
+    const direction = directionOf(i);
     try {
-      const assets = assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) };
       if (logo) {
         option = drawn.options[i];
         if (!option.made) continue; // no concept was left to try for this option; concepts says why
       }
-      made = option?.made ?? await (redesign ? makeRedesign : make)({ prompt, ...c, screens, assets, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction });
+      made = option?.made ?? await build(i, numbered);
     } catch (e) { critic?.close?.(); fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     let critique;
     if (critic?.judge) {
       tokens_in += made.tokens_in; tokens_out += made.tokens_out; made = { ...made, tokens_in: 0, tokens_out: 0 }; // a revision's tokens are the critic's
-      try { ({ made, critique } = await critic.judge(made, (version, change) => make({ prompt: change, ...c, seed: version.html, references: refs.images, referenceBrief: refs.metadata?.brief }))); }
+      try { ({ made, critique } = await critic.judge(made, (version, change) => (engine ? make : draft)({ prompt: change, ...c, seed: version.html, references: refs.images, referenceBrief: refs.metadata?.brief }))); }
       catch (e) { critique = { error: `the critic did not score this option: ${e.message}` }; }
     }
     const out = resolve(numbered);
@@ -299,7 +310,7 @@ if (command === 'references') {
         ...(drawn.second_round && { second_round: drawn.second_round }), critic: 'the same model, against written principles and the person\'s --ref images; not an independent judgement or trademark clearance', agent: c.agent, model: c.model },
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
-    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }) });
+    files.push({ file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }) });
     if (!logo) { tokens_in += made.tokens_in; tokens_out += made.tokens_out; }
     made.remote.forEach((r) => blocked.add(r));
     if (made.render_check === 'skipped') render_check = 'skipped';

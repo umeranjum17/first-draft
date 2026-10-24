@@ -20,7 +20,7 @@ On a ChatGPT subscription, use your installed, signed-in Codex CLI instead: `fir
 
 ## Choose a direction, not just a screenshot
 
-- **Make options.** `make` generates three directions by default; use `--options 1` for one or `--options 5` for five. Each is a self-contained HTML file, not app code, and with no `--direction` each takes a different named style (`first-draft-axi styles` lists them).
+- **Make options.** `make` generates three directions by default; use `--options 1` for one or `--options 5` for five. Each is a self-contained HTML file, not app code, written in one model call from Anthropic's frontend-design guidance (vendored in `src/taste/`, Apache-2.0) plus a short page contract: design what the brief names, one accent colour used on one thing per screen, faint grids, real-looking data and no invented testimonials or logos. Chrome then draws the page and the same model scores it 1 to 10 beside the best products of its kind and a plain one-prompt page of the same brief; a score under 9 (or under the plain page) sends it back for a revision, twice at most, and the best version is kept (`--no-critic` skips this). With several options and no `--direction`, the model plans one direction per option for your brief (`first-draft-axi styles` lists the named styles you can pick instead). `--engine` uses the older multi-turn engine loop.
 - **Open one on the canvas.** Studio shows one option beside its options, comments and a brief for your next change, as large as the window allows. On a laptop it opens on Desktop (1280px); where there is room it opens on Both, the desktop and the phone (390px) side by side, each with its own Play. Both, Desktop and Phone are one click away and your pick is remembered; a phone-width window shows the phone.
 - **Comment on it.** Press Comment (in the ⋯ menu on a phone) and tap the spot you mean: your comment is saved next to the design and shows as a numbered pin beside the frame.
 - **Look closer.** Fullscreen gives the option the whole window; Play is one tap away.
@@ -146,6 +146,8 @@ Run `first-draft-axi --help` for all flags. [ENGINE.md](ENGINE.md) covers the pi
 | --- | --- |
 | `--options <n>` / `--count <n>` | Integer 1–5; default 3. Do not combine aliases. |
 | `--direction <look>` / `--style <look>` | Named style or free-text direction for every option. Default: different styles for multiple options. Do not combine aliases. |
+| `--no-critic` | Skip the critic: with it on (default, needs Chrome and a model that takes images) each new option is scored against real products and a plain page, and revised under 9/10, twice at most. |
+| `--engine` | Make each option with the multi-turn engine tool loop instead of one page from one call (`--assets` always does). |
 | `--screens <names>` | 1–12 comma-separated screen/page names, each 1–100 characters; asks the model to include each with ids and navigation. Default: infer from brief. |
 | `--brief-file <file>` | Append nonempty UTF-8 text, at most 100 KB; positional prompt becomes optional. No URLs or images are fetched. |
 | `--model <id>` | This run's model on the configured BYOKit route; does not change saved config. Provider validates availability. |

@@ -30,7 +30,7 @@ test('the critic scores each option against real products and a plain page, and 
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
   // 6 against the plain page's 7: back to the engine with the critic's reasons; the revision scores 9 and passes.
-  const { out, seen, result: { made, help } } = await make(t, dir, [[6, 7], [9, 7]]);
+  const { out, seen, result: { made, help } } = await make(t, dir, [[6, 7], [9, 7]], '--engine');
   const [file] = made.files;
   assert.deepEqual([file.critique.score, file.critique.passed, file.critique.plain_score, file.critique.rounds, file.critique.scores], [9, true, 7, 2, [6, 9]]);
   assert.match(file.critique.judge, /same model/);
@@ -49,17 +49,33 @@ test('the critic scores each option against real products and a plain page, and 
   assert.ok(!help.some((h) => /below the bar/.test(h)));
 
   // Never 9: two revisions, then the best version (the second, 8) is the option, flagged below the bar.
-  const low = await make(t, dir, [[5, 7], [8, 7], [7, 7]]);
+  const low = await make(t, dir, [[5, 7], [8, 7], [7, 7]], '--engine');
   const flagged = low.result.made.files[0];
   assert.deepEqual([flagged.critique.score, flagged.critique.passed, flagged.critique.rounds, flagged.critique.scores], [8, false, 3, [5, 8, 7]]);
   assert.match(readFileSync(low.out, 'utf8'), /Notes, version 2/, 'the best-scored version is kept');
   assert.match(low.result.help.find((h) => /below the bar/.test(h)), /notes-3\.html scored 8\/10 \(plain page 7; 9 needed\) after 3 review\(s\).*never show one as finished/);
 
   // --no-critic: no plain page, no review, and the output says nothing was scored.
-  const off = await make(t, dir, [[1, 1], [1, 1], [1, 1], [1, 1]], '--no-critic');
+  const off = await make(t, dir, [[1, 1], [1, 1], [1, 1], [1, 1]], '--no-critic', '--engine');
   assert.equal(off.seen.filter((b) => b.includes('"review_designs"') || b.includes('"write_page"')).length, 0);
   assert.equal(off.result.made.files[0].critique, undefined);
   assert.match(off.result.made.critic.off, /--no-critic/);
   assert.match(off.result.help.find((h) => /critic was off/.test(h)), /no option was scored against the references/);
   assert.equal(existsSync(join(dir, 'notes-4.critic')), false);
+});
+
+// The default make writes the page from one call, so the critic's revision is the same call with the version it scored.
+test('the critic revises the default one-call page from a seed: the scored version goes back with its gaps and the revision is the option', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-critic-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { out, seen, result: { made } } = await make(t, dir, [[6, 7], [9, 7]]);
+  const [file] = made.files;
+  assert.deepEqual([file.critique.score, file.critique.passed, file.critique.scores], [9, true, [6, 9]]);
+  assert.match(readFileSync(out, 'utf8'), /Notes, version 2/);
+  assert.equal(file.turns, 1, 'one call per version, not an engine loop');
+  const revision = seen.find((b) => !b.includes('"review_designs"') && userText(b)[0]?.includes('The critic scored this design 6/10'));
+  assert.ok(revision, 'the page call was sent the critic\'s score');
+  assert.match(userText(revision)[0], /Notes, version 1/, 'with the version it scored');
+  assert.equal(JSON.parse(revision).tools, undefined);
 });
