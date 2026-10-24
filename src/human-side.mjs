@@ -27,7 +27,9 @@ export function humanSidePage(runLimit, hueLimit, [minWords, maxWords]) {
   const ground = (el) => { for (let e = el; e; e = e.parentElement) { const c = rgba(getComputedStyle(e).backgroundColor); if (c.a >= 0.5) return c; } return { r: 255, g: 255, b: 255, a: 1 }; };
   const sections = [...document.querySelectorAll('section, header, footer')].filter((s) => !s.parentElement?.closest('section') && shown(s) && s.getBoundingClientRect().height > 80);
   const h1 = document.querySelector('h1');
-  const hero = h1 && (h1.closest('[data-section="hero"], section, header') ?? h1.parentElement);
+  // The hero: the h1's section or header, else the widest ancestor of the h1 that is still under 1.6 screens tall (a page of divs).
+  const heroOf = (h) => { let e = h; while (e.parentElement && !/^(?:BODY|MAIN)$/.test(e.parentElement.tagName) && e.parentElement.getBoundingClientRect().height < 1.6 * innerHeight) e = e.parentElement; return e; };
+  const hero = h1 && (h1.closest('[data-section="hero"], section, header') ?? heroOf(h1));
 
   if (!h1) out.push('the page has no h1; the hero needs one title');
   else {
@@ -44,7 +46,9 @@ export function humanSidePage(runLimit, hueLimit, [minWords, maxWords]) {
     if (filled.length !== 1) out.push(`the hero has ${filled.length} filled buttons; it needs exactly one filled primary button, and a second action drawn as an outline or a plain link`);
     const other = controls.filter((e) => !filled.includes(e) && (getComputedStyle(e).borderTopWidth !== '0px' || /button|btn|cta/i.test(e.className)));
     if (filled.length === 1 && other.some((e) => e.getBoundingClientRect().height * e.getBoundingClientRect().width > filled[0].getBoundingClientRect().height * filled[0].getBoundingClientRect().width)) out.push('the secondary button is larger than the primary; make it a bit smaller and lighter, in the same shape and type');
-    if (!hero.querySelector('img, picture, video, canvas, svg, figure, table')) out.push('the hero has no product screen or picture; draw the product\'s main screen as real data under the buttons');
+    // A product screen or picture: media, a table, or a boxed panel at least 240x140 px with six or more text-bearing parts (a UI drawn in divs).
+    const panel = (e) => { const r = e.getBoundingClientRect(), c = getComputedStyle(e); return r.width >= 240 && r.height >= 140 && (parseFloat(c.borderTopWidth) > 0 || c.boxShadow !== 'none' || rgba(c.backgroundColor).a > 0.5) && [...e.querySelectorAll('*')].filter((x) => x.children.length === 0 && x.textContent.trim()).length >= 6; };
+    if (!hero.querySelector('img, picture, video, canvas, svg, figure, table') && ![...hero.querySelectorAll('*')].some((e) => shown(e) && !e.closest('nav') && panel(e))) out.push('the hero has no product screen or picture; draw the product\'s main screen as real data under the buttons');
   }
 
   // Accent hues in visible text, backgrounds and borders (OKLCH chroma above 0.06; hues within 30 degrees are one).

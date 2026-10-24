@@ -28,6 +28,9 @@ test('a page on the human side passes every host check, and each check refuses i
   const run = check(t);
   assert.deepEqual(await run(page()), []);
   assert.deepEqual(await run(page({ cards: 2 })), [], 'two card-grid sections in a row are allowed');
+  const divs = '<div class="screen"><div class="bar"></div><p>Weekly revenue</p><p>$4,571</p><p>Open invoices</p><p>12</p><p>Sent this month</p><p>32</p></div>';
+  assert.deepEqual(await run(page({ screen: divs })), [], 'a product screen drawn in divs counts');
+  assert.deepEqual(await run(page().replace('<header class="hero">', '<div class="hero">').replace('</header>', '</div>')), [], 'a hero that is a div, not a section or header, is found from its title');
   for (const [what, html, message] of MUTANTS) {
     const found = await run(html);
     assert.ok(found.length > 0 && found.every((f) => message.test(f)), `${what} alone: ${found.join(' | ') || 'no finding'}`);
