@@ -33,3 +33,12 @@ Run `first-draft-axi --help` for every command and flag. Each command prints JSO
    `first-draft-axi post <the --out path> --title "<question>" --recommend a --option a=<label> --option b=<label> ...`.
    It copies the options into the board's `mocks/`, starts the view if needed, and each option gets a tappable Open link to its Play url under its mock (needs `sign-off-axi` 0.5.0+; the same urls also ride in the card text as a fallback). Pick `--recommend` yourself; a key already on the board needs a new `--key`.
    Journeys, tests and demos never ask the owner for a pick: post with `--evidence --media shot.png` instead of `--recommend` (an Evidence card with the options and Play links, no Decide card).
+
+## Clarity over flash
+
+For a landing, home, marketing or product page, a clear page beats a flashy one. The engine's `clarity-over-flash` skill holds the rubric and a 12-line self-check; apply the same bar when you brief, refine and recommend.
+- The 5-second test must pass on the first screen: who it is for, what it does, why trust it, what to do next. Put any of the four the user gave you into the prompt in their words.
+- The shape: one real picture, one headline of at most 10 words (one word may be muted, as in "Built for teams, proven by results"), one support line, one primary and at most one secondary button, generous whitespace, then proof (named customers or cases with concrete results) right after the hero. One message per section.
+- Restraint: neutrals with one accent at most, no motion that runs on its own, a real photo or the product over decoration. For real photos offer `--assets` (with the cost preview and approval above) or the project's own screenshots; without them the hero keeps a marked image slot.
+- Flash only when the brief asks for it: do not add a loud `--direction` (maximalism, y2k, neon …) yourself. With several options and no direction, some options get loud styles; the structure above still applies to them.
+- When you pick `--recommend` or explain options, lead with the one that passes the 5-second test, and name what each other option misses.
