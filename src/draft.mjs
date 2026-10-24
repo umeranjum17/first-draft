@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { writePage } from './byokit.mjs';
 import { FACTS } from './direct.mjs';
+import { restraintProblems } from './restraint.mjs';
 import { embedFonts } from './fonts.mjs';
 import { embedMedia, mediaBrief, projectMedia } from './media.mjs';
 import { staticExport } from './make.mjs';
@@ -14,13 +15,13 @@ import { directionText } from './styles.mjs';
 // The skill's own words, unmodified (Apache-2.0, src/taste/LICENSE.txt), without its attribution comment and frontmatter.
 const TASTE = readFileSync(new URL('./taste/frontend-design.md', import.meta.url), 'utf8').replace(/^<!--[\s\S]*?-->\s*---[\s\S]*?\n---\s*/, '');
 const LANDING = /\blanding[\s-]?pages?\b/i;
-const contract = (drawing) => `Page contract: reply with one complete, self-contained HTML document (<!doctype html> to </html>), with its CSS inside. Design what the brief names: an app, tool or product is shown as its own screens in use, not as a page that markets it, unless the brief asks for a landing, marketing or company page. Restraint: one accent colour, used on one thing per screen (the primary action or the selected item, never also headers, highlights, badges and rows); everything else is neutral. Background patterns, grids and rules are barely visible (about 4-6% contrast), never lines that compete with the content. Every control is something the product has a reason to show: no close (x), menu or badge that has nothing to close, open or count. People compare it at phone width (390px) and desktop width (1280px), so design both. Google Fonts named in a <link> or @import are embedded by the host. Images are inline SVG, CSS or data: URIs: a remote image is blocked. ${FACTS} ${drawing
+const contract = (drawing) => `Page contract: reply with one complete, self-contained HTML document (<!doctype html> to </html>), with its CSS inside. Design what the brief names: an app, tool or product is shown as its own screens in use, not as a page that markets it, unless the brief asks for a landing, marketing or company page. Restraint: one accent colour, used on one thing per screen (the primary action or the selected item, never also headers, highlights, badges and rows); everything else is neutral. Background patterns, grids and rules are barely visible (about 4-6% contrast), never lines that compete with the content. Every control is something the product has a reason to show: no close (x), menu or badge that has nothing to close, open or count. Fill each screen for its purpose: related text sits beside or under its headline, every step of a flow has its own content and a decision to make, frames shown in a row share one height, and no part of a screen is left empty or half-built. The phone layout is designed, not the desktop squeezed: navigation fits without being cut (a bottom bar or a menu), a fixed bar never covers content (reserve its space), tables become two-line rows, tap targets are at least 44px, and secondary text stays at 4.5:1 contrast. People compare it at phone width (390px) and desktop width (1280px), so design both. Google Fonts named in a <link> or @import are embedded by the host. Images are inline SVG, CSS or data: URIs: a remote image is blocked. ${FACTS} ${drawing
   ? 'Script may run once: the host draws the page in a browser at 1280px and keeps what that first render shows, without the script, so the first render must show the whole design.'
   : 'Write no script, no on* event handler and no javascript: URL: the page is shown as a static document.'}`;
 
 export async function draft({ prompt, agent, model, timeoutMs, direction, screens, references = [], seed }) {
   const warn = (warning) => process.stderr.write(`first-draft-axi: ${warning}\n`);
-  const render = renderCheck(warn);
+  const render = renderCheck(warn, { pageChecks: true });
   const media = LANDING.test(prompt) && !references.length && !seed ? projectMedia(prompt) : []; // a landing page about this project gets its own screenshots
   const system = `${TASTE}\n\n---\n\n${contract(render.drawing)}`;
   const brief = [`Brief: ${prompt}`, ...(direction ? [`Direction: ${directionText(direction)}`] : []),
@@ -45,9 +46,22 @@ export async function draft({ prompt, agent, model, timeoutMs, direction, screen
   const held = [];
   const lighter = (html) => html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>\s*/i, '').replace(/(data:[\w/+.-]+;base64,)([A-Za-z0-9+/=]{200,})/g, (_, head, data) => `${head}@@held-${held.push(data) - 1}@@`);
   const restored = (html) => html.replace(/@@held-(\d+)@@/g, (_, i) => held[i] ?? '');
+  // What the host can measure and the critic should not have to find: overflow, content under a fixed bar, clipped text, a close
+  // control with nothing to close (render-check.mjs) and the source's restraint (restraint.mjs). The model gets one call to fix
+  // exactly those; a page it cannot fix stays as it is, with the findings in the result.
+  const checked = async (source) => {
+    const drawn = await finish(source);
+    const layout = (await render.verify(drawn.page)).filter((e) => !/light and dark themes|dark-first/.test(e.message)).map((e) => e.message.replace(/,? then call done again\.?|\s*Then call done again\.?/gi, '').slice(0, 400));
+    const found = [...new Set([...restraintProblems(drawn.page), ...layout])].slice(0, 6);
+    if (!found.length) return drawn;
+    try {
+      const fixed = restored(await ask(`${brief}\n\nThe page below has defects the host measured. Fix exactly these and change nothing else:\n${found.map((f, i) => `${i + 1}. ${f}`).join('\n')}\nReply with the complete improved HTML document.\n\n${lighter(drawn.page)}`, references));
+      return { ...(await finish(fixed)), repaired: found };
+    } catch (e) { return { ...drawn, unrepaired: found, repair_failed: e.message }; }
+  };
   try {
     const source = restored(await ask(seed ? `${prompt}\n\nThe current page follows; change only what is asked and keep the rest.\nReply with the complete improved HTML document.\n\n${lighter(seed)}` : `${brief}\nReply with the complete HTML document.`, references));
-    const { page, remote } = await finish(source);
-    return { html: page, source: 'index.html', turns: used.calls, tools: {}, truncated: false, remote, tokens_in: used.tokens_in, tokens_out: used.tokens_out, render_check: render.status };
+    const { page, remote, repaired, unrepaired, repair_failed } = await checked(source);
+    return { html: page, source: 'index.html', turns: used.calls, tools: {}, truncated: false, remote, ...(repaired && { repaired }), ...(unrepaired && { unrepaired, repair_failed }), tokens_in: used.tokens_in, tokens_out: used.tokens_out, render_check: render.status };
   } finally { render.close(); }
 }

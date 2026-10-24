@@ -14,3 +14,6 @@ Harness: a shell runs the CLI with a throwaway FIRST_DRAFT_HOME; a browser opens
 2. Paid, on the user's model (`byokit:claude`, `claude-sonnet-5-5`): make one option of a fixed brief. Pass: `critique.score` and `plain_score` are set, `scores` lists every round, and when `passed` is false a help line names the file and its score.
 3. Capture the option and `<file>.critic/plain.html` side by side at 390 and 1280, light, with the score, the plain page's score, the model and `made.seconds` under each. A design is shown as finished only when `passed` is true.
 4. Stop what you started.
+
+
+Before the critic, the default make measures the drawn page itself (`src/restraint.mjs` on its source; `src/render-check.mjs` in Chrome: overflow, text under a fixed bar, clipped text, unreadable text, a close control on screen with nothing open) and sends the model back once with those findings; `repaired` in each file's JSON lists them (`unrepaired` and `repair_failed` when the fix call fails). Deterministic proof: `node --test --test-name-pattern="strong grid" test/make.test.mjs`.
