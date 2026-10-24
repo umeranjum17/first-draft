@@ -34,6 +34,9 @@ journeys:
   landing:
     command: node journeys/landing.mjs
     timeout: 5m
+  version:
+    command: node journeys/version.mjs
+    timeout: 8m
 
 # This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
 # agent: opencode
