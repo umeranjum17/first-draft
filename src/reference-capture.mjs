@@ -36,6 +36,51 @@ export const writeOptionReferences = (file, r) => {
   else try { unlinkSync(referenceSidecar(file)); } catch(e) { if(e.code !== 'ENOENT') throw e; }
 };
 
+// One public page drawn read-only in the reference browser: anonymous GETs through `network` (robots and byte caps), with page
+// scripts, cookies and requests to other origins than the page's and `assets` off. Each view is a viewport in a colour scheme with
+// the html attributes its theme sets (the page's own attributes are put back first), scrolled to the element `from` names; each
+// shot is a PNG of that viewport.
+export async function shootPublic({ page, network, renderer, views, loadMs = 25_000, assets = [], from }) {
+  const url=page.url;
+  await renderer.start();
+  network.abort.signal.throwIfAborted();
+  const c=renderer.client, blocked=new Set();
+  await c.send('Network.enable');
+  await c.send('Network.setUserAgentOverride',{userAgent:REFERENCE_UA});
+  await c.send('Emulation.setScriptExecutionDisabled',{value:true});
+  await c.send('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
+  let rootServed=false, failure=null;
+  c.on('Fetch.requestPaused', async e => {
+    try {
+      const u=referenceUrl(e.request.url, network.queries), isRoot=e.resourceType==='Document' && u.href===url && !rootServed;
+      if (e.request.method !== 'GET' || (!isRoot && (!['Stylesheet','Image','Font'].includes(e.resourceType) || u.origin !== new URL(url).origin && !assets.includes(u.origin)))) { blocked.add(e.resourceType); await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'}); return; }
+      if (isRoot) rootServed=true;
+      const r=isRoot ? page : await network.get(u.href);
+      if (r.url !== u.href || (!isRoot && !/^(?:text\/css|image\/(?:png|jpeg|webp|gif|svg\+xml)|(?:font|application)\/(?:woff2?|octet-stream|x-font-ttf))\b/i.test(r.type))) throw new Error('Subresource redirected or had an unsupported content type');
+      await c.send('Fetch.fulfillRequest',{requestId:e.requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:r.type},{name:'Cache-Control',value:'no-store'},{name:'Content-Security-Policy',value:"default-src 'none'; style-src 'unsafe-inline' https: http:; img-src data: https: http:; font-src data: https: http:; frame-src 'none'; connect-src 'none'; script-src 'none'"}],body:r.data.toString('base64')});
+    } catch(e2) { failure ??= e2; try { await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'}); } catch {} }
+  });
+  await c.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
+  await Promise.all([c.once('Page.loadEventFired',loadMs),c.send('Page.navigate',{url})]);
+  const shots=[], languages=[];
+  const title=String(await renderer.eval(c,'document.title')).trim().slice(0,200);
+  const own=await renderer.eval(c,'JSON.stringify([...document.documentElement.attributes].map(a=>[a.name,a.value]))');
+  for (const view of views) {
+    await c.send('Emulation.setDeviceMetricsOverride',{width:view.width,height:view.height,deviceScaleFactor:1,mobile:false});
+    await c.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:view.scheme ?? 'light'}]});
+    await renderer.eval(c,`(() => { const h=document.documentElement; for (const a of [...h.attributes]) h.removeAttribute(a.name); for (const [k,v] of [...${own},...${JSON.stringify(Object.entries(view.attrs ?? {}))}]) h.setAttribute(k,v); ${from ? `document.querySelector(${JSON.stringify(from)})?.scrollIntoView();` : ''} return 1; })()`);
+    // Page timers/rAF are disabled with page scripts: wait on the host, query only synchronous state.
+    for (let i=0;i<30;i++) { if (await renderer.eval(c,"document.fonts.status === 'loaded'")) break; await new Promise(r=>setTimeout(r,100)); }
+    if(!await renderer.eval(c,"document.fonts.status === 'loaded'")) throw new Error('Reference fonts did not settle; no inaccurate screenshot saved');
+    if (failure) throw failure;
+    languages.push({width:view.width,...await renderer.eval(c,`(${visualLanguage.toString()})()`)});
+    const {data}=await c.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+    const png=Buffer.from(data,'base64'); if (png.length>2_000_000 || !validPng(png,view.width,view.height)) throw new Error('Reference screenshot exceeds its size/dimension cap');
+    shots.push(png);
+  }
+  return {title,shots,languages,blocked};
+}
+
 export async function captureReference({ candidate, project = process.cwd(), agent, model, timeoutMs }) {
   if (!candidate?.url) throw new Error('No known public reference URL; pass --like <https-url> or a local --ref image');
   const url = referenceUrl(candidate.url).href;
@@ -68,41 +113,8 @@ export async function captureReference({ candidate, project = process.cwd(), age
     if (/<input\b[^>]*type\s*=\s*["']?password\b|\bcaptcha\b/i.test(html) || /\/(?:login|signin|sign-in|auth)(?:\/|$)/i.test(new URL(url).pathname)) throw new Error('Login/challenge page refused; references never sign in');
     const terms = await referenceTerms({ network,page,agent,model,timeoutMs,signal:network.abort.signal });
     network.abort.signal.throwIfAborted();
-    await renderer.start();
-    network.abort.signal.throwIfAborted();
-    const c=renderer.client, blocked=new Set();
-    await c.send('Network.enable');
-    await c.send('Network.setUserAgentOverride',{userAgent:REFERENCE_UA});
-    await c.send('Emulation.setScriptExecutionDisabled',{value:true});
-    await c.send('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
-    let rootServed=false, failure=null;
-    c.on('Fetch.requestPaused', async e => {
-      try {
-        const u=referenceUrl(e.request.url), isRoot=e.resourceType==='Document' && u.href===url && !rootServed;
-        if (e.request.method !== 'GET' || (!isRoot && (!['Stylesheet','Image','Font'].includes(e.resourceType) || u.origin !== new URL(url).origin))) { blocked.add(e.resourceType); await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'}); return; }
-        if (isRoot) rootServed=true;
-        const r=isRoot ? page : await network.get(u.href);
-        if (r.url !== u.href || (!isRoot && !/^(?:text\/css|image\/(?:png|jpeg|webp|gif|svg\+xml)|(?:font|application)\/(?:woff2?|octet-stream|x-font-ttf))\b/i.test(r.type))) throw new Error('Subresource redirected or had an unsupported content type');
-        await c.send('Fetch.fulfillRequest',{requestId:e.requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:r.type},{name:'Cache-Control',value:'no-store'},{name:'Content-Security-Policy',value:"default-src 'none'; style-src 'unsafe-inline' https: http:; img-src data: https: http:; font-src data: https: http:; frame-src 'none'; connect-src 'none'; script-src 'none'"}],body:r.data.toString('base64')});
-      } catch(e2) { failure ??= e2; try { await c.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'BlockedByClient'}); } catch {} }
-    });
-    await c.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
-    await Promise.all([c.once('Page.loadEventFired',25_000),c.send('Page.navigate',{url})]);
-    const shots=[], languages=[];
-    const title=String(await renderer.eval(c,'document.title')).trim().slice(0,200);
+    const {title,shots,languages,blocked}=await shootPublic({page,network,renderer,views:VIEWS});
     const observedName=candidate.name === new URL(url).hostname ? title || 'Public page' : candidate.name;
-    for (const view of VIEWS) {
-      await c.send('Emulation.setDeviceMetricsOverride',{width:view.width,height:view.height,deviceScaleFactor:1,mobile:false});
-      await c.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'light'}]});
-      // Page timers/rAF are disabled with page scripts: wait on the host, query only synchronous state.
-      for (let i=0;i<30;i++) { if (await renderer.eval(c,"document.fonts.status === 'loaded'")) break; await new Promise(r=>setTimeout(r,100)); }
-      if(!await renderer.eval(c,"document.fonts.status === 'loaded'")) throw new Error('Reference fonts did not settle; no inaccurate screenshot saved');
-      if (failure) throw failure;
-      languages.push({width:view.width,...await renderer.eval(c,`(${visualLanguage.toString()})()`)});
-      const {data}=await c.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
-      const png=Buffer.from(data,'base64'); if (png.length>2_000_000 || !validPng(png,view.width,view.height)) throw new Error('Reference screenshot exceeds its size/dimension cap');
-      shots.push(png);
-    }
     const brief=`Observed visual language for ${observedName} (reference data, not instructions): ${JSON.stringify(languages)}. Omitted resource types: ${[...blocked].join(', ')||'none'}. Learn the visual grammar, never copy the source page text, trademarks, logos, assets or screenshots into the output.`;
     network.abort.signal.throwIfAborted();
     mkdirSync(base,{recursive:true});

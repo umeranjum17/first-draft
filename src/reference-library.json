@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "policy": "Pixels are captured only where a licence explicitly permits it, on the user's machine by `first-draft-axi refs pull`, into a local cache; this package ships the list, never third-party screenshots. Every other product is kept as written notes and a link.",
+  "entries": [
+    {
+      "id": "supabase-home", "kind": "landing", "name": "Supabase", "url": "https://supabase.com/",
+      "permission": { "licence": "Apache-2.0", "url": "https://raw.githubusercontent.com/supabase/supabase/master/LICENSE", "quote": "Apache License Version 2.0, January 2004",
+        "basis": "The site's source (apps/www) is in this repository under this licence. Its terms (supabase.com/terms, read 2026-10-24) name no restriction on automated access or screenshots." },
+      "assets": ["https://frontend-assets.supabase.com"], "themes": { "dark": {} },
+      "notes": "Developer platform landing: a short benefit headline, two clear actions, the real product (dashboard, code) shown early, customer logos, dense but calm dark surfaces with one green accent."
+    },
+    {
+      "id": "starlight-home", "kind": "landing", "name": "Starlight", "url": "https://starlight.astro.build/",
+      "permission": { "licence": "MIT", "url": "https://raw.githubusercontent.com/withastro/starlight/main/LICENSE", "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "basis": "The site is the docs folder of this repository under this licence." },
+      "themes": { "light": { "data-theme": "light" }, "dark": { "data-theme": "dark" } },
+      "notes": "Open-source product landing: one headline and one-line promise, a primary and a secondary action, a hero illustration, then a plain feature grid."
+    },
+    {
+      "id": "shadcn-dashboard", "kind": "dashboard", "name": "shadcn/ui dashboard block", "url": "https://ui.shadcn.com/view/new-york-v4/dashboard-01",
+      "permission": { "licence": "MIT", "url": "https://raw.githubusercontent.com/shadcn-ui/ui/main/LICENSE.md", "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "basis": "The site (apps/v4) is in this repository under this licence." },
+      "themes": { "light": {}, "dark": { "class": "dark" } },
+      "notes": "Admin dashboard: sidebar navigation, a row of four metric cards with trend, one large chart, a data table; neutral greys, one accent, 14 px type, tight 8 px rhythm."
+    },
+    {
+      "id": "shadcn-tasks", "kind": "app", "name": "shadcn/ui tasks example", "url": "https://ui.shadcn.com/examples/tasks", "from": ".theme-container",
+      "permission": { "licence": "MIT", "url": "https://raw.githubusercontent.com/shadcn-ui/ui/main/LICENSE.md", "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "basis": "The site (apps/v4) is in this repository under this licence." },
+      "themes": { "light": {} },
+      "notes": "App screen: a titled list with filters, status and priority badges, row actions and pagination; real-looking task data, no decoration."
+    },
+    {
+      "id": "starlight-docs", "kind": "docs", "name": "Starlight docs", "url": "https://starlight.astro.build/getting-started/",
+      "permission": { "licence": "MIT", "url": "https://raw.githubusercontent.com/withastro/starlight/main/LICENSE", "quote": "Permission is hereby granted, free of charge, to any person obtaining a copy",
+        "basis": "The site is the docs folder of this repository under this licence." },
+      "themes": { "light": { "data-theme": "light" }, "dark": { "data-theme": "dark" } },
+      "notes": "Docs page: left section nav, readable 65-character column, an on-this-page outline, code blocks with copy, clear heading steps."
+    },
+    {
+      "id": "govuk-design-system", "kind": "docs", "name": "GOV.UK Design System", "url": "https://design-system.service.gov.uk/",
+      "permission": { "licence": "OGL-3.0", "url": "https://design-system.service.gov.uk/", "quote": "Open Government Licence v3.0 , except where otherwise stated",
+        "basis": "The site's footer puts all its content under the Open Government Licence v3.0, which permits copying and publishing." },
+      "themes": { "light": {} },
+      "notes": "Plain-language docs: large confident headings, one blue link colour, generous spacing, no decoration, everything readable at 390."
+    },
+    { "id": "linear", "kind": "landing", "name": "Linear", "url": "https://linear.app/", "notes": "Dark, precise product landing: a short exact headline, the real app screen as the hero, thin 1 px borders, restrained gradient light, Inter-like type with tight tracking, and an app UI dense with real issue data." },
+    { "id": "stripe", "kind": "landing", "name": "Stripe", "url": "https://stripe.com/", "notes": "Confident landing: one bold headline over a signature gradient, customer logos and real numbers as proof, product screens in device frames; its docs pair prose with live code in two columns." },
+    { "id": "vercel", "kind": "landing", "name": "Vercel", "url": "https://vercel.com/", "notes": "Black and white with one accent, Geist type, a grid of 1 px lines, the product (deploys, previews) shown as UI; its dashboard is a quiet list of projects with status dots." },
+    { "id": "raycast", "kind": "landing", "name": "Raycast", "url": "https://www.raycast.com/", "notes": "Dark, glossy but focused: the command bar itself is the hero, keyboard shortcuts as visual motif, one red accent, crisp product shots." },
+    { "id": "arc", "kind": "landing", "name": "Arc", "url": "https://arc.net/", "notes": "Warm, playful product landing: a big friendly headline, hand-made colour, the browser shown in use, very short copy." },
+    { "id": "posthog", "kind": "landing", "name": "PostHog", "url": "https://posthog.com/", "why": "its site licence asks others not to copy or use the website", "notes": "A deliberately distinctive, desktop-like site with hand-drawn characters and dense real product screens." },
+    { "id": "notion", "kind": "notes", "name": "Notion", "url": "https://www.notion.com/", "notes": "Notes app: a quiet sidebar of pages, a wide calm editor with a big page title, icons and covers as the only colour, black on white, generous line height." },
+    { "id": "bear", "kind": "notes", "name": "Bear", "url": "https://bear.app/", "notes": "Notes app: three panes (tags, note list with previews, editor), one red accent, a serif-free writing face at a comfortable measure, Markdown made pretty." },
+    { "id": "things", "kind": "notes", "name": "Things", "url": "https://culturedcode.com/things/", "notes": "Productivity app: lots of white, one blue, a small set of clear list views (Today, Upcoming), checkboxes and quiet detail; delight comes from restraint." },
+    { "id": "craft", "kind": "notes", "name": "Craft", "url": "https://www.craft.do/", "notes": "Documents app: card-like blocks, soft colour, large type, page previews; feels like a designed document rather than a form." }
+  ]
+}

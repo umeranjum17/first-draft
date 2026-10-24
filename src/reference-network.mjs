@@ -16,9 +16,10 @@ const fixtureOrigin = () => {
   if (u.protocol !== 'http:' || u.hostname !== '127.0.0.1' || !u.port || u.pathname !== '/' || u.search || u.hash || u.username || u.password) throw new Error('FIRST_DRAFT_TEST_REF_ORIGIN must name one exact loopback HTTP fixture origin');
   return u.origin;
 };
-export function referenceUrl(value) {
+// A query string is refused unless `queries` allows it (the library's same-origin images and styles, e.g. /_next/image?url=...).
+export function referenceUrl(value, queries = false) {
   const u = new URL(value);
-  if ((u.protocol !== 'https:' && u.origin !== fixtureOrigin()) || u.username || u.password || u.search || (u.port && u.port !== '443' && u.origin !== fixtureOrigin())) throw new Error('Reference candidates need a public HTTPS URL without credentials, query strings or a custom port');
+  if ((u.protocol !== 'https:' && u.origin !== fixtureOrigin()) || u.username || u.password || (u.search && !queries) || (u.port && u.port !== '443' && u.origin !== fixtureOrigin())) throw new Error('Reference candidates need a public HTTPS URL without credentials, query strings or a custom port');
   u.hash = '';
   return u;
 }
@@ -55,12 +56,13 @@ function robotsAllows(text, url) {
 }
 
 export class ReferenceNetwork {
-  constructor() { this.count = 0; this.bytes = 0; this.robots = new Map(); this.last = new Map(); this.queue = Promise.resolve(); this.abort = new AbortController(); this.sources = []; }
+  // Caps: `requests` GETs and `bytes` in all; `queries` lets subresource URLs carry a query string.
+  constructor({ requests = 32, bytes = 8_000_000, queries = false } = {}) { this.cap = { requests, bytes }; this.queries = queries; this.count = 0; this.bytes = 0; this.robots = new Map(); this.last = new Map(); this.queue = Promise.resolve(); this.abort = new AbortController(); this.sources = []; }
   close() { this.abort.abort(); }
   async raw(url, limit) {
     this.abort.signal.throwIfAborted();
-    if (++this.count > 32) throw new Error('Reference request cap exceeded (32)');
-    const u = referenceUrl(url), fixture = u.origin === fixtureOrigin();
+    if (++this.count > this.cap.requests) throw new Error(`Reference request cap exceeded (${this.cap.requests})`);
+    const u = referenceUrl(url, this.queries), fixture = u.origin === fixtureOrigin();
     const addresses = fixture ? [{ address: '127.0.0.1', family: 4 }] : isIP(u.hostname.replace(/^\[|\]$/g,'')) ? [{ address: u.hostname.replace(/^\[|\]$/g,''), family: isIP(u.hostname.replace(/^\[|\]$/g,'')) }] : await lookup(u.hostname, { all: true });
     if (!addresses.length || (!fixture && addresses.some(a => !publicIP(a.address)))) throw new Error(`Reference host is not entirely public: ${u.hostname}`);
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]);
@@ -68,7 +70,7 @@ export class ReferenceNetwork {
       const pinned = addresses[0];
       const req = (fixture ? httpRequest : httpsRequest)(u, { signal, method: 'GET', agent: false, headers: { 'user-agent': REFERENCE_UA, accept: '*/*', 'accept-encoding': 'identity' }, lookup: (_host, options, cb) => cb(null, options.all ? [pinned] : pinned.address, pinned.family) }, res => {
         let size = 0; const chunks = [];
-        res.on('data', chunk => { size += chunk.length; this.bytes += chunk.length; if (size > limit || this.bytes > 8_000_000) res.destroy(new Error('Reference byte cap exceeded (2 MB per resource, 8 MB total)')); else chunks.push(chunk); });
+        res.on('data', chunk => { size += chunk.length; this.bytes += chunk.length; if (size > limit || this.bytes > this.cap.bytes) res.destroy(new Error(`Reference byte cap exceeded (2 MB per resource, ${this.cap.bytes / 1e6} MB total)`)); else chunks.push(chunk); });
         res.on('error', no);
         res.on('end', () => ok({ url: u.href, status: res.statusCode, type: String(res.headers['content-type'] ?? ''), location: res.headers.location, data: Buffer.concat(chunks), headers: res.headers }));
       });
@@ -76,7 +78,7 @@ export class ReferenceNetwork {
     });
   }
   async allowed(url) {
-    const u = referenceUrl(url);
+    const u = referenceUrl(url, this.queries);
     if (!this.robots.has(u.origin)) this.robots.set(u.origin, (async () => {
       const r = await this.raw(`${u.origin}/robots.txt`, 64_000);
       if (r.status === 404) return '';
@@ -95,7 +97,7 @@ export class ReferenceNetwork {
     return run.then(async r => {
       if ([301,302,303,307,308].includes(r.status)) {
         if (redirects >= 3 || !r.location) throw new Error('Reference redirect limit exceeded');
-        const target=referenceUrl(new URL(r.location,r.url).href);
+        const target=referenceUrl(new URL(r.location,r.url).href, this.queries);
         if(target.origin !== new URL(r.url).origin) throw new Error('Reference redirect left the source site; capture refused');
         return this.get(target.href, redirects + 1);
       }

@@ -8,6 +8,8 @@ import { parseArgs } from 'node:util';
 import { doctor as routeDoctor, imageSupport, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
 import { referenceDoctor, referenceFlags, referenceHelp, references } from './references.mjs';
 import { discoverReference, discoveryHelp, explicitReferenceUrl } from './reference-discovery.mjs';
+import { KINDS, libraryCache, pullLibrary, readLibrary } from './reference-library.mjs';
+import { judgeRouteProblem } from './judge.mjs';
 import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { planDirections } from './direct.mjs';
@@ -36,18 +38,18 @@ const read = () => {
     const c = JSON.parse(readFileSync(CONFIG(), 'utf8'));
     const t = c.agent_timeout ?? '10m';
     const timeout = /^\d+[smh]$/.test(t) ? t : '10m';
-    return { agent: c.agent, model: c.agent && c.agent_config?.[c.agent]?.model, timeoutMs: Number(timeout.slice(0, -1)) * { s: 1e3, m: 6e4, h: 36e5 }[timeout.slice(-1)] };
+    return { agent: c.agent, model: c.agent && c.agent_config?.[c.agent]?.model, ...(c.judge && { judge: c.judge }), timeoutMs: Number(timeout.slice(0, -1)) * { s: 1e3, m: 6e4, h: 36e5 }[timeout.slice(-1)] };
   } catch (e) {
     if (e.code === 'ENOENT') return {};
     throw e;
   }
 };
-const save = ({ agent, model }) => {
+const save = ({ agent, model, judge }) => {
   let c = {};
   try { c = JSON.parse(readFileSync(CONFIG(), 'utf8')); } catch (e) {
     if (e.code !== 'ENOENT') throw e;
   }
-  c = { ...c, agent, agent_config: { ...c.agent_config, [agent]: { model } } };
+  c = { ...c, agent, agent_config: { ...c.agent_config, [agent]: { model } }, ...(judge && { judge }) };
   mkdirSync(HOME(), { recursive: true });
   writeFileSync(CONFIG(), `${JSON.stringify(c, null, 2)}\n`);
 };
@@ -131,7 +133,7 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
 
 const HELP = `first-draft-axi ${VERSION}
 usage: first-draft-axi <command> [flags]
-commands[11]:
+commands[12]:
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
@@ -170,7 +172,24 @@ const [command, ...rest] = process.argv.slice(2);
 if (!command || command === '--help' || command === '-h' || rest.includes('--help') || rest.includes('-h')) { console.log(HELP); process.exit(0); }
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
-if (command === 'references') {
+if (command === 'refs') {
+  const [action, ...more] = rest;
+  const { values } = flags(more, { kind: { type: 'string' }, library: { type: 'string' } });
+  if (!['pull', 'list'].includes(action) || (values.kind && !KINDS.includes(values.kind)) || (action === 'list' && values.kind)) fail('USAGE', `refs pull [--kind ${KINDS.join('|')}] [--library <file.json>] or refs list`, ['Run `first-draft-axi refs pull`']);
+  try {
+    if (action === 'list') {
+      let here = [];
+      try { here = JSON.parse(readFileSync(join(libraryCache(HOME()), 'library.json'), 'utf8')).entries; } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      const lib = readLibrary(values.library && resolve(values.library));
+      console.log(JSON.stringify({ refs: lib.entries.map((e) => { const h = here.find((r) => r.id === e.id); return { id: e.id, kind: e.kind, name: e.name, url: e.url, capture: e.permission ? `permitted (${e.permission.licence})` : 'notes and link only', here: h?.captured ? `captured ${h.captured_at}` : h ? h.why : 'not pulled' }; }), policy: lib.policy, help: ['Run `first-draft-axi refs pull` to capture the permitted ones on this machine'] }));
+    } else {
+      const pulled = await pullLibrary({ home: HOME(), library: values.library, kind: values.kind });
+      console.log(JSON.stringify({ refs_pulled: { cache: pulled.cache, captured: pulled.entries.filter((e) => e.captured).map((e) => ({ id: e.id, kind: e.kind, name: e.name, licence: e.licence.licence, shots: e.shots.length })),
+        not_captured: pulled.entries.filter((e) => !e.captured).map((e) => ({ id: e.id, kind: e.kind, name: e.name, url: e.url, why: e.why })) },
+        help: ['The critic\'s independent judge now compares each make option with the captured products of its kind', 'The not-captured products are kept as notes and links; the judge reads the notes as words only'] }));
+    }
+  } catch (e) { fail('REFS_FAILED', e.message, ['Run `first-draft-axi refs list`']); }
+} else if (command === 'references') {
   const { values, positionals } = flags(rest, { like: { type: 'string' }, capture: { type: 'boolean' }, project: { type: 'string' } });
   const prompt = positionals.join(' ').trim();
   if ((!prompt && values.like === undefined) || values.like?.trim() === '') fail('USAGE', 'references needs a prompt or --like <brand-or-https-url>', [discoveryHelp]);
@@ -274,7 +293,7 @@ if (command === 'references') {
   // make's critic: every option scored against real products and a plain page of the same brief (kept in <out>.critic/, outside the
   // options the view lists), and revised under PASS (critic.mjs).
   const critic = logo || redesign ? null : values['no-critic'] ? { off: '--no-critic: no option was scored' }
-    : await openCritic({ c, brief: prompt, references: refs.images, plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
+    : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.judge, plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
   for (let i = 0; i < count; i++) {
     const numbered = numberedOf(files.length + 1);
     let made, written, option;
