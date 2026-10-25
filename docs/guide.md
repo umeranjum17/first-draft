@@ -58,7 +58,7 @@ The helper answers with an account folder — a path, never a credential — and
 
 ## Generated assets
 
-Opt-in pictures, illustrations, icons, hero visuals and backgrounds are placed **inside the draft screens**, not on a separate asset sheet. With `--assets`, the design agent gets the engine's own `generate_image_asset` tool and decides which pictures the design needs and which approved provider makes each one, at most 3 per option. No asset calls happen by default (`--no-assets` makes that explicit).
+Opt-in pictures, illustrations, icons, hero visuals and backgrounds are placed **inside the draft screens**, not on a separate asset sheet. With `--assets`, the design agent gets the engine's own `generate_image_asset` tool and decides which pictures the design needs and which approved provider makes each one, at most 3 per option, and (with Higgsfield) makes one short looping hero video from the still it puts in the hero. No asset calls happen by default (`--no-assets` makes that explicit).
 
 ```sh
 first-draft-axi assets  # detect installed, signed-in providers; no generation
@@ -67,13 +67,28 @@ first-draft-axi make "Umer's plant shop with a photo of the shop window and a le
 first-draft-axi make "Umer's plant shop with a photo of the shop window and a leaf illustration" --out shop.html --assets codex,higgsfield --allow-asset-spend
 ```
 
-`--assets codex|higgsfield|codex,higgsfield|auto` alone previews each provider's per-image cost and the image ceiling, and exits **before any design or image generation**. `auto` offers every ready provider. With `--allow-asset-spend`, the preview is printed to stderr before generation. The make JSON lists each option's `images`: the provider, purpose and prompt the agent chose. Design-model charges are separate and unchanged. Asset generation is refused in CI even with approval; tests use stand-ins only. `redesign` does not generate images.
+`--assets codex|higgsfield|codex,higgsfield|auto` alone previews each provider's per-image cost, the image ceiling and — when Higgsfield is approved — the per-video cost and the video ceiling, then exits **before any design or image generation**. `auto` offers every ready provider. With `--allow-asset-spend`, the preview is printed to stderr before generation. The make JSON lists each option's `images` (the provider, purpose and prompt the agent chose) and its `videos`. Design-model charges are separate and unchanged. Asset generation is refused in CI even with approval; tests use stand-ins only. `redesign` does not generate images.
 
 - **Codex:** installed CLI with `codex login` (ChatGPT subscription), launched with its BYOKit installed-account path, never copied credentials. Uses native `image_generation` through `codex exec`, GPT-6 Luna, low effort, one image per call at the lowest quality; shell tools are disabled. The native tool keeps its image in Codex's own image cache, so the adapter imports the newest PNG under this invocation's thread ID only; it never follows a model-suggested file path or reads login files. Codex provides **no price API**: the preview says unknown subscription quota/overage, never “free”. Approval explicitly accepts that uncertainty; exact image dimensions/quality are controlled by Codex's native tool.
 - **Higgsfield:** installed CLI with `higgsfield auth login`; uses Z Image at the aspect ratio the agent asks for, with the provider's live credit estimate. Your existing account pays; no keys are stored by First Draft. If a mise shim reports no runtime, run `mise exec node@26.1.0 -- first-draft-axi …` with your installed Node version.
 - **Optimization:** requires ImageMagick 7 (`magick`) on PATH, checked before spending. Each image is stripped of metadata, resized to at most 1024×1024 and encoded as WebP at quality 80 (800 KB maximum). Files live beside the output in `<name>.assets-*/image.webp`; HTML embeds them as data URIs, so viewing, copying and posting remain offline. `done` fails while a generated image is not shown in the design. `refine` keeps embedded images but does not generate new ones.
 
 The adapter contract is `detect()`, `estimate() → {amount,unit,detail}` for one image, `use` (what the provider is good at, shown to the agent) and `generate({prompt,aspectRatio,dir}) → local raster path` in `src/assets.mjs`. New providers use that same boundary; the host handles approval, image budget, optimization and embedding. No account switching or host retries; the agent may ask again within the budget. A failed design can leave a paid asset on disk; the error is reported, not silently retried.
+
+### Hero video
+
+With Higgsfield approved, the still the design put in its hero also becomes a **short silent loop** — the pattern real product pages use: a generated hero image, a few seconds of motion from it, the page built around the file. One video per option, under the same `--allow-asset-spend` approval, the same preview and the same CI refusal; the still is only read, never regenerated.
+
+```sh
+first-draft-axi make "Umer's plant shop with a photo of the shop window at golden hour" --out shop.html --assets codex,higgsfield            # preview: image and video cost
+first-draft-axi make "Umer's plant shop with a photo of the shop window at golden hour" --out shop.html --assets codex,higgsfield --allow-asset-spend
+```
+
+- **Model and price:** Seedance 2.0 Mini, 5 s, 720p, no audio — the cheapest start-image model on the account's estimate (5 credits for one loop at the time of writing; the preview prints the live figure). Short and silent keeps the page fast and the loop small.
+- **Seamless by construction:** the still is passed as both the start and the end image, and the prompt asks for motion that returns to the opening frame, so the loop does not cut. The prompt keeps the still's own subject line; the provider's style line is dropped.
+- **Where it lands:** `<name>.assets-*/hero-loop.mp4` beside the still, encoded with FFmpeg (device width at most 1280, no audio, faststart) and embedded in the HTML as a `data:video/mp4` URI, so the page still loads nothing from the network. FFmpeg is checked before the paid call.
+- **How the page uses it:** the host replaces that one hero `<img>` with `<video autoplay muted loop playsinline poster="…">` plus the still beside it, and adds a `prefers-reduced-motion` rule that hides the video and shows the still. A reader with reduced motion sees the picture; everyone else sees the loop.
+- **What the checks allow:** `done`'s clarity rule still fails a video that autoplays on its own, except the hero loop first-draft made and a recording the project supplied. The host generates the loop after the design passes, so the design agent never handles video files.
 
 ## Logos
 

@@ -64,6 +64,21 @@ test('a clear page passes every host check and each check refuses its own failur
   }
 });
 
+// A video that moves on its own is flash, except the two first-draft itself allows: the hero loop it makes from the design's own hero
+// image, and a recording the project supplied. The still of a hero loop is what a reader with reduced motion gets (assets.mjs).
+test('only the generated hero loop and a project recording may autoplay', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const check = checker(t);
+  const loop = '<video data-hero-loop autoplay muted loop playsinline poster="data:image/webp;base64,AA"><source src="data:video/mp4;base64,AA" type="video/mp4"></video>';
+  const recording = '<video autoplay muted loop playsinline src="data:video/mp4;base64,AA"></video>';
+  const stray = '<video autoplay muted loop playsinline src="https://example.invalid/loop.mp4"></video>';
+  assert.deepEqual(await check(page({ figure: false, extra: loop })), { status: 'checked', errors: [] });
+  assert.deepEqual(await check(page({ figure: false, extra: recording })), { status: 'checked', errors: [] });
+  const { errors } = await check(page({ figure: false, extra: stray }));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /a video autoplays that first-draft did not make/);
+});
+
 test('a flashy page fails the checks; a loud brief keeps the structure and drops colour and motion', async (t) => {
   if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
   const clear = (await checker(t)(FLASHY)).errors.join('\n');

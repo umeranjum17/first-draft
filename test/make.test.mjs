@@ -1,11 +1,11 @@
 // The whole make journey on the built CLI: config, BYOKit's opencode-go plan key route
 // against a local stand-in for the provider, and the mock files. No paid call is made.
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { findBrowser } from '../src/render-check.mjs';
@@ -739,18 +739,26 @@ test('asset CLI previews without spending, then the design agent generates image
   const script = `#!${process.execPath}\nimport {appendFileSync,mkdirSync,writeFileSync} from 'node:fs'; import {join,basename} from 'node:path';
     const args=process.argv.slice(2), name=basename(process.argv[1]);
     appendFileSync(${JSON.stringify(log)},JSON.stringify([name,...args])+'\\n');
-    if(name==='magick'){if(args[0]!=='-version')writeFileSync(args.at(-1),Buffer.from('${webp}','base64'));}
-    else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});const thread='01a16724-50d5-76f1-af27-1ad159aec924',folder=join(process.env.HOME,'.codex/generated_images',thread);mkdirSync(folder,{recursive:true});for(const n of [0,1])writeFileSync(join(folder,'exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b040'+n+'.png'),Buffer.from('${webp}','base64'));console.log(JSON.stringify({type:'thread.started',thread_id:thread}));}else console.log('codex-cli 0.159.2');}
+    if(name==='magick'){if(args[0]!=='-version'){const {copyFileSync}=await import('node:fs');copyFileSync(args[0],args.at(-1));}}
+    else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});const thread='01a16724-50d5-76f1-af27-1ad159aec924',folder=join(process.env.HOME,'.codex/generated_images',thread);mkdirSync(folder,{recursive:true});for(const n of [0,1])writeFileSync(join(folder,'exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b040'+n+'.png'),Buffer.concat([Buffer.from('${webp}','base64'),Buffer.from([n])]));console.log(JSON.stringify({type:'thread.started',thread_id:thread}));}else console.log('codex-cli 0.159.2');}
     else if(args[0]==='account')console.log('{"credits":10}');
-    else if(args[1]==='cost')console.log('{"credits":0.15}');
+    else if(args[1]==='cost')console.log(args.includes('seedance_2_0_mini')?'{"credits":5}':'{"credits":0.15}');
+    else if(args.includes('seedance_2_0_mini'))console.log('[{"status":"completed","job_type":"seedance_2_0_mini","result_url":"https://fixture.invalid/asset.mp4"}]');
     else console.log('[{"status":"completed","job_type":"z_image","result_url":"https://fixture.invalid/asset.png"}]');`;
   for (const name of ['codex', 'higgsfield', 'magick']) writeFileSync(join(bin, name), script, { mode: 0o755 });
+  // The loop is really encoded by the machine's ffmpeg; only the paid providers are stand-ins, and they come first on PATH.
+  const ffmpeg = execFileSync('sh', ['-c', 'command -v ffmpeg'], { encoding: 'utf8' }).trim();
+  writeFileSync(join(bin, 'ffmpeg'), `#!${process.execPath}\nimport {appendFileSync} from 'node:fs'; import {spawnSync} from 'node:child_process';
+    appendFileSync(${JSON.stringify(log)}, JSON.stringify(['ffmpeg', ...process.argv.slice(2)])+'\\n');
+    process.exit(spawnSync(${JSON.stringify(ffmpeg)}, process.argv.slice(2), { stdio: 'inherit' }).status ?? 1);`, { mode: 0o755 });
   const hook = join(dir, 'fetch.mjs');
-  writeFileSync(hook, `const fetchReal=globalThis.fetch;globalThis.fetch=(url,options)=>url==='https://fixture.invalid/asset.png'?Promise.resolve(new Response(Buffer.from('${webp}','base64'))):fetchReal(url,options);`);
+  // A real, tiny 32x32 mp4, so the loop is encoded by the installed ffmpeg rather than faked.
+  const mp4 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAPsbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAABOIAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAxd0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAABOIAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAACAAAAAgAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAATiAAAIAAABAAAAAAKPbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAwAAAAPABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAACOm1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAfpzdGJsAAAAvnN0c2QAAAAAAAAAAQAAAK5hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAACAAIABIAAAASAAAAAAAAAABFExhdmM2My4xLjEwMSBsaWJ4MjY0AAAAAAAAAAAAAAAAGP//AAAANGF2Y0MBZAAK/+EAF2dkAAqs2UlsBEAAAAMAQAAABgPEiWWAAQAGaOvhEsiw/fj4AAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAABa5AAAAAAAAABhzdHRzAAAAAAAAAAEAAAAPAAAEAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAiGN0dHMAAAAAAAAADwAAAAEAAAgAAAAAAQAAFAAAAAABAAAIAAAAAAEAAAAAAAAAAQAABAAAAAABAAAUAAAAAAEAAAgAAAAAAQAAAAAAAAABAAAEAAAAAAEAABQAAAAAAQAACAAAAAABAAAAAAAAAAEAAAQAAAAAAQAADAAAAAABAAAEAAAAABxzdHNjAAAAAAAAAAEAAAABAAAADwAAAAEAAABQc3RzegAAAAAAAAAAAAAADwAAAs4AAAAMAAAADAAAAAwAAAAMAAAAEgAAAA4AAAAMAAAADAAAABIAAAAOAAAADAAAAAwAAAATAAAADAAAABRzdGNvAAAAAAAAAAEAAAQcAAAAYXVkdGEAAABZbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAsaWxzdAAAACSpdG9vAAAAHGRhdGEAAAABAAAAAExhdmY2My4xLjEwMQAAAAhmcmVlAAADlW1kYXQAAAKuBgX//6rcRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY1IHIzMjIyIGIzNTYwNWEgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDI1IC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MSByZWY9MyBkZWJsb2NrPTE6MDowIGFuYWx5c2U9MHgzOjB4MTEzIG1lPWhleCBzdWJtZT03IHBzeT0xIHBzeV9yZD0xLjAwOjAuMDAgbWl4ZWRfcmVmPTEgbWVfcmFuZ2U9MTYgY2hyb21hX21lPTEgdHJlbGxpcz0xIDh4OGRjdD0xIGNxbT0wIGRlYWR6b25lPTIxLDExIGZhc3RfcHNraXA9MSBjaHJvbWFfcXBfb2Zmc2V0PS0yIHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MTIgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTMwLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAYZYiEABD//tRp8yxqqaldx8umTJQWQz//AAAACEGaJGxBD/5OAAAACEGeQniG/3ZBAAAACAGeYXRDP31AAAAACAGeY2pDP31BAAAADkGaaEmoQWiZTAh///5PAAAACkGehkURLDf/dkEAAAAIAZ6ldEM/fUEAAAAIAZ6nakM/fUAAAAAOQZqsSahBbJlMCHf//iwAAAAKQZ7KRRUsN/92QQAAAAgBnul0Qz99QAAAAAgBnutqQz99QAAAAA9Bmu5JqEFsmUwUTDP//h0AAAAIAZ8NakM/fUE=';
+  writeFileSync(hook, `const fetchReal=globalThis.fetch;const file=new Map([['https://fixture.invalid/asset.png','${webp}'],['https://fixture.invalid/asset.mp4','${mp4}']]);globalThis.fetch=(url,options)=>file.has(url)?Promise.resolve(new Response(Buffer.from(file.get(url),'base64'))):fetchReal(url,options);`);
   // The model decides: one illustration from Codex, one photo from Higgsfield and one from a provider nobody approved (refused, no spend), then done on a page that shows both images.
   const generate = (provider, filenameHint, purpose) => ({ type: 'function_call', id: `fc-${provider}`, call_id: `c-${provider}`, name: 'generate_image_asset',
     arguments: JSON.stringify({ prompt: `${filenameHint} for Umer's botanical shop`, purpose, filenameHint, aspectRatio: '1:1', alt: filenameHint, provider }) });
-  const seen = [], server = await standIn(seen, null, true, 'index.html', `<!doctype html><html><body><h1>Umer's botanical shop</h1><img alt="Leaf illustration" src="assets/leaf-1.webp"><img alt="Shop photo" src="assets/shop-photo-2.webp"></body></html>`,
+  const seen = [], server = await standIn(seen, null, true, 'index.html', `<!doctype html><html><body><section data-section="hero"><h1>Umer's botanical shop</h1><img alt="Shop photo" src="assets/shop-photo-2.webp"></section><section><img alt="Leaf illustration" src="assets/leaf-1.webp"></section></body></html>`,
     null, [generate('codex', 'leaf', 'illustration'), generate('higgsfield', 'shop photo', 'hero'), generate('midjourney', 'banner', 'background')]);
   t.after(() => server.close());
   const env = { ...process.env, PATH: bin, CI: '', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
@@ -761,8 +769,9 @@ test('asset CLI previews without spending, then the design agent generates image
   const preview = JSON.parse((await run(...args)).stdout).asset_preview;
   assert.deepEqual(preview.providers.map((p) => [p.provider, p.amount]), [['codex', null], ['higgsfield', 0.15]]);
   assert.equal(preview.max_images, 3); assert.equal(preview.approved, false);
+  assert.deepEqual([preview.video.amount, preview.video.unit, preview.max_videos], [5, 'credits', 1], 'the preview names the per-video cost and the video ceiling');
   assert.equal(existsSync(out), false); assert.equal(seen.length, 0);
-  assert.doesNotMatch(readFileSync(log, 'utf8'), /"exec"|"create"/);
+  assert.doesNotMatch(readFileSync(log, 'utf8'), /"exec"|"create"/, 'the preview makes no image or video job');
   const made = JSON.parse((await run(...args, '--allow-asset-spend')).stdout).made.files[0];
   assert.deepEqual(made.images.map((i) => [i.provider, i.purpose, i.path]), [['codex', 'illustration', 'assets/leaf-1.webp'], ['higgsfield', 'hero', 'assets/shop-photo-2.webp']]);
   assert.deepEqual(made.images_refused.map((r) => r.provider), ['midjourney']); assert.match(made.images_refused[0].reason, /provider must be one of: codex, higgsfield/);
@@ -770,17 +779,36 @@ test('asset CLI previews without spending, then the design agent generates image
   assert.deepEqual(offered.parameters.properties.provider.enum, ['codex', 'higgsfield'], 'the model is offered exactly the approved providers');
   const html = readFileSync(out, 'utf8');
   assert.match(html, /<img alt="Leaf illustration" src="data:image\/webp;base64,/);
-  assert.match(html, /<img alt="Shop photo" src="data:image\/webp;base64,/);
+  assert.match(html, /<img data-hero-loop-still[^>]*data:image\/webp;base64,[^>]*alt="Shop photo"/, 'the hero still is kept as the loop\'s fallback');
   assert.doesNotMatch(html, /src="(?:\/|assets\/)/);
   assert.match(readFileSync(log, 'utf8'), /"-strip","-resize","1024x1024>","-quality","80"/);
+  // The still the design placed in its hero becomes one looping hero video beside the page, and the page plays it with the still as poster and fallback.
+  assert.deepEqual(made.videos.map((v) => [v.provider, v.model, v.path, v.still, v.credits]), [['higgsfield', 'seedance_2_0_mini', 'assets/shop-photo-loop.mp4', 'assets/shop-photo-2.webp', 5]]);
+  assert.ok(existsSync(made.videos[0].file), 'the loop file lands beside the page in the same assets folder as the still');
+  assert.equal(dirname(made.videos[0].file), dirname(made.images[1].file));
+  assert.ok(statSync(made.videos[0].file).size > 0);
+  assert.match(html, /<video data-hero-loop autoplay muted loop playsinline poster="data:image\/webp;base64,[^"]+"[^>]*><source src="data:video\/mp4;base64,/);
+  assert.equal((html.match(/<img data-hero-loop-still/g) ?? []).length, 1, 'one still image stands in for the loop when motion is reduced');
+  assert.doesNotMatch(html.match(/<img data-hero-loop-still[^>]*>/)[0], /display:/, 'the still never carries an inline display, which would outrank the reduced-motion rule');
+  assert.match(html, /prefers-reduced-motion:reduce/, 'reduced motion shows the still, never the loop');
+  assert.match(html, /<img alt="Leaf illustration" src="data:image\/webp;base64,/, 'the other generated image is left as a still');
   assert.equal(readdirSync(dir).filter((p) => p.startsWith('shop.assets-')).length, 2);
   assert.ok(existsSync(join(dir, '.codex/generated_images/01a16724-50d5-76f1-af27-1ad159aec924/exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b0401.png')), 'import never deletes the native CLI image');
   const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(calls.filter(([name, action]) => name === 'codex' && action === 'exec').length, 1);
-  assert.equal(calls.filter(([name, action, verb]) => name === 'higgsfield' && action === 'generate' && verb === 'create').length, 1);
+  assert.equal(calls.filter(([name, action, verb]) => name === 'higgsfield' && action === 'generate' && verb === 'create').length, 2, 'one image and one hero video, never a second video');
+  const video = calls.find((call) => call[0] === 'higgsfield' && call[2] === 'create' && call.includes('seedance_2_0_mini'));
+  assert.deepEqual([video[video.indexOf('--duration') + 1], video[video.indexOf('--resolution') + 1], video[video.indexOf('--aspect_ratio') + 1]], ['5', '720p', '16:9']);
+  assert.equal(video[video.indexOf('--start-image') + 1], video[video.indexOf('--end-image') + 1], 'the same still starts and ends the loop');
+  assert.match(video[video.indexOf('--prompt') + 1], /^A seamless looping hero shot of: shop photo for Umer's botanical shop\. Gentle continuous motion/, 'the loop prompt keeps the still\'s subject and asks for a loop');
+  assert.ok(calls.some(([name]) => name === 'ffmpeg'), 'the loop is encoded to a page-sized mp4');
+  assert.doesNotMatch(readFileSync(log, 'utf8'), /asset\.mp4/, 'the downloaded video is not kept');
   await run('make', 'Shop without generation', '--out', join(dir, 'disabled.html'), '--no-assets');
   assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, calls.length);
-  assert.deepEqual(JSON.parse((await run('make', 'Shop', '--out', join(dir, 'auto.html'), '--assets', 'auto')).stdout).asset_preview.providers.map((p) => p.provider), ['higgsfield', 'codex'], 'auto offers every ready provider');
+  const auto = JSON.parse((await run('make', 'Shop', '--out', join(dir, 'auto.html'), '--assets', 'auto')).stdout).asset_preview;
+  assert.deepEqual(auto.providers.map((p) => p.provider), ['higgsfield', 'codex'], 'auto offers every ready provider');
+  const codexOnly = JSON.parse((await run('make', 'Shop', '--out', join(dir, 'codex-only.html'), '--assets', 'codex')).stdout).asset_preview;
+  assert.equal(codexOnly.video, undefined, 'no video is quoted when the approved providers cannot make one');
   await assert.rejects(run('redesign', 'https://example.com', 'Shop', '--out', join(dir, 'redesign'), '--assets', 'codex'), (e) => /redesign does not generate images/.test(e.stdout));
   await assert.rejects(run('make', 'Shop', '--out', join(dir, 'bad.html'), '--no-assets', '--assets', 'codex'), (e) => /conflicts/.test(e.stdout));
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'make', 'Shop', '--out', join(dir, 'ci.html'), '--assets', 'higgsfield', '--allow-asset-spend'], { env: { ...env, CI: 'true' } }), (e) => /disabled in CI/.test(e.stdout));
