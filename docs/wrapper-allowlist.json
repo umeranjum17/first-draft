@@ -55,6 +55,18 @@
     ]
   },
   {
+    "id": "flow-shell",
+    "source": "contract",
+    "kind": "quality",
+    "what": "A multi-screen flow brief keeps one shell and one grid on every screen (header with back and Skip, one title position, progress dots, round next button), one idea and one decision per screen.",
+    "sha256": "4b0b2fd9f109776f",
+    "verdict": "provisional",
+    "note": "The flow gap the owner named from the mellow onboarding reference (25 Oct 2026): first-draft drew the screens but let each one invent its own layout, so the six never read as one flow. Stated in the contract; the critic also scores flow.shell and flow.character in its one review. No paired comparison yet.",
+    "decided_by": "onboarding-flow lane, 2026-10-26",
+    "needed": "A flow brief drawn with and without this sentence, both scored by a reviewer beside the same reference, on at least two flows.",
+    "evidence": []
+  },
+  {
     "id": "one-accent",
     "source": "contract",
     "kind": "quality",
@@ -206,6 +218,27 @@
     "sha256": "63d1c2d956a51103",
     "verdict": "accepted",
     "reason": "Without Chrome the page cannot be drawn, so script would not run in the exported document."
+  },
+  {
+    "id": "critic-flow-check",
+    "source": "step",
+    "kind": "measure",
+    "what": "In the same single review of a flow, the critic also scores flow.shell (one shell and one grid across the screens) and flow.character (one character in one drawing style on every screen), and either under the pass mark fails the option.",
+    "verdict": "provisional",
+    "reason": "Part of the one review call, so no extra call: it adds the reason a flow cannot pass while its screens or its mascot change from screen to screen.",
+    "decided_by": "onboarding-flow lane, 2026-10-26",
+    "needed": "The judge's flow scores against a reviewer's on retained flows."
+  },
+  {
+    "id": "character-sheet-chain",
+    "source": "step",
+    "kind": "quality",
+    "what": "With --assets in a flow, the design agent draws the character's style sheet first and the host draws every later image of that option from it as an attached reference (Codex image generation), so one character stays the same across screens.",
+    "verdict": "provisional",
+    "calls": {"per": "option", "max": 1},
+    "note": "One style-sheet image per option instead of one more independent scene; the rest of the option's images are unchanged in count. No paired comparison yet.",
+    "decided_by": "onboarding-flow lane, 2026-10-26",
+    "needed": "A flow drawn with the sheet chained and with each scene independent, scored by a reviewer for character consistency."
   },
   {
     "id": "direction-plan",

@@ -45,7 +45,7 @@ Key routes read the environment variable named by `doctor`; keys are never saved
 
 ## Generated assets
 
-Opt-in pictures, illustrations, icons, hero visuals and backgrounds are placed **inside the draft screens**, not on a separate asset sheet. With `--assets`, the design agent gets the engine's own `generate_image_asset` tool and decides which pictures the design needs and which approved provider makes each one, at most 3 per option. No asset calls happen by default (`--no-assets` makes that explicit).
+Opt-in pictures, illustrations, icons, hero visuals and backgrounds are placed **inside the draft screens**, not on a separate asset sheet. With `--assets`, the design agent gets the engine's own `generate_image_asset` tool and decides which pictures the design needs and which approved provider makes each one, at most 3 per option (a multi-screen flow: one character style sheet plus one picture per screen). No asset calls happen by default (`--no-assets` makes that explicit).
 
 ```sh
 first-draft-axi assets  # detect installed, signed-in providers; no generation
@@ -98,6 +98,19 @@ Chrome/Chromium captures the first viewport at **390×844 and 1280×800**. Fetch
 References are cached for 24 hours in the current project's `.first-draft/refs/<host-and-url-hash>/`, with immutable phone/desktop images and `sources.json` recording source URLs, fetch times, permission note, hashes and observed visual language (type, spacing, colour, layout, CSS motion). `--project <folder>` changes the cache's project root. The images reuse the existing native `--ref` input path; neither screenshot pixels nor source assets/text are copied into the generated HTML. Two source captures share the six-image / 10 MB model-input budget with local `--ref` images.
 
 The viewer shows the captures, Source/Permission links and visual-language notes **beside each option**. A portable `<option>.html.refs.json` sidecar keeps references available offline and through refinement/posting; keep it beside its HTML file. `--no-references` disables automatic online gathering without disabling local `--ref <local.png|jpg|webp>`. Generic follow-up changes keep the option's captured references. A failure is reported, never silently replaced with an invented brand style.
+
+## Multi-screen flows
+
+A brief that asks for a flow of three or more screens (onboarding, sign-up, a wizard, a checkout: it names the screens, or says "N screens") is drawn as **one journey, not N pages**. Every screen keeps one shell and one grid — a header row at the same height with a back control and Skip, the title at the same position, size and measure, the progress dots, and the round next button in the same corner — so only the content between them changes; each screen carries one idea and one decision, and the flow is one file whose screens are `data-oc-screen` sections in order. The sentence is part of the page contract, so it is held to the same bar as every other wrapper addition (`docs/wrapper-allowlist.json`).
+
+```sh
+first-draft-axi make "mobile onboarding flow, 6 screens, mindfulness app called mellow" --out flow.html --options 1 --ref /path/to/reference.jpg
+first-draft-axi make "…" --out flow.html --assets codex   # preview, then --allow-asset-spend
+```
+
+The critic scores `flow.shell` (one shell and one grid across the screens) and `flow.character` (one character, in one drawing style, on every screen) in its single review, and either under 9 fails the option however good its design score. An onboarding flow is its own reference kind (`onboarding`); there is no licensed public capture of one, so the reference is your own image (`--ref`), and the judge scores the flow beside it. With `--assets codex`, the design agent draws the character's **style sheet first** and every later picture of that option is drawn from it: the host attaches the first image to each later request (`codex exec -i`), so the face, line weight and palette stay the same. The make JSON marks it (`sheet: true`, then `style_sheet: true`).
+
+`journeys/onboarding-flow.mjs` is the benchmark for that brief: one live run of the mellow onboarding flow beside the owner's reference, with the six screens captured in the Studio at phone width and a report of the scores.
 
 ## Redesign an existing product (first slice)
 
