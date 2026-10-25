@@ -226,10 +226,57 @@ const unreadable = () => {
   }
   return out;
 };
+// A flow screen's scene belongs to the page it sits on: it runs to the screen's own edges, or its edge fades into that ground with a
+// mask. The pasted-on look is the finding: a border, an outline, a frame or mat behind it, a drop shadow, or an oval or rounded clip (a
+// scene's own ground cut to a shape reads as a rim); so is an inset picture that neither bleeds nor fades, and a scene left at thumbnail
+// size beside the flow's other screens. A repeated row of same-size pictures is a set of icons, not the screen's scene.
+const flowScene = () => {
+  const out = [];
+  const shown = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).opacity !== '0';
+  const rgba = (c) => { const m = (c || '').match(/[\d.]+/g)?.map(Number); return m && m.length >= 3 ? { r: m[0], g: m[1], b: m[2], a: m[3] ?? 1 } : null; };
+  const solid = (el) => { const c = rgba(getComputedStyle(el).backgroundColor); return c && c.a >= 0.5 ? c : null; };
+  const differs = (a, b) => !a || !b || Math.abs(a.r - b.r) > 8 || Math.abs(a.g - b.g) > 8 || Math.abs(a.b - b.b) > 8;
+  const bordered = (s) => ['Top', 'Right', 'Bottom', 'Left'].some((k) => (parseFloat(s[`border${k}Width`]) || 0) > 0 && s[`border${k}Style`] !== 'none');
+  const fades = (s) => [s.maskImage, s.webkitMaskImage].some((v) => v && v !== 'none' && /gradient/.test(v));
+  const label = (el) => `<${el.tagName.toLowerCase()}${typeof el.className === 'string' && el.className.split(/\s+/).filter(Boolean)[0] ? ` class="${el.className.split(/\s+/).filter(Boolean)[0]}"` : ''}>`;
+  const frames = [...document.querySelectorAll('[data-oc-screen]')].filter((e) => shown(e) && e.getBoundingClientRect().width > 0).map((screen) => {
+    const pictures = [...screen.querySelectorAll('img, figure')].filter((e) => shown(e) && !e.querySelector('img, figure') && e.getBoundingClientRect().width > 16);
+    const alike = (w) => pictures.filter((e) => Math.abs(e.getBoundingClientRect().width - w) <= w * 0.25).length >= 3;
+    const scene = pictures.filter((e) => !alike(e.getBoundingClientRect().width)).sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0] ?? null;
+    return { id: screen.id || screen.getAttribute('data-oc-screen') || '', screen, scene };
+  }).filter((f) => f.id);
+  if (frames.length < 2) return out;
+  const widest = Math.max(0, ...frames.map((f) => f.scene ? f.scene.getBoundingClientRect().width : 0));
+  for (const { id, screen, scene } of frames) {
+    if (!scene) continue;
+    const r = scene.getBoundingClientRect(), b = screen.getBoundingClientRect(), s = getComputedStyle(scene), where = `screen "${id}": ${label(scene)}`;
+    const rims = [];
+    if (r.width < widest * 0.55) out.push(`${where} is a thumbnail beside the flow's other scenes; give the scene the size the other screens give theirs, or drop the illustration on this screen entirely`);
+    else if (fades(s) || fades(getComputedStyle(scene.parentElement ?? scene))) continue; // the edge fades into the ground: part of the page
+    else {
+      if (bordered(s)) rims.push('a border');
+      if (s.outlineStyle !== 'none' && (parseFloat(s.outlineWidth) || 0) > 0) rims.push('an outline');
+      if (s.boxShadow !== 'none') rims.push('a drop shadow');
+      if (s.clipPath !== 'none' || s.webkitClipPath !== 'none') rims.push('a clip-path');
+      if (Math.max(...['TopLeft', 'TopRight', 'BottomLeft', 'BottomRight'].map((k) => parseFloat(s[`border${k}Radius`]) || 0)) > 0) rims.push(`a rounded or oval clip (border-radius ${s.borderTopLeftRadius})`);
+      const ground = (() => { for (let e = screen.parentElement ?? screen; e; e = e.parentElement) { const c = solid(e); if (c) return c; } return { r: 255, g: 255, b: 255, a: 1 }; })();
+      for (let p = scene.parentElement; p && p !== screen; p = p.parentElement) {
+        const ps = getComputedStyle(p), pr = p.getBoundingClientRect();
+        if (pr.width > r.width + 80 || pr.height > r.height + 80) continue; // a section, not a frame hugging the picture
+        if (bordered(ps)) { rims.push(`a frame ${label(p)} round it`); break; }
+        const painted = solid(p);
+        if (painted && differs(painted, ground)) { rims.push(`a mat ${label(p)} behind it`); break; }
+      }
+      if (rims.length) out.push(`${where} cuts the scene's edge with ${rims.join(', ')}`);
+      else if (r.left > b.left + 1 || r.right < b.right - 1) out.push(`${where} is inset with a cut edge (it neither reaches the screen's edges nor fades into the ground)`);
+    }
+  }
+  return out;
+};
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
-  constructor(bin, onWarn, dark, clarity, pageChecks, humanSide) { this.humanSide = humanSide; this.pageChecks = pageChecks; this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
+  constructor(bin, onWarn, dark, clarity, pageChecks, humanSide, flow) { this.humanSide = humanSide; this.flow = flow; this.pageChecks = pageChecks; this.dark = dark; this.clarity = clarity; this.bin = bin; this.onWarn = onWarn; this.proc = null; this.dir = null; this.client = null; this.n = 0; this.state = 'ready'; this.warning = null; }
 
   async start() {
     this.dir = mkdtempSync(join(tmpdir(), 'first-draft-render-'));
@@ -285,7 +332,8 @@ export class Renderer {
     const faint = this.pageChecks && screen === null ? await this.eval(c, `(${unreadable.toString()})()`) : [];
     const clarity = this.clarity && screen === null ? await this.eval(c, `(${clarityPage.toString()})(${this.clarity.flash})`) : []; // the clarity page is the whole page, not one screen
     const human = this.humanSide && screen === null ? await this.eval(c, `(${humanSidePage.toString()})(${CARD_RUN}, ${HUES}, ${JSON.stringify(TITLE_WORDS)})`) : []; // the human-side checks are the whole page's too
-    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    const scene = this.flow && screen === null ? await this.eval(c, `(${flowScene.toString()})()`) : []; // the flow's scenes are measured across the screens, as the person sees them together
+    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, scene, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -424,6 +472,7 @@ export class Renderer {
         // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
         for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
+        for (const message of shot.scene ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'flow', message: `${context}: ${message}. Make the illustration part of the screen's own surface: let it run to the screen's left and right edges on the screen's own ground, or give it a soft edge that fades into that ground with a mask (mask-image: radial-gradient(...)), and take away the hard rim: no border, outline, frame, mat, drop shadow, oval or rounded clip. Then call done again.` });
         for (const message of shot.human ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'human-side', message: `human side, ${context}: ${message}` });
         if (shot.stray?.length && theme === 'light') errors.push({ source: 'restraint', message: `${context}: a close control is on screen with nothing open: ${shot.stray.join('; ')}. Show it only while its drawer, dialog or banner is open (hide it by default and at this width), or remove it.` });
         if (shot.faint?.length) errors.push({ source: 'render', message: `${context} in ${theme}: text that cannot be read, colour against its own background: ${shot.faint.join('; ')}. Give it at least 4.5:1 contrast (an active or selected state needs its own text colour on its fill).` });
@@ -449,14 +498,15 @@ export class Renderer {
 // dark: the named style is dark-first, so the page must be dark in both renders instead of different in each.
 // humanSide: the brief is a landing, marketing, product or company page (human-side.mjs).
 // clarity: { flash } when the brief asks for a company or product page (clarity.mjs); flash waives the colour and motion checks.
-export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity, pageChecks, humanSide } = {}) => {
+// flow: the brief asks for a multi-screen flow, so each screen's scene must belong to the page and keep the size the others give it.
+export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, clarity, pageChecks, humanSide, flow = false } = {}) => {
   const bin = findBrowser();
   if (!bin) {
     const warning = 'no Chrome or Chromium was found on this machine, so the 390px/1280px light/dark render checks were skipped';
     onWarn(warning);
     return { status: 'skipped', warning, drawing: false, verify: async () => [], close: () => {} };
   }
-  const render = new Renderer(bin, onWarn, dark, clarity, pageChecks, humanSide);
+  const render = new Renderer(bin, onWarn, dark, clarity, pageChecks, humanSide, flow);
   return {
     drawing: true, // this machine can draw an App.jsx into static HTML
     get status() { return render.state === 'ready' ? 'checked' : 'skipped'; },

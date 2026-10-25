@@ -4,7 +4,11 @@ Entry: `src/flow.mjs`, `src/draft.mjs`, `src/make.mjs`, `src/assets.mjs`, `src/c
 
 A flow brief (onboarding, sign-up, wizard, checkout: `flowOf` reads the brief's words and its `N screens`, three or more) is drawn as a
 journey, not as N pages. Every screen keeps one shell and one grid — a header row at the same height with a back control and Skip, the title
-at the same position, size and measure, the progress dots, and the round next button in the same corner — so only the content changes.
+at the same position, size and measure, the progress dots, and the round next button in the same corner on every screen but the last, whose
+closing filled button is its one action — so only the content changes. Each screen's small label above the title names that screen's own
+step, and each screen's illustration belongs to that screen's surface: it runs to the screen's left and right edges on its ground, or its
+edge fades into that ground with a mask, never in a border, outline, frame, mat, drop shadow, oval or rounded clip, and never shrunk to a
+thumbnail beside the other screens' scenes. `done` refuses either (below); the sentence is `flowRule()` in the page contract.
 
 ## Drive
 
@@ -27,7 +31,11 @@ capture of one, so the owner's own reference image is passed to make as `--ref` 
 
 Deterministic (`test/`, no model, no key, no network): `tests/e2e/wrapper-baseline.test.mjs` draws a flow brief through the real CLI against a
 local provider stand-in and asserts the one-shell sentence reaches the model, the review asks for the flow scores, a flow that keeps them
-passes and one whose screens or character change does not.
+passes and one whose screens or character change does not. `test/flow-scene.test.mjs` runs the real browser check (`flowScene` in
+`src/render-check.mjs`, enabled by `renderCheck(..., { flow: true })` for a flow brief): fixture flow screens whose scene fades into the
+ground or runs to both screen edges pass, and each of an oval/rounded clip, a plain inset cut edge on the ground, a border, a drop shadow,
+a clip-path, a mat or framed box behind it, and a thumbnail scene on one screen fails with its own finding. To see the finding on a real
+flow, run the check over a retained flow's HTML (`renderCheck(() => {}, { flow: true }).verify(html)`).
 
 Live benchmark, the mellow onboarding reference: `node journeys/onboarding-flow.mjs` with `DONE_DONE_EVIDENCE_ROOT`,
 `FD_DESIGN_AGENT`/`FD_DESIGN_MODEL`, `FD_ONBOARDING_REF=<the owner's reference image>` and spending approval. It previews the flow's image
