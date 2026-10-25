@@ -417,14 +417,18 @@ function sourcesPanel(o) {
     ...(c.shots?.length?[el('div',{class:'market-shots'},...c.shots.map((sh,i)=>el('a',{href:sh.src,target:'_blank',rel:'noopener',class:'market-shot','aria-label':`Open screen ${i+1} of ${c.name}`},
       el('img',{src:sh.src,alt:`${c.name} at ${sh.width} pixels`,width:sh.width,height:sh.height}),el('span',{},`${sh.width}px`))))]:[])));
   const refused=links.map((r)=>el('li',{},where(r),el('span',{class:'muted'},` — ${r.description}. ${r.why??''}`)));
+  // A real run finds more links than a phone panel can show, so a long list starts folded: its summary carries the count and the
+  // reason, one click opens every entry, and nothing is dropped. A short list stays open, where it fits.
+  const fold=(title,items,note)=>el('details',items.length<=3?{open:''}:{},
+    el('summary',{},title),...(note?[el('p',{class:'muted'},note)]:[]),el('ul',{},...items));
   const failed=s.searches.filter((x)=>x.status==='refused');
   const looked=s.searches.filter((x)=>x.status==='ok').length;
   return [el('section',{class:'references market sources','aria-label':`Inspiration sources for Option ${o.n}`},
     el('div',{class:'reference-heading'},el('h2',{},'Inspiration sources'),
       el('p',{class:'muted'},`Searched ${new Date(s.searched_at).toLocaleDateString()} · ${s.product_type} · ${plural(looked,'search')} · ${captured.length} captured, ${links.length} link only`)),
     ...(cards.length?[el('div',{class:'market-grid'},...cards)]:[]),
-    ...(links.length?[el('div',{class:'market-refused'},el('h3',{},`Link only (${links.length})`),el('p',{class:'muted'},'Their own terms or robots do not permit an automated capture: open the link yourself. Nothing is drawn in their place.'),el('ul',{},...refused))]:[]),
-    ...(failed.length?[el('div',{class:'market-refused'},el('h3',{},`Search that refused (${failed.length})`),el('ul',{},...failed.map((f)=>el('li',{},source(f.url,`${f.source} search`),el('span',{class:'muted'},` — ${f.why}`)))))]:[]))];
+    ...(links.length?[el('div',{class:'market-refused'},fold(`Link only (${links.length}) — their own terms or robots refuse a capture: open each one yourself`,refused,'Nothing is drawn in their place.'))]:[]),
+    ...(failed.length?[el('div',{class:'market-refused'},fold(`Search that refused (${failed.length})`,failed.map((f)=>el('li',{},source(f.url,`${f.source} search`),el('span',{class:'muted'},` — ${f.why}`)))))]:[]))];
 }
 
 // The option switcher beside the design's name: its menu lists every option, an option being made, and the grid of all of them.
