@@ -122,6 +122,19 @@ first-draft-axi make "A shift-scheduling app for small restaurants" --competitor
 
 The viewer shows the captured competitors **beside each option** under **What the market does**, each with its own source URL, permission note and phone/desktop capture, and every refusal under **Not captured** with the reason for it. They are kept in a portable `<option>.html.competitors.json` beside the option (12 MB budget), survive `refine` and the Studio brief, and are **not** sent to the model: they are how the person picking a direction sees what the real world already does.
 
+### Free inspiration sources, and the sources list
+
+```sh
+first-draft-axi make "A shift-swapping app for hospital nurses" --screens onboarding,rota --inspiration --out shift.html
+first-draft-axi make "A shift-swapping app for hospital nurses" --inspiration --app ~/Downloads/rota-app.apk --device emulator-5554 --out shift.html
+```
+
+`--inspiration` needs no brand and no paid library. It **searches first**: two queries planned from the brief run over the free open web, Hacker News' public search API and the designer subreddits (`r/UI_Design`, `r/UXDesign`, `r/web_design`), and every query, where it was tried and how it went is recorded, a refusal included. Each candidate then goes through the **same robots/terms review and capture** as any reference: the pages whose own terms explicitly permit it are captured at 390 and 1280, and every other candidate is kept as **a link with the one-line description the search gave it and the reason it was refused** — never scraped, never replaced by something drawn or invented. At most six pages are captured per run; the rest stay links. Search, discovery and terms-review calls consume your normal model quota; no paid search or reference API is used.
+
+`--app <apk-or-package>` (with `--inspiration`) is for mobile briefs: on one attached **Android emulator** it installs that APK (or opens a package already installed), launches it and captures its own two screens as **internal mobile reference only** — never embedded in the output. It needs `adb` on `PATH` and an emulator; `--device <serial>` picks which one when more than one is attached. With no emulator, no `adb`, an APK that installs nothing, or a package with no launchable activity, the step **refuses with that reason** and the rest of the run continues. It never starts an emulator, never touches a serial it was not given, and runs one adb call at a time with a deadline. `--app` without `--inspiration` is refused, as are `--inspiration` and `--no-references` together.
+
+The viewer shows the **sources list** beside each option: the search date, the product type and how many searches ran, every captured page with its own source, permission note and screenshots, every **Link only** page with its description and refusal reason, and every **search that refused**. It is kept in a portable `<option>.html.sources.json` beside the option (12 MB budget) and survives `refine`. The curated, dated list of free sources per product type, with a terms note on every entry, is **[docs/inspiration.md](inspiration.md)**.
+
 ## Multi-screen flows
 
 A brief that asks for a flow of three or more screens (onboarding, sign-up, a wizard, a checkout: it names the screens, or says "N screens") is drawn as **one journey, not N pages**. Every screen keeps one shell and one grid — a header row at the same height with a back control and Skip, the title at the same position, size and measure, the progress dots, and the round next button in the same corner — so only the content between them changes; each screen carries one idea and one decision, and the flow is one file whose screens are `data-oc-screen` sections in order. The sentence is part of the page contract, so it is held to the same bar as every other wrapper addition (`docs/wrapper-allowlist.json`).

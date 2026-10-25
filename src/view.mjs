@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { readCompetitors, writeCompetitors } from './reference-competitors.mjs';
+import { readSources } from './reference-sources.mjs';
 import { VERSION } from './version.mjs';
 
 const LIMIT = 5_000_000; // sign-off takes mocks of 5 MB or less
@@ -125,6 +126,9 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     // What the market does for this brief: each captured competitor with its live source, and every refusal with its reason.
     try { const c=readCompetitors(o.file); if(c) value.competitors={...c,competitors:c.competitors.map((x,k)=>({...x,shots:x.shots.map((s,i)=>({width:s.width,height:s.height,src:`/competitors/${o.n}/${k}/${i}`}))}))}; }
     catch(e) { value.competitorError=`Market comparison unavailable: ${e.message}`; }
+    // The sources list: what the free search found for this brief, what was captured, and every refusal with its description.
+    try { const list=readSources(o.file); if(list) value.sources={...list,sources:list.sources.map((x,k)=>({...x,...(x.shots?.length && {shots:x.shots.map((s,i)=>({width:s.width,height:s.height,src:`/inspiration/${o.n}/${k}/${i}`}))})}))}; }
+    catch(e) { value.sourcesError=`Inspiration sources unavailable: ${e.message}`; }
     return value;
   };
   const page = () => {
@@ -185,6 +189,12 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       const o=options[Number(shot[1])-1]; if(!o) return send(res,404,'text/plain','not found');
       try { const r=readOptionReferences(o.file),s=r?.shots[Number(shot[2])]; if(!s) return send(res,404,'text/plain','not found'); return send(res,200,'image/png',Buffer.from(s.dataUrl.slice(22),'base64')); }
       catch(e) { return send(res,422,'text/plain',`Reference cannot be read: ${e.message}`); }
+    }
+    const inspired=path.match(/^\/inspiration\/(\d+)\/(\d+)\/([01])$/);
+    if (inspired) {
+      const o=options[Number(inspired[1])-1]; if(!o) return send(res,404,'text/plain','not found');
+      try { const s=readSources(o.file)?.sources[Number(inspired[2])]?.shots?.[Number(inspired[3])]; if(!s) return send(res,404,'text/plain','not found'); return send(res,200,'image/png',Buffer.from(s.dataUrl.slice(22),'base64')); }
+      catch(e) { return send(res,422,'text/plain',`Inspiration capture cannot be read: ${e.message}`); }
     }
     const market=path.match(/^\/competitors\/(\d+)\/(\d+)\/([01])$/);
     if (market) {

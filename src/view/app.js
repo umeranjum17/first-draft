@@ -399,6 +399,34 @@ function marketPanel(o) {
     ...(m.refused.length?[el('div',{class:'market-refused'},el('h3',{},`Not captured (${m.refused.length})`),el('p',{class:'muted'},'These were found and refused or failed: nothing is drawn in their place.'),el('ul',{},...refused))]:[]))];
 }
 
+// The sources list for this brief: where the free search looked, the pages whose own terms allowed a capture, and every page that
+// refused one, kept as a link with the description the search gave it.
+function sourcesPanel(o) {
+  if(o.sourcesError) return [el('p',{class:'reference-error',role:'alert'},o.sourcesError)];
+  const s=o.sources; if(!s) return [];
+  const source=(href,text)=>el('a',{href,target:'_blank',rel:'noopener noreferrer',class:'reference-link'},text);
+  const where=(x)=>x.url?source(x.url,x.name):el('span',{},x.name);
+  const captured=s.sources.filter((x)=>x.status==='captured'), links=s.sources.filter((x)=>x.status!=='captured');
+  const cards=captured.map((c)=>el('div',{class:'market-card'},
+    el('div',{class:'market-text'},
+      el('h3',{},where(c)),
+      el('p',{},c.description),
+      el('p',{class:'market-url'},`Found on ${c.found_via}${c.internal_reference_only?' · internal reference only':''}`),
+      ...(c.url?[el('div',{},source(c.url,'Source'),' · ',source(c.terms_url,'Permission note'))]:[el('p',{class:'muted'},'Captured on the emulator: for internal reference only, never embedded in the design')]),
+      ...(c.licence_note?[el('details',{},el('summary',{},'Permission'),el('p',{},c.licence_note))]:[])),
+    ...(c.shots?.length?[el('div',{class:'market-shots'},...c.shots.map((sh,i)=>el('a',{href:sh.src,target:'_blank',rel:'noopener',class:'market-shot','aria-label':`Open screen ${i+1} of ${c.name}`},
+      el('img',{src:sh.src,alt:`${c.name} at ${sh.width} pixels`,width:sh.width,height:sh.height}),el('span',{},`${sh.width}px`))))]:[])));
+  const refused=links.map((r)=>el('li',{},where(r),el('span',{class:'muted'},` — ${r.description}. ${r.why??''}`)));
+  const failed=s.searches.filter((x)=>x.status==='refused');
+  const looked=s.searches.filter((x)=>x.status==='ok').length;
+  return [el('section',{class:'references market sources','aria-label':`Inspiration sources for Option ${o.n}`},
+    el('div',{class:'reference-heading'},el('h2',{},'Inspiration sources'),
+      el('p',{class:'muted'},`Searched ${new Date(s.searched_at).toLocaleDateString()} · ${s.product_type} · ${plural(looked,'search')} · ${captured.length} captured, ${links.length} link only`)),
+    ...(cards.length?[el('div',{class:'market-grid'},...cards)]:[]),
+    ...(links.length?[el('div',{class:'market-refused'},el('h3',{},`Link only (${links.length})`),el('p',{class:'muted'},'Their own terms or robots do not permit an automated capture: open the link yourself. Nothing is drawn in their place.'),el('ul',{},...refused))]:[]),
+    ...(failed.length?[el('div',{class:'market-refused'},el('h3',{},`Search that refused (${failed.length})`),el('ul',{},...failed.map((f)=>el('li',{},source(f.url,`${f.source} search`),el('span',{class:'muted'},` — ${f.why}`)))))]:[]))];
+}
+
 // The option switcher beside the design's name: its menu lists every option, an option being made, and the grid of all of them.
 function switcher(o, dev) {
   const button = el('button', { type: 'button', class: 'button switch', 'aria-label': `Option ${o.n} ${o.label}: switch option` }, el('span', { class: 'num on' }, String(o.n)), el('span', { class: 'name' }, o.label), icon('chevron', 'chev'));
@@ -465,7 +493,7 @@ function canvas(o, device) {
       el('section', {}, el('h2', { class: 'kicker' }, `Comments · Option ${o.n}`, el('span', { class: 'mono' }, String(all.length))), notes)),
     ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]), version());
 
-  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), ...marketPanel(o), stage));
+  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), ...marketPanel(o), ...sourcesPanel(o), stage));
   const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };
   tool.onclick = () => commenting(!studio.classList.contains('commenting'));
   add.onclick = () => { moreMenu.hidePopover(); commenting(true); };

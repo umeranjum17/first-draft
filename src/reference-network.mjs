@@ -68,7 +68,8 @@ export class ReferenceNetwork {
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]);
     return await new Promise((ok, no) => {
       const pinned = addresses[0];
-      const req = (fixture ? httpRequest : httpsRequest)(u, { signal, method: 'GET', agent: false, headers: { 'user-agent': REFERENCE_UA, accept: '*/*', 'accept-encoding': 'identity' }, lookup: (_host, options, cb) => cb(null, options.all ? [pinned] : pinned.address, pinned.family) }, res => {
+      const req = (fixture ? httpRequest : httpsRequest)(u, { signal, method: 'GET', agent: false, // A top-level navigation, as a browser sends it: some sites answer a bare GET with a bot challenge (DuckDuckGo: HTTP 202).
+        headers: { 'user-agent': REFERENCE_UA, accept: '*/*', 'accept-encoding': 'identity', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-user': '?1', 'upgrade-insecure-requests': '1' }, lookup: (_host, options, cb) => cb(null, options.all ? [pinned] : pinned.address, pinned.family) }, res => {
         let size = 0; const chunks = [];
         res.on('data', chunk => { size += chunk.length; this.bytes += chunk.length; if (size > limit || this.bytes > this.cap.bytes) res.destroy(new Error(`Reference byte cap exceeded (2 MB per resource, ${this.cap.bytes / 1e6} MB total)`)); else chunks.push(chunk); });
         res.on('error', no);
