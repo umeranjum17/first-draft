@@ -53,7 +53,7 @@ export async function draft({ prompt, brief: original, agent, model, timeoutMs, 
   const warn = (warning) => process.stderr.write(`first-draft-axi: ${warning}\n`);
   const human = humanSideOf({ prompt: original ?? prompt, direction }); // a revision carries the brief it started from
   const flow = flowOf(original ?? prompt, screens);
-  const render = renderCheck(warn, { pageChecks: true, humanSide: human });
+  const render = renderCheck(warn, { pageChecks: true, humanSide: human, flow: Boolean(flow) });
   const media = LANDING.test(prompt) && !references.length && !seed ? projectMedia(prompt) : []; // a landing page about this project gets its own screenshots
   const system = systemPrompt(render.drawing, human, flow);
   const brief = [`Brief: ${prompt}`, ...(direction ? [`Direction: ${directionText(direction)}`] : []),

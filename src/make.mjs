@@ -91,7 +91,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   const dark = !redesignPages && !logo && style?.dark;
   if (logo && !findBrowser()) throw new Error('logo needs Chrome or Chromium on this machine to check the SVG files and draw the icon at every size, and none was found; install one or set FIRST_DRAFT_CHROME to its path');
   const clarity = clarityOf({ prompt, direction, seed, logo, redesignPages }); // a company or product page is held to clarity over flash
-  const render = renderCheck(warn, { dark, redesignPages, clarity });
+  const render = renderCheck(warn, { dark, redesignPages, clarity, flow: Boolean(flow) });
   const semanticChecks = [];
   const failed = new AbortController(), signal = failed.signal;
   // The page a source becomes, drawn once per version: the board's static HTML with the policy, its fonts and media inside, and the errors done reports for it.
