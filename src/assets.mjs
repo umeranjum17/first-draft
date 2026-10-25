@@ -17,7 +17,7 @@ const run = async (bin, args, options = {}) => {
     throw new Error(`${detail}${/No version is set for shim/.test(detail) ? '; run with mise exec node@26.1.0 -- first-draft-axi ...' : ''}`);
   }
 };
-const hf = (args) => run('higgsfield', [...args, '--json']);
+const hf = (args, options) => run('higgsfield', [...args, '--json'], options);
 const hfArgs = (prompt, aspectRatio = '1:1') => ['z_image', '--prompt', prompt, '--aspect_ratio', aspectRatio];
 const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4']; // the engine tool's own aspect ratios
 // The hero loop: one short silent video made from the still the design put in its hero. Seedance 2.0 Mini at 5s is 2.5 credits at
@@ -85,8 +85,8 @@ export const assetProviders = {
     },
   },
 };
-export const assetFlags = { assets: { type: 'string' }, 'no-assets': { type: 'boolean' }, 'allow-asset-spend': { type: 'boolean' } };
-export const assetHelp = `Assets (make only): --assets codex|higgsfield|codex,higgsfield|auto lets the design agent generate pictures with those providers where it decides they help, at most ${IMAGES_PER_OPTION} per option, and with higgsfield one short looping hero video made from its hero image at most per option; alone it previews the per-image and per-video cost and exits without model calls. auto offers every ready provider. --allow-asset-spend explicitly approves that previewed asset spend (Codex quota/overage unknown); --no-assets disables assets (default). Needs ImageMagick, and FFmpeg for the hero loop. \`assets\` lists detected providers without spending. Never runs paid asset calls in CI.`;
+export const assetFlags = { assets: { type: 'string' }, 'no-assets': { type: 'boolean' }, 'allow-asset-spend': { type: 'boolean' }, 'hero-video': { type: 'boolean' } };
+export const assetHelp = `Assets (make only): --assets codex|higgsfield|codex,higgsfield|auto lets the design agent generate pictures with those providers where it decides they help, at most ${IMAGES_PER_OPTION} per option, and makes one short looping hero video from its hero image at most per option (Higgsfield; --hero-video asks for the loop alone, beside a free picture provider); alone it previews the per-image and per-video cost and exits without model calls. auto offers every ready provider. --allow-asset-spend explicitly approves that previewed asset spend (Codex quota/overage unknown); --no-assets disables assets (default). Needs ImageMagick, and FFmpeg for the hero loop. \`assets\` lists detected providers without spending. Never runs paid asset calls in CI.`;
 // The video estimate needs no image: Higgsfield prices it per second and resolution. No job, no upload, no credits.
 const videoEstimate = async () => {
   const cost = JSON.parse(await hf(['generate', 'cost', VIDEO.model, '--prompt', 'a seamless looping hero shot', '--aspect_ratio', VIDEO.aspectRatio, '--duration', String(VIDEO.duration), '--resolution', VIDEO.resolution]));
@@ -101,9 +101,9 @@ export async function detectAssets() {
 // The approved providers and a generate(request, out) the design agent's generate_image_asset tool calls; null without --assets.
 // perOption bounds this option's images: a flow needs one style sheet and one picture per screen.
 export async function prepareAssets(values, count, perOption) {
-  if (values['no-assets'] && (values.assets || values['allow-asset-spend'])) throw new Error('--no-assets conflicts with asset generation flags');
+  if (values['no-assets'] && (values.assets || values['allow-asset-spend'] || values['hero-video'])) throw new Error('--no-assets conflicts with asset generation flags');
   if (!values.assets) {
-    if (values['allow-asset-spend']) throw new Error('--allow-asset-spend requires --assets <provider>');
+    if (values['allow-asset-spend'] || values['hero-video']) throw new Error('--allow-asset-spend and --hero-video require --assets <provider>');
     return null;
   }
   if (process.env.CI && values['allow-asset-spend']) throw new Error('Paid asset generation is disabled in CI');
@@ -121,7 +121,10 @@ export async function prepareAssets(values, count, perOption) {
   const limit = Math.max(IMAGES_PER_OPTION, Math.min(13, perOption ?? IMAGES_PER_OPTION));
   const max = limit * count;
   const quotes = await Promise.all(providers.map(async (provider) => ({ provider, ...await assetProviders[provider].estimate() })));
-  const video = providers.includes('higgsfield'); // only Higgsfield makes video here
+  const video = Boolean(values['hero-video']) || providers.includes('higgsfield'); // only Higgsfield makes video here
+  // --hero-video asks for the loop beside a picture provider that spends no credits (codex), so Higgsfield is detected for the video alone
+  // and never offered for the pictures: the still stays on the free path.
+  if (video && !providers.includes('higgsfield')) await assetProviders.higgsfield.detect();
   const preview = { providers: quotes, max_images: max, per_option: limit, ...(video && { video: await videoEstimate(), max_videos: VIDEO.perOption * count }), approved: Boolean(values['allow-asset-spend']) };
   const spent = new Map(), sheets = new Map(), loops = new Map(); // images per option output, the style sheet its set is drawn from, and hero loops
   return { preview, providers: providers.map((provider) => ({ provider, use: assetProviders[provider].use, style_reference: Boolean(assetProviders[provider].styleReference) })), perOption: limit,
@@ -132,7 +135,8 @@ export async function prepareAssets(values, count, perOption) {
       const dir = dirname(image.file), raw = join(dir, 'provider-result.mp4');
       const cost = await videoEstimate();
       loops.set(image.file, (loops.get(image.file) ?? 0) + 1);
-      const jobs = JSON.parse(await hf(['generate', 'create', VIDEO.model, '--prompt', videoPrompt(prompt), '--aspect_ratio', VIDEO.aspectRatio, '--duration', String(VIDEO.duration), '--resolution', VIDEO.resolution, '--start-image', image.file, '--end-image', image.file, '--wait']));
+      // A video job runs for minutes, longer than the image call's deadline; the CLI waits inside that window rather than the host retrying.
+      const jobs = JSON.parse(await hf(['generate', 'create', VIDEO.model, '--prompt', videoPrompt(prompt), '--aspect_ratio', VIDEO.aspectRatio, '--duration', String(VIDEO.duration), '--resolution', VIDEO.resolution, '--generate_audio', 'false', '--start-image', image.file, '--end-image', image.file, '--wait', '--wait-timeout', '20m', '--wait-interval', '5s'], { signal: AbortSignal.timeout(1_500_000) }));
       writeFileSync(join(dir, 'provider-result-video.json'), JSON.stringify(jobs));
       const url = jobs[0]?.result_url;
       if (!url || new URL(url).protocol !== 'https:') throw new Error('Higgsfield returned no HTTPS video result');

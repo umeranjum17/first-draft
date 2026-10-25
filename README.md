@@ -101,7 +101,7 @@ Calls use [BYOKit](https://www.npmjs.com/package/@byokit/accounts) and your sele
 
 ## Known limits
 
-Options are prototypes, not production apps. Model assessments can be wrong; independently judge designs and verify claims before shipping. Render checks need Chrome/Chromium. Generated assets are opt-in, separately approved spending; with Higgsfield they can include a short looping hero video made from the hero image. Public-URL redesign supports anonymous, script-disabled HTML, not signed-in apps or SPA flows.
+Options are prototypes, not production apps. Model assessments can be wrong; independently judge designs and verify claims before shipping. Render checks need Chrome/Chromium. Generated assets are opt-in, separately approved spending; add `--hero-video` (or name Higgsfield) to a `--assets` run and the hero image also becomes a short looping hero video under the same approval. Public-URL redesign supports anonymous, script-disabled HTML, not signed-in apps or SPA flows.
 
 ## Reference
 

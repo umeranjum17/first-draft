@@ -252,7 +252,7 @@ if (command === 'refs') {
   const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
   const images = await readReferences(values.ref, values.model);
   let assetSession;
-  if (redesign && (values.assets || values['allow-asset-spend'])) fail('USAGE', 'redesign does not generate images; use make --assets', [assetHelp]);
+  if (redesign && (values.assets || values['allow-asset-spend'] || values['hero-video'])) fail('USAGE', 'redesign does not generate images; use make --assets', [assetHelp]);
   // A flow needs one style sheet and one picture per screen: its illustration set is as big as its screens.
   const flow = flowOf(prompt, screens);
   try { assetSession = await prepareAssets(values, count, flow ? (flow.screens.length || flow.count) + 1 : undefined); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }

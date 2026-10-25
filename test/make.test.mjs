@@ -739,7 +739,7 @@ test('asset CLI previews without spending, then the design agent generates image
   const script = `#!${process.execPath}\nimport {appendFileSync,mkdirSync,writeFileSync} from 'node:fs'; import {join,basename} from 'node:path';
     const args=process.argv.slice(2), name=basename(process.argv[1]);
     appendFileSync(${JSON.stringify(log)},JSON.stringify([name,...args])+'\\n');
-    if(name==='magick'){if(args[0]!=='-version')writeFileSync(args.at(-1),Buffer.from('${webp}','base64'));}
+    if(name==='magick'){if(args[0]!=='-version')writeFileSync(args.at(-1),Buffer.concat([Buffer.from('${webp}','base64'),Buffer.from(args.at(-1))]));}
     else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){if(args.includes('-i')&&!args.includes('--')){console.error('Reading prompt from stdin... No prompt provided via stdin.');process.exit(1);}await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});const thread='01a16724-50d5-76f1-af27-1ad159aec924',folder=join(process.env.HOME,'.codex/generated_images',thread);mkdirSync(folder,{recursive:true});for(const n of [0,1])writeFileSync(join(folder,'exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b040'+n+'.png'),Buffer.concat([Buffer.from('${webp}','base64'),Buffer.from([n])]));console.log(JSON.stringify({type:'thread.started',thread_id:thread}));}else console.log('codex-cli 0.159.2');}    else if(args[0]==='account')console.log('{"credits":10}');
     else if(args[1]==='cost')console.log(args.includes('seedance_2_0_mini')?'{"credits":5}':'{"credits":0.15}');
     else if(args.includes('seedance_2_0_mini'))console.log('[{"status":"completed","job_type":"seedance_2_0_mini","result_url":"https://fixture.invalid/asset.mp4"}]');
@@ -800,6 +800,7 @@ test('asset CLI previews without spending, then the design agent generates image
   const video = calls.find((call) => call[0] === 'higgsfield' && call[2] === 'create' && call.includes('seedance_2_0_mini'));
   assert.deepEqual([video[video.indexOf('--duration') + 1], video[video.indexOf('--resolution') + 1], video[video.indexOf('--aspect_ratio') + 1]], ['5', '720p', '16:9']);
   assert.equal(video[video.indexOf('--start-image') + 1], video[video.indexOf('--end-image') + 1], 'the same still starts and ends the loop');
+  assert.equal(video[video.indexOf('--generate_audio') + 1], 'false', 'the loop is made silent, not muted after the fact');
   assert.match(video[video.indexOf('--prompt') + 1], /^A seamless looping hero shot of: shop photo for Umer's botanical shop\. Gentle continuous motion/, 'the loop prompt keeps the still\'s subject and asks for a loop');
   assert.ok(calls.some(([name]) => name === 'ffmpeg'), 'the loop is encoded to a page-sized mp4');
   assert.doesNotMatch(readFileSync(log, 'utf8'), /asset\.mp4/, 'the downloaded video is not kept');
@@ -809,6 +810,12 @@ test('asset CLI previews without spending, then the design agent generates image
   assert.deepEqual(auto.providers.map((p) => p.provider), ['higgsfield', 'codex'], 'auto offers every ready provider');
   const codexOnly = JSON.parse((await run('make', 'Shop', '--out', join(dir, 'codex-only.html'), '--assets', 'codex')).stdout).asset_preview;
   assert.equal(codexOnly.video, undefined, 'no video is quoted when the approved providers cannot make one');
+  // --hero-video asks for the loop beside a free picture provider: the stills stay on codex and Higgsfield is never offered a picture.
+  const freeStill = JSON.parse((await run('make', 'Shop', '--out', join(dir, 'free-still.html'), '--assets', 'codex', '--hero-video')).stdout).asset_preview;
+  assert.deepEqual(freeStill.providers.map((p) => p.provider), ['codex'], 'the pictures stay on the provider the person named');
+  assert.deepEqual([freeStill.video.amount, freeStill.video.unit, freeStill.max_videos], [5, 'credits', 1], 'the preview names the loop price and ceiling without higgsfield pictures');
+  await assert.rejects(run('make', 'Shop', '--out', join(dir, 'no-assets-video.html'), '--hero-video'), (e) => /--allow-asset-spend and --hero-video require --assets/.test(e.stdout));
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'make', 'Shop', '--out', join(dir, 'ci-video.html'), '--assets', 'codex', '--hero-video', '--allow-asset-spend'], { env: { ...env, CI: 'true' } }), (e) => /disabled in CI/.test(e.stdout), 'the hero loop is refused in CI like every paid asset');
   await assert.rejects(run('redesign', 'https://example.com', 'Shop', '--out', join(dir, 'redesign'), '--assets', 'codex'), (e) => /redesign does not generate images/.test(e.stdout));
   await assert.rejects(run('make', 'Shop', '--out', join(dir, 'bad.html'), '--no-assets', '--assets', 'codex'), (e) => /conflicts/.test(e.stdout));
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'make', 'Shop', '--out', join(dir, 'ci.html'), '--assets', 'higgsfield', '--allow-asset-spend'], { env: { ...env, CI: 'true' } }), (e) => /disabled in CI/.test(e.stdout));
