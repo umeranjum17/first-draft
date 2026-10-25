@@ -7,6 +7,8 @@
 // Two retained stripped-engine options that self-score 8 and 7 are shown as the README hero: a reviewed sample, not a critic pass. The
 // reviewer, review date and note, and every source identity, are pinned HERE and not in samples.json, so editing the manifest alone can
 // never admit a below-9 picture; any other picture still needs a critic pass at 9 or more. See the README hero section in docs/quality.md.
+// This covers pictures shown AS a sample. The bake-off cells the README and docs/quality.md show side by side are not samples: they are
+// labelled comparison captures under docs/ui/quality/ (run, model, score, and the plain page beside each), inventoried in docs/ui/README.md.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

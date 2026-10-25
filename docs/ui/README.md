@@ -16,3 +16,10 @@ A formatted view of `first-draft-axi make`'s own JSON and critic scores at 880×
 rearranges the board, not its values. It is **not** a screenshot of an interactive screen the tool ships. Model, date, source commit,
 timing, score and limits: [the CLI excerpt](../quality.md#the-cli-excerpt--24-october-2026). Raw records and the capture recipe are kept
 with the README rewrite review evidence. No model was run and no quota was spent to make these captures.
+
+## `quality/` — the bake-off cells shown on the quality page
+
+`quality/{landing,dashboard,onboarding,notes}-{plain,first-draft}.webp` and `quality/{landing,notes}-before-fixes.webp` are the retained 1280px
+first screens of the bake-off cells shown as picture pairs on the quality page (`webp`, 320px wide); `quality/scores-{light,dark}.svg` is
+the paired-bar chart of the same cell scores. Model, run, time, tokens and score for each row: [How good is it?](../quality.md). These
+are scorer-labelled comparison captures, not samples: the only below-9 picture admitted as a sample is the reviewed hero pair above.

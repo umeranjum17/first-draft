@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="332" viewBox="0 0 600 332" role="img" aria-label="Scores out of 10 on Claude Sonnet 5.5: First Draft against the plain prompt, for four briefs">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}</style>
+<rect x="0" y="8" width="12" height="12" rx="2" fill="#0a66c2"/><text font-size="14" fill="#1f2328" x="18" y="19">First Draft</text>
+<rect x="112" y="8" width="12" height="12" rx="2" fill="#afb8c1"/><text font-size="14" fill="#1f2328" x="130" y="19">plain Sonnet 5.5 prompt, same brief</text>
+<text font-size="14" fill="#1f2328" x="0" y="82">SaaS landing</text>
+<rect x="150" y="68" width="336.0" height="18" rx="3" fill="#0a66c2"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="494.0" y="82">8</text>
+<rect x="150" y="92" width="273.0" height="18" rx="3" fill="#afb8c1"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="431.0" y="106">6.5</text>
+<line x1="150" y1="118" x2="570" y2="118" stroke="#d1d9e0" stroke-width="1"/>
+<text font-size="14" fill="#1f2328" x="0" y="146">Analytics dashboard</text>
+<rect x="150" y="132" width="336.0" height="18" rx="3" fill="#0a66c2"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="494.0" y="146">8</text>
+<rect x="150" y="156" width="252.0" height="18" rx="3" fill="#afb8c1"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="410.0" y="170">6</text>
+<line x1="150" y1="182" x2="570" y2="182" stroke="#d1d9e0" stroke-width="1"/>
+<text font-size="14" fill="#1f2328" x="0" y="210">Mobile onboarding</text>
+<rect x="150" y="196" width="294.0" height="18" rx="3" fill="#0a66c2"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="452.0" y="210">7</text>
+<rect x="150" y="220" width="273.0" height="18" rx="3" fill="#afb8c1"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="431.0" y="234">6.5</text>
+<line x1="150" y1="246" x2="570" y2="246" stroke="#d1d9e0" stroke-width="1"/>
+<text font-size="14" fill="#1f2328" x="0" y="274">Notes app</text>
+<rect x="150" y="260" width="315.0" height="18" rx="3" fill="#0a66c2"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="473.0" y="274">7.5</text>
+<rect x="150" y="284" width="126.0" height="18" rx="3" fill="#afb8c1"/>
+<text font-size="13" font-weight="600" fill="#1f2328" x="284.0" y="298">3</text>
+<line x1="150" y1="310" x2="570" y2="310" stroke="#d1d9e0" stroke-width="1"/>
+<text font-size="12" fill="#59636e" x="150" y="330">score out of 10 (worker-scored, one run per cell)</text>
+</svg>

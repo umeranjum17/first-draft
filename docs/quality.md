@@ -1,42 +1,82 @@
-# What we have measured
+# How good is it?
 
-[Back to the README](../README.md#proof-not-a-promise-of-perfect-design)
+**On Claude Sonnet 5.5, on the same brief, First Draft scores 8, 8, 7 and 7.5 out of 10 against 6.5, 6, 6.5 and 3 for the plain prompt — better on all four, none at our 9/10 bar.**
 
-## Same-model bake-off — 24 October 2026
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/ui/quality/scores-dark.svg">
+  <img src="docs/ui/quality/scores-light.svg" width="600" alt="Bar chart out of 10, First Draft against the plain prompt: landing 8 versus 6.5, dashboard 8 versus 6, onboarding 7 versus 6.5, notes 7.5 versus 3.">
+</picture>
 
-Model: **Claude Sonnet 5.5** (`claude-sonnet-5-5`, `byokit:claude`), through the installed signed-in Claude CLI. One run per cell, not a statistical benchmark. Scores below are the worker's visual assessments at 1280 and 390 pixels, not customer ratings or an independent blinded evaluation.
+### SaaS landing — First Draft wins, 8 to 6.5
 
-| Brief | Plain | Plain + frontend-design | First Draft before fixes |
-| --- | --- | --- | --- |
-| a landing page for a small accounting software company for teams | 6.5; 46 s; 7.9k output tokens | 8; 139 s; 19.9k tokens | 4; 101 s; 13.3k tokens |
-| A notes app | 3; 23 s; 4.0k tokens | 5.5; 55 s; 7.7k tokens | 4; 94 s; 13.7k tokens |
+| Plain prompt | First Draft ✅ |
+| --- | --- |
+| <img src="docs/ui/quality/landing-plain.webp" width="420" alt="Plain prompt: Ledgely, a stock green SaaS landing page"><h2>6.5 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/landing-first-draft.webp" width="420" alt="First Draft: Parley Books, a ledger-led accounting landing page"><h2>8 <sub>/ 10</sub></h2> |
 
-Source: the retained `fd-quality-bakeoff/report.md`, section 2, dated 2026-10-24. The report and raw run artifacts are retained with the README rewrite review evidence, not bundled into the npm package. These numbers describe historical versions, not today's wrapper. The comparison exposed forced novelty styles, a marketing brief imposed on unrelated pages, small output budgets and a missing visual critique path. See [the wrapper allowlist](wrapper-allowlist.json) for the current status of additions and their evidence; provisional does not mean proven.
+First Draft makes the page about the product — a real ledger entry off by 62.50 with the team's thread on it, one blue accent. Plain is the stock SaaS kit: identical cards and a green button.
+
+### Analytics dashboard — First Draft wins, 8 to 6
+
+| Plain prompt | First Draft ✅ |
+| --- | --- |
+| <img src="docs/ui/quality/dashboard-plain.webp" width="420" alt="Plain prompt: a library circulation report with an unlabeled bar chart"><h2>6 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/dashboard-first-draft.webp" width="420" alt="First Draft: Larder Bakery trading dashboard with KPIs and a sales-by-hour chart"><h2>8 <sub>/ 10</sub></h2> |
+
+First Draft states the finding in the headline and backs it with plain KPIs and an hourly chart anyone can read. Plain is one decorative chart of unlabeled bars, with no axis and no legend.
+
+### Mobile onboarding flow — First Draft wins, 7 to 6.5
+
+| Plain prompt | First Draft ✅ |
+| --- | --- |
+| <img src="docs/ui/quality/onboarding-plain.webp" width="420" alt="Plain prompt: a ferry app onboarding screen, dark with a yellow button"><h2>6.5 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/onboarding-first-draft.webp" width="420" alt="First Draft: four-step sourdough starter setup with real choices"><h2>7 <sub>/ 10</sub></h2> |
+
+A close one. First Draft asks five questions whose answers change the schedule it shows; plain's first step is distinctive but script-driven, so only step one could be judged at all.
+
+### Notes app — First Draft wins, 7.5 to 3
+
+| Plain prompt | First Draft ✅ |
+| --- | --- |
+| <img src="docs/ui/quality/notes-plain.webp" width="420" alt="Plain prompt: a browser-default notes app with an emoji logo"><h2>3 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/notes-first-draft.webp" width="420" alt="First Draft: Margin, a three-pane notes app with a note and a checklist"><h2>7.5 <sub>/ 10</sub></h2> |
+
+First Draft draws a working three-pane notes app with a real note and a checklist. Plain is a browser-default page: one welcome note, an empty right half, an emoji logo.
+
+<sub>One run per cell, 24 October 2026, scored by the review worker beside real reference products — not customers, not a blinded or independent judge (the tool's own critic scored the landing 7, 8, 8 over its three rounds). The dashboard and onboarding baselines are plain Sonnet with Anthropic's frontend-design guidance; the landing and notes ones a bare prompt. First Draft runs: landing 176 s and 25.2k tokens, dashboard 170 s and 23.4k, onboarding 135 s and 18.8k, notes 277 s and 39.3k. Pictures are each cell's light-theme 1280px first screen.</sub>
+
+## History: what we fixed
+
+Before those fixes, on that same model, First Draft scored **4** on both briefs — below a bare prompt.
+
+### SaaS landing — plain 6.5, First Draft before fixes 4
+
+| Plain prompt | First Draft, before fixes ❌ |
+| --- | --- |
+| <img src="docs/ui/quality/landing-plain.webp" width="420" alt="Plain prompt: Ledgely, a stock green SaaS landing page"><h2>6.5 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/landing-before-fixes.webp" width="420" alt="First Draft before fixes: Tallyfold, with an install command in the hero"><h2>4 <sub>/ 10</sub></h2> |
+
+The hero sold a command (`$ npx tallyfold start`), not the product: our landing brief was written for README pages. Plain scored higher.
+
+### Notes app — plain 3, First Draft before fixes 4
+
+| Plain prompt | First Draft, before fixes ❌ |
+| --- | --- |
+| <img src="docs/ui/quality/notes-plain.webp" width="420" alt="Plain prompt: a browser-default notes app with an emoji logo"><h2>3 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/notes-before-fixes.webp" width="420" alt="First Draft before fixes: Margin, a generic three-column notes page"><h2>4 <sub>/ 10</sub></h2> |
+
+Every cause was in our wrapper: a cheap flash-tier default (MiniMax M3.1), options forced into fixed novelty styles, a "label sample content, write no scripts" rule that pushed invented placeholders into the design, and small caps (12 turns, 6,000-token slices, 16k output) that stopped the run at the first slice that passed. It never looked at its own render.
+
+What changed: one call that plans the page from the brief, the facts rule, "design what the brief names", a critique pass that receives screenshots at 1280 and 390, and host checks that send a page back once for overflow, covered text and clipped or unreadable text. Re-run with those checks, the same briefs read 8 (landing), 7 (dashboard) and 7.5 (onboarding) in 304–412 s and 48–69k tokens each. [The wrapper allowlist](wrapper-allowlist.json) tracks every addition and its evidence; provisional does not mean proven.
 
 ## The CLI excerpt — 24 October 2026
 
-The README's formatted critic board comes from the retained `g2-fd-landing/make.json` and `run.json`: source head `cd49ea3`, exit 0, `made.at` 2026-10-24T17:51:06.295Z, model `claude-sonnet-5-5`, route `byokit:claude`, **304 seconds**. It was one landing option, not three.
-
-Its critic scored that option **8/10**, the plain page **5/10**, and returned `passed: false`. This was the **generator judging its own output**, with three reviews, not an independent assessment. `render_check: checked` is layout validation, not a visual-quality certificate. The image selects the model, elapsed time, render status and first option's critique fields from real output, reformats them for readability and repeats those scores as a board. No design pixels are shown. It is not a screenshot of an interactive critic UI, a fresh generation, or evidence that the current one-pass critic improves quality.
+The README's formatted critic board is real CLI output, reformatted: one landing option from `g2-fd-landing`, source head `cd49ea3`, exit 0, `claude-sonnet-5-5` on `byokit:claude`, **304 seconds**. Its critic scored that option **8/10** and the plain page **5/10**, and returned `passed: false`. That is the generator judging its own output over three reviews, not an independent assessment, and `render_check: checked` is layout validation, not a quality certificate. It is one option, not three, and the image shows no design pixels.
 
 ## The README hero — 24 October 2026
 
-The README hero animates two options retained from the stripped-engine bake-off, shown unaltered inside the real Studio chrome:
+The README hero animates two options from the stripped-engine bake-off, unaltered inside the real Studio chrome:
 
 | Option | Run | Seconds | Exit | Source head | Retained page SHA256 | Critic self-score | Plain-prompt baseline |
 | --- | --- | ---: | ---: | --- | --- | --- | --- |
 | Parley Books (landing) | `strip-landing` | 176 | 0 | `b36f4d3` | `0d426a17…a970c56` | 8/10 (7 then 8) | none recorded |
 | Margin (notes) | `strip2-notes` | 278 | 0 | `85f773f` | `20eb800a…56cf36e` | 7/10 (7 then 7) | none recorded |
 
-Both: `claude-sonnet-5-5` through `byokit:claude` on the signed-in Claude CLI, one option each, four turns, render check enabled. Neither
-run recorded `made.at`, so the date above is the date of the run's files and of the bake-off report (2026-10-24), not a reconstructed
-timestamp; no numeric plain-prompt baseline was scored for either cell, so none is claimed. The scores are the **generator judging its own
-output** across two critic rounds, not an independent verdict, and both are **below the 9/10 bar**.
-
-Main reviewed exactly these two on 2026-10-25 and approved showing them as they are — a reviewed sample, Sonnet 5.5, 24 Oct 2026,
-score 8/10 (Margin 7/10) — because they are the product's real output and the alternative was an empty canvas. `scripts/check-samples.mjs`
-pins their hashes, runs, models, scores, the reviewer, the review date and the note, so editing `docs/media/samples.json` alone cannot
-admit a picture and **every other** below-9 sample still fails CI. Full capture recipe and frames: the README rewrite review evidence.
+Both: `claude-sonnet-5-5` through `byokit:claude`, one option each, four turns, render check enabled. Neither run recorded `made.at`, so the date is the date of the run's files and of the bake-off report, and no numeric plain-prompt baseline was scored for either cell, so none is claimed. The scores are the generator judging its own output, and both are **below the 9/10 bar**. Main reviewed exactly these two on 2026-10-25 and shows them as they are — a **reviewed sample** (reviewer Main, Sonnet 5.5, 24 Oct 2026, score 8/10, Margin 7/10), because they are the product's real output. `scripts/check-samples.mjs` pins their hashes, runs, models, scores, reviewer, review date and note, so editing `docs/media/samples.json` alone cannot admit a picture, and **every other** below-9 sample still fails CI. Capture recipe and frames: the README rewrite review evidence.
 
 ## Rerun a comparison
 
@@ -47,7 +87,6 @@ first-draft-axi init --agent byokit:codex --model gpt-6.1-sol
 node scripts/compare.mjs "A notes app" --out /var/tmp/notes-comparison
 ```
 
-Run the same brief/model for both sides, inspect every render, and label the date, version, scorer and method. See [CONTRIBUTING.md](../CONTRIBUTING.md). A different model/date is a new comparison; do not reuse the Sonnet figures for it.
+Run the same brief and model for both sides, inspect every render, and label the date, version, scorer and method ([CONTRIBUTING.md](../CONTRIBUTING.md)). A different model or date is a new comparison; do not reuse the Sonnet figures for it.
 
-Every other design output stays unpublished until it scores at least 9/10, meets its plain-model baseline and receives human review: the
-two options above are the single reviewed pair shown below that bar. See [the sample gate](../.agents/skills/done-done-verify-first-draft/features/sample-provenance.md).
+Every other design output stays unpublished until it scores at least 9/10, meets its plain-model baseline and receives human review: the two options above are the single reviewed pair shown below that bar. See [the sample gate](../.agents/skills/done-done-verify-first-draft/features/sample-provenance.md).
