@@ -790,6 +790,8 @@ test('asset CLI previews without spending, then the design agent generates image
   assert.match(html, /<video data-hero-loop autoplay muted loop playsinline poster="data:image\/webp;base64,[^"]+"[^>]*><source src="data:video\/mp4;base64,/);
   assert.equal((html.match(/<img data-hero-loop-still/g) ?? []).length, 1, 'one still image stands in for the loop when motion is reduced');
   assert.doesNotMatch(html.match(/<img data-hero-loop-still[^>]*>/)[0], /display:/, 'the still never carries an inline display, which would outrank the reduced-motion rule');
+  assert.doesNotMatch(html.match(/<video data-hero-loop[^>]*>/)[0], /display:/, 'the video never carries an inline display either: it would outrank the reduced-motion rule and show the loop beside the still');
+  assert.match(html, /\[data-hero-loop-still\]\{display:none\}video\[data-hero-loop\]\{display:block\}@media \(prefers-reduced-motion:reduce\)\{video\[data-hero-loop\]\{display:none\}/, 'the loop CSS owns both displays, so the media query can swap them');
   assert.match(html, /prefers-reduced-motion:reduce/, 'reduced motion shows the still, never the loop');
   assert.match(html, /<img alt="Leaf illustration" src="data:image\/webp;base64,/, 'the other generated image is left as a still');
   assert.equal(readdirSync(dir).filter((p) => p.startsWith('shop.assets-')).length, 2);

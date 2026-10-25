@@ -187,7 +187,9 @@ const endOfSection = (html, start) => {
   for (let depth = 1, m; (m = tags.exec(html));) { depth += m[1] ? -1 : 1; if (!depth) return m.index; }
   return -1;
 };
-const LOOP_CSS = '<style data-hero-loop-css>[data-hero-loop-still]{display:none}@media (prefers-reduced-motion:reduce){video[data-hero-loop]{display:none}[data-hero-loop-still]{display:block}}</style>';
+// Display for both is owned here, never inline: an inline display on the video outranks the media query and a reader with
+// reduced motion would get the playing loop and the still stacked (found by recording the real page, not by reading the CSS).
+const LOOP_CSS = '<style data-hero-loop-css>[data-hero-loop-still]{display:none}video[data-hero-loop]{display:block}@media (prefers-reduced-motion:reduce){video[data-hero-loop]{display:none}[data-hero-loop-still]{display:block}}</style>';
 
 // The hero loop: the generated still the design placed in its hero becomes the page's hero video. The host injects it, so the design agent
 // never handles video files, and the still stays in the markup as the poster and as what a reader with reduced motion sees.
@@ -207,7 +209,7 @@ export async function heroLoop(html, images, assets) {
     const keep = (display) => `${klass ? ` class="${klass}"` : ''} style="${display}width:100%;height:auto;${style}"`;
     // The still's display comes from LOOP_CSS alone: an inline display would outrank the reduced-motion rule and show both.
     const video = `<span data-hero-loop-wrap${klass ? ` class="${klass}"` : ''} style="display:block;${style}">`
-      + `<video data-hero-loop autoplay muted loop playsinline poster="${image.dataUrl}" aria-label="${alt}"${keep('display:block;')}>`
+      + `<video data-hero-loop autoplay muted loop playsinline poster="${image.dataUrl}" aria-label="${alt}"${keep('')}>`
       + `<source src="${loop.dataUrl}" type="video/mp4">${alt}</video>`
       + `<img data-hero-loop-still${klass ? ` class="${klass}"` : ''} src="${image.dataUrl}" alt="${alt}"${keep('')}></span>${LOOP_CSS}`;
     const { dataUrl, ...reported } = loop;
