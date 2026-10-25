@@ -1,7 +1,8 @@
 {
   "name": "first-draft-axi",
   "version": "0.2.11",
-  "description": "AXI CLI that turns a prompt into design mocks: self-contained HTML pages, made by the model you choose through BYOKit.",
+  "description": "Pick a design direction before writing app code. A CLI for developers and coding agents.",
+  "keywords": ["ai", "cli", "design-tools", "prototyping", "html", "developer-tools", "coding-agents"],
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -1,0 +1,86 @@
+{
+  "reviewed-pair": {
+    "command": "make",
+    "agent": "byokit:claude",
+    "model": "claude-sonnet-5-5",
+    "made_at": "2026-10-24",
+    "made_at_basis": "The retained run.json records no made.at, so this is the date of the run's files and of the bake-off report (2026-10-24), not a reconstructed timestamp.",
+    "reviewed_by": "Main",
+    "sources": [
+      {
+        "name": "Parley Books",
+        "run": "strip-landing",
+        "option": "strip-landing/page.html",
+        "sha256": "0d426a173f11b1d74fab665de5a211ec12382c26dfcc5638d2c089ff2a970c56",
+        "model": "claude-sonnet-5-5",
+        "seconds": 176,
+        "exit": 0,
+        "head": "b36f4d3",
+        "critique": {
+          "score": 8,
+          "passed": false,
+          "plain_score": null
+        }
+      },
+      {
+        "name": "Margin",
+        "run": "strip2-notes",
+        "option": "strip2-notes/page.html",
+        "sha256": "20eb800aaddc9b5af584e62aa841c11dfca6175560123fb2a36d80cad56cf36e",
+        "model": "claude-sonnet-5-5",
+        "seconds": 278,
+        "exit": 0,
+        "head": "85f773f",
+        "critique": {
+          "score": 7,
+          "passed": false,
+          "plain_score": null
+        }
+      }
+    ],
+    "reviewed_at": "2026-10-25",
+    "review_note": "reviewed sample, Sonnet 5.5, 24 Oct 2026, score 8/10"
+  },
+  "reviewed-pair-phone": {
+    "command": "make",
+    "agent": "byokit:claude",
+    "model": "claude-sonnet-5-5",
+    "made_at": "2026-10-24",
+    "made_at_basis": "The retained run.json records no made.at, so this is the date of the run's files and of the bake-off report (2026-10-24), not a reconstructed timestamp.",
+    "reviewed_by": "Main",
+    "sources": [
+      {
+        "name": "Parley Books",
+        "run": "strip-landing",
+        "option": "strip-landing/page.html",
+        "sha256": "0d426a173f11b1d74fab665de5a211ec12382c26dfcc5638d2c089ff2a970c56",
+        "model": "claude-sonnet-5-5",
+        "seconds": 176,
+        "exit": 0,
+        "head": "b36f4d3",
+        "critique": {
+          "score": 8,
+          "passed": false,
+          "plain_score": null
+        }
+      },
+      {
+        "name": "Margin",
+        "run": "strip2-notes",
+        "option": "strip2-notes/page.html",
+        "sha256": "20eb800aaddc9b5af584e62aa841c11dfca6175560123fb2a36d80cad56cf36e",
+        "model": "claude-sonnet-5-5",
+        "seconds": 278,
+        "exit": 0,
+        "head": "85f773f",
+        "critique": {
+          "score": 7,
+          "passed": false,
+          "plain_score": null
+        }
+      }
+    ],
+    "reviewed_at": "2026-10-25",
+    "review_note": "reviewed sample, Sonnet 5.5, 24 Oct 2026, score 8/10"
+  }
+}
