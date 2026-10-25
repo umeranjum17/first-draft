@@ -20,8 +20,10 @@ h1{font-size:30px;margin:0 0 8px}
 .start{display:inline-block;margin-top:16px;padding:14px 22px;border-radius:999px;background:var(--ink);color:var(--paper)}
 .scene{margin:20px 0 0}
 .scene img{display:block;width:100%;max-width:320px;height:220px;background:#efe6d6}
+.options{display:grid;gap:8px;margin-top:16px}
+.card{display:block;padding:12px;border:1px solid #ddd3c4;border-radius:12px;font-size:15px}
 ${fade ? FADE : ''}${css}
-</style></head><body>${SCREENS.map(([id, title], i) => `<section id="${id}" data-oc-screen="${id}"><header><a href="#${id}">Back</a><a href="#${SCREENS.at(-1)[0]}">Skip</a></header><p class="eyebrow">${label(i)}</p><h1>${title}</h1><figure class="scene"><img src="${PIXEL}" alt="the character in its scene"></figure>${i === SCREENS.length - 1 ? '<a class="start" href="#welcome">Start</a>' : `<a class="next" href="#${SCREENS[i + 1][0]}">Next</a>`}</section>`).join('')}</body></html>`;
+</style></head><body>${SCREENS.map(([id, title], i) => `<section id="${id}" data-oc-screen="${id}"><header><a href="#${id}">Back</a><a href="#${SCREENS.at(-1)[0]}">Skip</a></header><p class="eyebrow">${label(i)}</p><h1>${title}</h1><figure class="scene"><img src="${PIXEL}" alt="the character in its scene"></figure>${i === 1 ? `<div class="options">${'<span class="card">An option</span>'.repeat(6)}</div>` : ''}${i === SCREENS.length - 1 ? '<a class="start" href="#welcome">Start</a>' : `<a class="next" href="#${SCREENS[i + 1][0]}">Next</a>`}</section>`).join('')}</body></html>`;
 
 const check = (t, options = { flow: true }) => {
   const render = renderCheck(() => {}, options);
@@ -64,6 +66,8 @@ test('one step label repeated on every screen, or two actions on the last one, f
   assert.ok((await run(repeated)).some((f) => /every screen repeats the same label above its title \("01 \/ A moment for you"\)/.test(f)), 'the repeated eyebrow the owner saw on all six screens is refused, even when each one carries its own number');
   const twoActions = page().replace('<a class="start" href="#welcome">Start</a>', '<a class="start" href="#welcome">Start</a><a class="next" href="#welcome">Next</a>');
   assert.ok((await run(twoActions)).some((f) => /the last screen "first-step" offers 2 actions at once/.test(f)), 'a closing button beside the round next button is refused');
+  const tooLong = page({ css: '.options .card{padding:40px 12px}' });
+  assert.ok((await run(tooLong)).some((f) => /screen "feeling" is \d+px tall on a 844px screen/.test(f)), 'a screen whose option list runs it past the bottom of the screen is refused, because its dots and next button fall below the fold');
 });
 
 test('only a flow is held to the scene rule', async (t) => {

@@ -275,7 +275,9 @@ const flowScene = () => {
 };
 // The flow's shell also has to say the same kind of thing on every screen without saying the same words: each screen's small label
 // above its title names that screen's own step, and the last screen ends on one action, its closing button, instead of that button
-// beside the round next button. Only the flow-wide cases are findings: one label repeated on every screen, and two actions at the end.
+// beside the round next button. Only the flow-wide cases are findings: one label repeated on every screen, two actions at the end, and
+// a screen that outgrows the screen it is shown on (the owner's option screens ran 80-110px past 390, so the dots and the round next
+// button fell below the fold and the last option was sliced).
 const flowShell = () => {
   const out = [];
   const shown = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).opacity !== '0';
@@ -295,6 +297,10 @@ const flowShell = () => {
     if (keys.size === 1 && [...keys][0]) out.push(`every screen repeats the same label above its title ("${labels[0]}"); give each screen its own short step label, in the same style and place`);
   }
   const last = screens.at(-1), id = last.id || last.getAttribute('data-oc-screen') || '';
+  for (const screen of screens) {
+    const r = screen.getBoundingClientRect(), room = Math.round(r.height - innerHeight), sid = screen.id || screen.getAttribute('data-oc-screen') || '';
+    if (room > 8) out.push(`screen "${sid}" is ${Math.round(r.height)}px tall on a ${innerHeight}px screen, ${room}px longer than the screen it is shown on, so its footer (the progress dots and the round next button) and its last options fall below the fold; fit the screen's own content: let a long option list scroll inside the screen, or size the cards so five or six fit beside the scene`);
+  }
   const actions = [...last.querySelectorAll('button, a[href], [role=button]')].filter((e) => shown(e) && !e.closest('header, nav, p, li') && !e.hasAttribute('disabled') && e.getAttribute('aria-disabled') !== 'true');
   if (actions.length > 1) out.push(`the last screen "${id}" offers ${actions.length} actions at once (${actions.map((e) => text(e) || e.getAttribute('aria-label') || e.tagName.toLowerCase()).join(', ')}); keep its closing button as the one action and drop the round next button beside it`);
   return out;
