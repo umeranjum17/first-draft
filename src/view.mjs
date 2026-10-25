@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
+import { readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { VERSION } from './version.mjs';
 
 const LIMIT = 5_000_000; // sign-off takes mocks of 5 MB or less
@@ -121,6 +122,9 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     const value={ n:o.n,label:o.label,file:basename(o.file),error:sizeError(o)?.message };
     try { const r=readOptionReferences(o.file); if(r) value.references={...r,shots:r.shots.map((s,i)=>({width:s.width,height:s.height,src:`/refs/${o.n}/${i}`}))}; }
     catch(e) { value.referenceError=`Reference images unavailable: ${e.message}`; }
+    // What the market does for this brief: each captured competitor with its live source, and every refusal with its reason.
+    try { const c=readCompetitors(o.file); if(c) value.competitors={...c,competitors:c.competitors.map((x,k)=>({...x,shots:x.shots.map((s,i)=>({width:s.width,height:s.height,src:`/competitors/${o.n}/${k}/${i}`}))}))}; }
+    catch(e) { value.competitorError=`Market comparison unavailable: ${e.message}`; }
     return value;
   };
   const page = () => {
@@ -164,6 +168,7 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       const made = await refine(readFileSync(from.file, 'utf8'),text,inherited,{ from: from.file, to: file });
       writeFileSync(file,typeof made === 'string' ? made : made.html);
       writeOptionReferences(file,typeof made === 'string' ? inherited : made.reference);
+      writeCompetitors(file, readCompetitors(from.file));
       const added = { n: options.length + 1, label: basename(file, extname(file)), file };
       options.push(added);
       reply(200, { option: shown(added) });
@@ -180,6 +185,12 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       const o=options[Number(shot[1])-1]; if(!o) return send(res,404,'text/plain','not found');
       try { const r=readOptionReferences(o.file),s=r?.shots[Number(shot[2])]; if(!s) return send(res,404,'text/plain','not found'); return send(res,200,'image/png',Buffer.from(s.dataUrl.slice(22),'base64')); }
       catch(e) { return send(res,422,'text/plain',`Reference cannot be read: ${e.message}`); }
+    }
+    const market=path.match(/^\/competitors\/(\d+)\/(\d+)\/([01])$/);
+    if (market) {
+      const o=options[Number(market[1])-1]; if(!o) return send(res,404,'text/plain','not found');
+      try { const c=readCompetitors(o.file),s=c?.competitors[Number(market[2])]?.shots[Number(market[3])]; if(!s) return send(res,404,'text/plain','not found'); return send(res,200,'image/png',Buffer.from(s.dataUrl.slice(22),'base64')); }
+      catch(e) { return send(res,422,'text/plain',`Market capture cannot be read: ${e.message}`); }
     }
     if (ASSETS[path]) {
       try { return send(res, 200, ASSETS[path], readFileSync(new URL(path.slice(1), DIST))); }

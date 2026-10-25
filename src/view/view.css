@@ -337,20 +337,39 @@ svg.i.fill { fill: currentColor; stroke: none; }
 .pin-bubble[hidden] { display: none; }
 
 /* Reference captures stay outside the design sandbox, beside the result, with their original source. */
-.references { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 140px)); gap: 12px; padding: 12px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-1); flex-shrink: 0; }
+.references { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 140px)); gap: 12px; padding: 12px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-1); flex-shrink: 0; scroll-margin-top: 64px; }
 .reference-heading { min-width: 0; overflow-wrap: anywhere; }
 .reference-heading h2 { font-size: 13.5px; font-weight: 600; }
 .reference-heading p, .reference-heading details { font-size: 12px; margin-top: 4px; }
 .reference-heading details { max-height: 130px; overflow: auto; color: var(--text-2); }
 .reference-heading summary { cursor: pointer; color: var(--text); }
 .reference-link { color: var(--text); text-underline-offset: 3px; text-decoration-color: var(--border-2); }
-.reference-shot { min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; color: var(--muted); font-size: 11px; text-decoration: none; }
-.reference-shot img { display: block; width: 100%; height: 88px; object-fit: contain; background: var(--canvas); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--border); }
+.reference-shot, .market-shot { min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; color: var(--muted); font-size: 11px; text-decoration: none; }
+.reference-shot img, .market-shot img { display: block; width: 100%; height: 88px; object-fit: contain; background: var(--canvas); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--border); }
 .reference-error { padding: 10px 12px; border-radius: 12px; background: var(--error-soft); color: var(--error); }
+/* The market beside the options: one competitor a row, its captures and its live source, then the refusals with their reasons. */
+/* The market list is context, not the work: it scrolls inside its card so the option keeps the canvas at every width. */
+.references.market { grid-template-columns: minmax(0, 1fr); gap: 10px; max-height: 40vh; overflow: auto; }
+.market-entry { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 190px)); gap: 10px; align-items: start; min-width: 0; padding-top: 10px; border-top: 1px solid var(--border); }
+.market-text { min-width: 0; display: grid; gap: 4px; }
+.market-text h3 { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+.market-text p, .market-text > div { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.market-url { font-size: 11px; word-break: break-all; }
+.market-text details { max-height: 130px; overflow: auto; font-size: 12px; color: var(--text-2); }
+.market-text summary { cursor: pointer; color: var(--text); }
+.market-refused h3 { font-size: 12.5px; font-weight: 600; margin-top: 10px; }
+.market-refused ul { margin-top: 4px; padding-left: 16px; }
+.market-refused li { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
 @media (max-width: 859px) {
   .references { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+  .references.market { grid-template-columns: minmax(0, 1fr); }
+  /* On a phone the option keeps the canvas first: the market follows it in the same scrolled panel, not above it. */
+  .work > .references.market { order: 1; max-height: 30vh; }
+  .work > .stage { min-height: 200px; } /* the option keeps a usable canvas however much context sits beside it */
+  .market-entry { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .market-text { grid-column: 1 / -1; }
   .reference-heading { grid-column: 1 / -1; }
   .reference-heading > p { display: inline; margin-right: 8px; }
   .reference-heading > div { display: inline; font-size: 12px; }
-  .reference-shot img { height: 70px; }
+  .reference-shot img, .market-shot img { height: 70px; }
 }

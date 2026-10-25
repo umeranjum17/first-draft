@@ -7,7 +7,7 @@ import { Renderer, findBrowser } from './render-check.mjs';
 import { references } from './references.mjs';
 const hash = (b) => createHash('sha256').update(b).digest('hex');
 const VIEWS = [{ name: 'phone', width: 390, height: 844 }, { name: 'desktop', width: 1280, height: 800 }];
-const validPng = (data, width, height) => data.length >= 24 && data.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')) && data.readUInt32BE(16) === width && data.readUInt32BE(20) === height;
+export const validPng = (data, width, height) => data.length >= 24 && data.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')) && data.readUInt32BE(16) === width && data.readUInt32BE(20) === height;
 
 // Computed visual language only. Never send page copy, logos, source HTML or instructions into generation.
 const visualLanguage = () => {

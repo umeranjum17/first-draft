@@ -112,6 +112,16 @@ References are cached for 24 hours in the current project's `.first-draft/refs/<
 
 The viewer shows the captures, Source/Permission links and visual-language notes **beside each option**. A portable `<option>.html.refs.json` sidecar keeps references available offline and through refinement/posting; keep it beside its HTML file. `--no-references` disables automatic online gathering without disabling local `--ref <local.png|jpg|webp>`. Generic follow-up changes keep the option's captured references. A failure is reported, never silently replaced with an invented brand style.
 
+### What the market does (competitors)
+
+```sh
+first-draft-axi make "A shift-scheduling app for small restaurants" --competitors --options 3 --out shifts.html
+```
+
+`--competitors` needs **no brand in the brief**. Your configured model names **3 to 5 real products of the same kind** (the same job, audience and surface), each with its own live public URL; then every candidate's page goes through the **same robots/terms review and capture** as a named reference, and never through a new scraper or a logged-in session. A candidate whose robots or terms refuse capture, that redirects off its own site or into a login/challenge page, or that fails to capture is **refused and reported as refused**, with its reason: it is never shown as a drawn substitute, and no competitor name or URL is invented. If the model cannot name three real products with public URLs, the run stops before fetching anything. `--competitors` is refused together with `--no-references` and with `--like` (that compares with one named product instead). Discovery and terms-review calls consume your normal model quota; only public marketing pages are read.
+
+The viewer shows the captured competitors **beside each option** under **What the market does**, each with its own source URL, permission note and phone/desktop capture, and every refusal under **Not captured** with the reason for it. They are kept in a portable `<option>.html.competitors.json` beside the option (12 MB budget), survive `refine` and the Studio brief, and are **not** sent to the model: they are how the person picking a direction sees what the real world already does.
+
 ## Multi-screen flows
 
 A brief that asks for a flow of three or more screens (onboarding, sign-up, a wizard, a checkout: it names the screens, or says "N screens") is drawn as **one journey, not N pages**. Every screen keeps one shell and one grid — a header row at the same height with a back control and Skip, the title at the same position, size and measure, the progress dots, and the round next button in the same corner — so only the content between them changes; each screen carries one idea and one decision, and the flow is one file whose screens are `data-oc-screen` sections in order. The sentence is part of the page contract, so it is held to the same bar as every other wrapper addition (`docs/wrapper-allowlist.json`).
@@ -173,6 +183,7 @@ Run `first-draft-axi --help` for all flags. [ENGINE.md](../ENGINE.md) covers the
 | `--direction <look>` / `--style <look>` | Named style or free-text direction for every option. Default: different styles for multiple options. Do not combine aliases. |
 | `--no-critic` | Skip the single critic pass. Otherwise each option is scored beside a plain page; low scores stay flagged without revision. Local references enable the independent subscription judge. |
 | `--engine` | Make each option with the multi-turn engine tool loop instead of one page from one call (`--assets` always does). |
+| `--competitors` | Find 3–5 real competitors of the brief (no brand needed) and capture their public pages through the same robots/terms review; the view shows them beside the options with sources, and each refusal with its reason. Refused with `--no-references` and `--like`. Off by default. |
 | `--screens <names>` | 1–12 comma-separated screen/page names, each 1–100 characters; asks the model to include each with ids and navigation. Default: infer from brief. |
 | `--brief-file <file>` | Append nonempty UTF-8 text, at most 100 KB; positional prompt becomes optional. No URLs or images are fetched. |
 | `--model <id>` | This run's model on the configured BYOKit route; does not change saved config. Provider validates availability. |

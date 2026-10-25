@@ -5,9 +5,12 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { readOptionReferences } from '../src/reference-capture.mjs';
+import { readCompetitors } from '../src/reference-competitors.mjs';
 const root=new URL('..',import.meta.url).pathname,source=process.env.FD_REFERENCE_SOURCE,out=process.env.DONE_DONE_EVIDENCE_ROOT;
 if(!source||!out)throw Error('Set FD_REFERENCE_SOURCE to the retained real make output with its .refs.json sidecar; run through done-done');
 const file=resolve(source),reference=readOptionReferences(file);assert.ok(reference,'Source needs real reference metadata');
+// A retained --competitors run also carries the market sidecar: the same viewer proof then covers what the market does beside the option.
+const comparison=readCompetitors(file);
 const dir=mkdtempSync('/var/tmp/fd-reference-view-');
 const support=resolve(out,'..',`${basename(out)}-support`);mkdirSync(out,{recursive:true});mkdirSync(support,{recursive:true});
 const env={...process.env,FIRST_DRAFT_HOME:join(dir,'config')};
@@ -37,8 +40,16 @@ try{
       const shot=join(out,`references-${width}-${theme}.png`);browser('screenshot',shot);
       const png=readFileSync(shot);assert.equal(png.readUInt32BE(16),width);assert.equal(png.readUInt32BE(20),height);
       metrics.push({width,theme,metric});console.log(`captured references-${width}-${theme}.png`);
+      if(comparison){
+        const entries=comparison.competitors.length,images=comparison.competitors.reduce((n,c)=>n+c.shots.length,0),refused=comparison.refused.length;
+        const market=browser('eval',`async()=>{const s=document.querySelector('.references.market');if(!s)throw Error('Market comparison section missing');s.scrollIntoView({block:'start'});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const imgs=[...s.querySelectorAll('.market-entry img')],links=[...s.querySelectorAll('.market-entry h3 a')];await Promise.all(imgs.map(i=>i.decode()));if(imgs.length!==${images}||links.length!==${entries}||links.some(a=>!/^https?:/.test(a.href))||imgs.some(i=>!i.naturalWidth||i.getBoundingClientRect().height<20)||document.documentElement.scrollWidth>innerWidth)throw Error('Market comparison did not settle at requested width');return{entries:links.length,images:imgs.length,refused:[...s.querySelectorAll('.market-refused li')].length,sources:links.map(a=>a.getAttribute('href')),width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth};}`);
+        await new Promise(r=>setTimeout(r,300));
+        const marketShot=join(out,`market-${width}-${theme}.png`);browser('screenshot',marketShot);
+        const marketPng=readFileSync(marketShot);assert.equal(marketPng.readUInt32BE(16),width);assert.equal(marketPng.readUInt32BE(20),height);
+        metrics.push({width,theme,market});console.log(`captured market-${width}-${theme}.png`);
+      }
     }finally{browser('stop');}
   }
   writeFileSync(join(support,'metrics.json'),JSON.stringify(metrics,null,2));
-  writeFileSync(join(out,'steps.json'),JSON.stringify({target:{version:run('git',['-C',root,'rev-parse','HEAD']).trim()},start:'Retained real byokit:claude design and its cached reference images; no model or source-site calls during this run.',steps:['Start the real CLI viewer on a private loopback port with isolated product configuration.','Open the actual option in owned browser profiles at phone 390 and desktop 1280, each in light and dark.','Wait for both cached reference images to decode, verify source links and option frame, measure scroll containers and capture each whole viewport including application navigation.'],result:'The actual First Draft viewer shows two source-linked reference captures above the generated notes option at phone and desktop widths. References come from the permissioned local Umer Reference Lab fixture, not the real Vercel site. This nonpaid run proves cached reference presentation, not a new model run or live internet reachability.'},null,2));
+  writeFileSync(join(out,'steps.json'),JSON.stringify({target:{version:run('git',['-C',root,'rev-parse','HEAD']).trim()},start:'Retained real byokit:claude design and its cached reference images; no model or source-site calls during this run.',steps:['Start the real CLI viewer on a private loopback port with isolated product configuration.','Open the actual option in owned browser profiles at phone 390 and desktop 1280, each in light and dark.','Wait for both cached reference images to decode, verify source links and option frame, measure scroll containers and capture each whole viewport including application navigation.'],result:'The actual First Draft viewer shows two source-linked reference captures above the generated notes option at phone and desktop widths.'+(comparison?` The same viewer shows the ${comparison.competitors.length} captured competitors of the market comparison beside the option, each with its own live source URL, and ${comparison.refused.length} refusal(s) with their reasons. Not captured: nothing is drawn in a refused competitor\'s place.`:'')+' References come from the permissioned local Umer Reference Lab fixture, not the real Vercel site. This nonpaid run proves cached reference presentation, not a new model run or live internet reachability.'},null,2));
 }finally{view?.kill();rmSync(dir,{recursive:true,force:true});}
