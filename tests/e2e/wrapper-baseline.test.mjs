@@ -35,7 +35,7 @@ const HOW = (id, source, text) => `"${id}" (${source}) reaches the model but is 
 const derived = () => [
   { id: 'frontend-design-guidance', source: 'taste', text: TASTE },
   { id: 'human-side-guidance', source: 'taste', text: HUMAN },
-  ...new Map([true, false].flatMap((drawing) => [true, false].flatMap((human) => contractRules(drawing, human))).map((r) => [r.id, { id: r.id, source: 'contract', text: r.text }])).values(),
+  ...new Map([true, false].flatMap((drawing) => [true, false].flatMap((human) => [true, false].flatMap((flow) => contractRules(drawing, human, flow)))).map((r) => [r.id, { id: r.id, source: 'contract', text: r.text }])).values(),
 ];
 const entryProblems = (e) => {
   const where = `allow-list entry "${e.id}"`, bad = [];
@@ -92,7 +92,7 @@ const kindOf = (j) => {
   const user = textOf(j);
   return user.includes('defects the host measured') ? 'host-repair' : user.includes('The critic scored this design') ? 'critic-revision' : 'draw';
 };
-async function standIn(seen, { score = 9, grid = false, delay = 0 } = {}) {
+async function standIn(seen, { score = 9, flowScore = score, grid = false, delay = 0 } = {}) {
   let pages = 0, flying = 0, peak = 0;
   const server = createServer((req, res) => {
     let body = '';
@@ -102,11 +102,12 @@ async function standIn(seen, { score = 9, grid = false, delay = 0 } = {}) {
       const page = ['draw', 'host-repair', 'critic-revision'].includes(kind);
       if (page) { flying++; peak = Math.max(peak, flying); await new Promise((r) => setTimeout(r, delay)); flying--; }
       seen.push({ kind, j, peak });
+      const needsFlow = j.tools?.[0]?.parameters?.required?.includes('flow');
       const call = { 'direction-plan': () => ['plan_directions', { directions: Array.from({ length: Number(textOf(j).match(/Plan (\d) directions/)[1]) }, (_, i) => ({ name: `Direction ${i + 1}`, learn_from: 'Notion', layout: `Layout ${i + 1}.`, type: 'Inter.', palette: '#fff and #111.', signature: `Detail ${i + 1}.` })) }],
         'critic-plain-page': () => ['write_page', { html: PAGE('plain') }],
-        'critic-review': () => ['review_designs', { design: { score, gaps: score < 10 ? ['the hero has no picture'] : [] }, plain: { score: 7, gaps: ['generic'] }, against: 'Notion', reads_as: 'a list of notes', fix: score < 10 ? 'Give the hero a picture.' : '' }] }[kind]?.();
+        'critic-review': () => ['review_designs', { design: { score, gaps: score < 10 ? ['the hero has no picture'] : [] }, plain: { score: 7, gaps: ['generic'] }, against: 'Notion', reads_as: 'a list of notes', fix: score < 10 ? 'Give the hero a picture.' : '', ...(needsFlow && { flow: { shell: { score: flowScore, reason: 'Every screen keeps the header, title, dots and next button' }, character: { score: flowScore, reason: 'The same character appears on every screen' } } }) }] }[kind]?.();
       const item = call ? { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: call[0], arguments: JSON.stringify(call[1]) }
-        : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'draw' && grid ? GRID : PAGE(++pages) }] };
+        : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'draw' && grid ? GRID : kind === 'draw' && /onboarding flow/.test(textOf(j)) ? PAGE(++pages).replace('<main>', Array.from({length:6}, (_, i) => `<section id="step-${i+1}" data-oc-screen="step-${i+1}"><h1>Step ${i+1}</h1></section>`).join('') + '<main>') : PAGE(++pages) }] };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
         + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
@@ -204,4 +205,30 @@ test('scripts/compare.mjs renders pages side by side at 390 and 1280 without a m
   const page = readFileSync(result.side_by_side, 'utf8');
   assert.match(page, /plain-1280\.png/);
   assert.match(page, /make-390\.png/);
+});
+
+// A flow brief is drawn with the one-shell contract and scored for its shell and its character in the same single review.
+const FLOW = 'a mobile onboarding flow, 6 screens, for a mindfulness app called mellow';
+test('a multi-screen flow gets the one-shell contract and a flow score in the same review', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const run = await make(t, { score: 9 }, FLOW, '--options', '1', '--screens', 'Welcome,Promise,Mood');
+  assert.deepEqual(run.counts, { draw: 1, 'critic-plain-page': 1, 'critic-review': 1 }, 'a flow adds no call: the flow score rides in the one review');
+  const draw = first(run);
+  assert.ok(draw.input[0].content.includes('ONE shell and ONE grid'), 'the flow keeps one grid and one shell on every screen');
+  assert.equal(draw.input[0].content, systemPrompt(true, false, { count: 6, screens: [] }), 'the flow rule is the only difference from the plain contract');
+  assert.match(textOf(draw), /^Brief: a mobile onboarding flow, 6 screens, for a mindfulness app called mellow\nScreens: Welcome, Promise, Mood\./);
+  const review = run.seen.find((s) => s.kind === 'critic-review').j;
+  assert.equal(review.input.flatMap((m) => Array.isArray(m.content) ? m.content : []).filter((c) => c.type === 'input_image').length, 14, 'all six design screens at both widths plus both plain views reach the critic');
+  assert.match(textOf(review), /design-phone-390-step-6/);
+  const file = run.made.files[0];
+  assert.deepEqual([file.critique.score, file.critique.passed, file.critique.flow.shell.score], [9, true, 9], 'a flow that keeps its shell and character passes');
+  assert.match(file.critique.fix, /hero/);
+});
+
+test('a flow that changes its screens or its character from screen to screen does not pass', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const run = await make(t, { score: 9, flowScore: 6 }, FLOW, '--options', '1', '--screens', 'Welcome,Promise,Mood');
+  const critique = run.made.files[0].critique;
+  assert.deepEqual([critique.score, critique.passed], [9, false], 'a high design score does not save a flow whose screens or character change');
+  assert.deepEqual([critique.flow.shell.score, critique.flow.character.score], [6, 6]);
 });
