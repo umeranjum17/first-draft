@@ -65,6 +65,7 @@ export const assetProviders = {
         '--model', 'gpt-6-luna', '-c', 'model_reasoning_effort="low"', '-c', 'mcp_servers={}', '-c', 'features.shell_tool=false', '-c', 'features.unified_exec=false', '-c', 'features.apps=false', '-c', 'features.plugins=false',
         // A style sheet of the same character is attached as a native image input, so every scene of a set is drawn from the first.
         ...(sheet ? ['-i', sheet] : []),
+        '--', // End variadic image arguments before the positional prompt.
         // The native tool keeps its image in Codex's own cache and cannot save elsewhere: asking it to save made the model call the tool a second time.
         `Call the native image generation tool exactly once, then stop. One raster image, aspect ratio ${aspectRatio}, lowest quality and smallest size available. The host collects the image from the tool itself: do not save, copy or rename it. No shell commands, no SVG, no external services, no API keys. If image generation is unavailable, say so and stop. Image brief: ${sheet ? `The attached image is this set's character style sheet: draw the same character in exactly the same drawing style, with the same line weight and palette, in the new pose and scene the brief describes. ` : ''}${prompt}`], { cwd: dir, env });
       writeFileSync(join(dir, 'codex-events.jsonl'), events);
