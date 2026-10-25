@@ -215,6 +215,8 @@ test('a multi-screen flow gets the one-shell contract and a flow score in the sa
   assert.deepEqual(run.counts, { draw: 1, 'critic-plain-page': 1, 'critic-review': 1 }, 'a flow adds no call: the flow score rides in the one review');
   const draw = first(run);
   assert.ok(draw.input[0].content.includes('ONE shell and ONE grid'), 'the flow keeps one grid and one shell on every screen');
+  assert.match(draw.input[0].content, /illustration belongs to that screen's own surface[^.]*mask-image/, 'the flow tells the model to make each scene part of its screen, not a rimmed shape pasted on');
+  assert.match(draw.input[0].content, /never shrinks to a thumbnail/, 'a scene keeps the size the other screens give theirs');
   assert.equal(draw.input[0].content, systemPrompt(true, false, { count: 6, screens: [] }), 'the flow rule is the only difference from the plain contract');
   assert.match(textOf(draw), /^Brief: a mobile onboarding flow, 6 screens, for a mindfulness app called mellow\nScreens: Welcome, Promise, Mood\./);
   const review = run.seen.find((s) => s.kind === 'critic-review').j;
