@@ -377,6 +377,28 @@ function referencePanel(o) {
   return [el('section',{class:'references','aria-label':`Reference images for Option ${o.n}`},heading,...shots)];
 }
 
+// What the market does for this brief: every captured competitor with its own live source, beside the options, and every refusal with its reason.
+function marketPanel(o) {
+  if(o.competitorError) return [el('p',{class:'reference-error',role:'alert'},o.competitorError)];
+  const m=o.competitors; if(!m) return [];
+  const source=(href,text)=>el('a',{href,target:'_blank',rel:'noopener noreferrer',class:'reference-link'},text);
+  // One card per competitor, side by side: every capture stays in view instead of hiding behind a scroll.
+  const cards=m.competitors.map((c)=>el('div',{class:'market-card'},
+    el('div',{class:'market-text'},
+      el('h3',{},source(c.url,c.name)),
+      el('p',{class:'market-url'},c.url),
+      el('p',{},`Captured ${new Date(c.fetched_at).toLocaleDateString()}`),
+      el('div',{},source(c.url,'Source'),' · ',source(c.terms_url,'Permission note'))),
+    el('div',{class:'market-shots'},...c.shots.map((s,i)=>el('a',{href:s.src,target:'_blank',rel:'noopener',class:'market-shot','aria-label':`Open the ${i ? 'desktop' : 'phone'} capture of ${c.name}`},
+      el('img',{src:s.src,alt:`${c.name} page at ${s.width} pixels`,width:s.width,height:s.height}),el('span',{},`${i ? 'Desktop' : 'Phone'} · ${s.width}px`)))),
+    el('details',{},el('summary',{},'Permission'),el('p',{},c.licence_note))));
+  const refused=m.refused.map((r)=>el('li',{},r.url?source(r.url,r.name):r.name,el('span',{class:'muted'},` — refused: ${r.why}`)));
+  return [el('section',{class:'references market','aria-label':`What the market does, beside Option ${o.n}`},
+    el('div',{class:'reference-heading'},el('h2',{},'What the market does'),el('p',{class:'muted'},m.competitors.length?`${plural(m.competitors.length,'competitor')} captured from their own public pages`:'Every page found was refused by its robots or terms review: none is captured and nothing is drawn in their place')),
+    ...(cards.length?[el('div',{class:'market-grid'},...cards)]:[]),
+    ...(m.refused.length?[el('div',{class:'market-refused'},el('h3',{},`Not captured (${m.refused.length})`),el('p',{class:'muted'},'These were found and refused or failed: nothing is drawn in their place.'),el('ul',{},...refused))]:[]))];
+}
+
 // The option switcher beside the design's name: its menu lists every option, an option being made, and the grid of all of them.
 function switcher(o, dev) {
   const button = el('button', { type: 'button', class: 'button switch', 'aria-label': `Option ${o.n} ${o.label}: switch option` }, el('span', { class: 'num on' }, String(o.n)), el('span', { class: 'name' }, o.label), icon('chevron', 'chev'));
@@ -443,7 +465,7 @@ function canvas(o, device) {
       el('section', {}, el('h2', { class: 'kicker' }, `Comments · Option ${o.n}`, el('span', { class: 'mono' }, String(all.length))), notes)),
     ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]), version());
 
-  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), stage));
+  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), ...marketPanel(o), stage));
   const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };
   tool.onclick = () => commenting(!studio.classList.contains('commenting'));
   add.onclick = () => { moreMenu.hidePopover(); commenting(true); };

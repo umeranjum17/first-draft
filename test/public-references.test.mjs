@@ -33,6 +33,9 @@ test('public references: actual browser capture, project cache, named-brand make
     if(req.url==='/huge') return send('text/html','x'.repeat(2_000_001));
     if(req.url==='/slow') {timeouts.push(setTimeout(()=>send('text/html',BRAND_PAGE),11_000));return;}
     if(req.url==='/no-terms') return send('text/html','<h1>Umer</h1>');
+    if(req.url==='/terms-restricted') return send('text/html','<h1>Reference permission</h1><p>Automated screenshots are prohibited.</p>');
+    if(req.url==='/market-a'||req.url==='/market-b'||req.url==='/market-c') return send('text/html',`<title>Umer market ${req.url.slice(-1).toUpperCase()}</title><h1>Umer market ${req.url.slice(-1).toUpperCase()}</h1><p>Another product for the same job.</p><a href="/terms">Terms</a>`);
+    if(req.url==='/market-restricted') return send('text/html','<title>Umer restricted</title><h1>Umer restricted</h1><p>Another product for the same job.</p><a href="/terms-restricted">Terms</a>');
     if(req.url==='/login') return send('text/html','<input type="password">');
     return send('text/html',BRAND_PAGE);
   });
@@ -50,7 +53,8 @@ else {
  const call=(name,a)=>({name,arguments:JSON.stringify(a)});
  let calls=[];
  if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
- else if(tools.some(t=>t.name==='assess_reference_terms'))calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||'allowed',quote:${JSON.stringify(PERMISSION)}})];
+ else if(tools.some(t=>t.name==='assess_reference_terms')){const q=JSON.parse(messages.at(-1).content),no=/prohibited/i.test(q.text);calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||(no?'blocked':'allowed'),quote:no?'Automated screenshots are prohibited.':${JSON.stringify(PERMISSION)}})];}
+ else if(tools.some(t=>t.name==='name_market_competitors')){const o=process.env.FD_BRAND_ORIGIN,all=[['Market A','market-a'],['Market B','market-b'],['Market C','market-c'],['Restricted Market','market-restricted'],['Robots Market','specific']];calls=[call('name_market_competitors',{products:(process.env.FD_COMPETITORS_FEW?all.slice(0,2):all).map(([name,path])=>({name,url:o+'/'+path}))})];}
  else if(tools.some(t=>t.name==='define_redesign_plan')){
   if(JSON.parse(args[args.indexOf('--json-schema')+1]).properties.calls.maxItems!==1||process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS!=='8192')throw Error('structural single-response budget missing');
   const q=JSON.parse(messages.at(-1).content),bad=process.env.FD_PLAN_BAD||(process.env.FD_PLAN_REPAIR&&q.attempt===1?'uri':'');
@@ -169,14 +173,40 @@ else {
   assert.match(readFileSync(warm,'utf8'),/A warm note/);assert.deepEqual(JSON.parse(readFileSync(warm+'.refs.json','utf8')),reference);
   const inputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>t.name==='done')&&!JSON.stringify(r.messages).includes('SOURCE INVENTORY:'));
   assert.ok(inputs.length>=8&&inputs.every(r=>r.images===2&&r.system.includes('Observed reference visual language')),'capture pixels and observed brief reach every generation turn');
+  // Competitor search: from the brief alone, 3-5 real products through the same robots/terms capture path; refusals reported, never filled in.
+  const comp=join(project,'market.html');
+  await assert.rejects(run('make','A notes app for Umer','--competitors','--no-references','--out',comp),e=>/conflicts/.test(e.stdout));
+  await assert.rejects(run('make','A notes app for Umer','--competitors','--like','Vercel','--out',comp),e=>/use --like/.test(e.stdout));
+  assert.equal(existsSync(comp),false);
+  env.FD_COMPETITORS_FEW='1';
+  const beforeFew=requests.length;
+  await assert.rejects(run('make','A notes app for Umer','--competitors','--options','1','--engine','--out',comp),e=>/did not name 3 to 5/.test(e.stdout));
+  assert.equal(existsSync(comp),false,'no option is made when fewer than three competitors are found');
+  assert.equal(requests.length,beforeFew,'a failed discovery fetches no competitor page');
+  delete env.FD_COMPETITORS_FEW;
+  const market=JSON.parse((await run('make','A notes app for Umer','--competitors','--options','1','--engine','--out',comp)).stdout);
+  assert.deepEqual(market.competitors.captured.map(c=>c.name).sort(),['Market A','Market B','Market C']);
+  assert.equal(market.competitors.refused.length,2);
+  assert.match(market.competitors.refused.find(r=>r.url.endsWith('/specific')).why,/robots\.txt disallows/,'a refusing robots page is reported as refused');
+  assert.match(market.competitors.refused.find(r=>r.url.endsWith('/market-restricted')).why,/restricted.*no screenshots/s,'a restrictive terms page is reported as refused');
+  const set=JSON.parse(readFileSync(comp+'.competitors.json','utf8'));
+  assert.equal(set.competitors.length+set.refused.length,5,'every named competitor is either captured or refused');
+  for(const c of set.competitors){assert.match(c.url,/^http:\/\/127\.0\.0\.1:\d+\/market-[abc]$/);assert.match(c.terms_url,/\/terms$/);assert.match(c.licence_note,/Anonymous automated browsers/);assert.equal(c.shots.length,2);for(const s of c.shots){const b=Buffer.from(s.dataUrl.slice(22),'base64');assert.equal(b.readUInt32BE(16),s.width);assert.equal(b.readUInt32BE(20),s.height);}}
+  assert.ok(!requests.some(r=>r.url==='/specific'),'a robots-refused candidate page is never fetched');
+  assert.ok(requests.some(r=>r.url==='/terms-restricted'),'a restrictive candidate is refused on its own public terms, before any screenshot');
   const port=await new Promise(ok=>{const s=portServer().listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>ok(p));});});
-  const child=spawn(process.execPath,[CLI,'view',out,warm,'--host','127.0.0.1','--port',String(port)],{env,cwd:project,stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,[CLI,'view',out,warm,comp,'--host','127.0.0.1','--port',String(port)],{env,cwd:project,stdio:['ignore','pipe','pipe']});
   t.after(()=>child.kill());
   const opened=await new Promise((ok,no)=>{let text='';const timer=setTimeout(()=>no(Error('view startup timed out')),10_000);child.stdout.on('data',b=>{text+=b;if(text.includes('\n')){clearTimeout(timer);ok(JSON.parse(text));}});child.on('exit',()=>{clearTimeout(timer);no(Error('view exited'));});});
   const view=opened.viewing.url;
   const data=JSON.parse((await(await fetch(view)).text()).match(/id="design">([\s\S]*?)<\/script>/)[1]);
   assert.equal(data.options[0].references.name,'Vercel');
   for(const shot of data.options[0].references.shots){const r=await fetch(new URL(shot.src,view));assert.equal(r.headers.get('content-type'),'image/png');assert.equal(Buffer.from(await r.arrayBuffer()).readUInt32BE(16),shot.width);}
+  assert.equal(data.options[2].competitors.competitors.length,3,'the market shows beside the options');
+  assert.deepEqual(data.options[2].competitors.competitors.map(c=>c.name),['Market A','Market B','Market C']);
+  assert.equal(data.options[2].competitors.refused.length,2,'the refusals stay visible with their reason');
+  assert.ok(data.options[2].competitors.refused.every(r=>typeof r.why==='string'&&r.why.length>10));
+  for(const c of data.options[2].competitors.competitors){assert.match(c.url,/^http:\/\/127\.0\.0\.1:\d+\/market-/,'every competitor carries its own live source URL');for(const shot of c.shots){const r=await fetch(new URL(shot.src,view));assert.equal(r.headers.get('content-type'),'image/png');const png=Buffer.from(await r.arrayBuffer());assert.equal(png.readUInt32BE(16),shot.width);assert.equal(png.readUInt32BE(20),shot.height);}}
   const changed=await fetch(new URL('/refine',view),{method:'POST',headers:{origin:new URL(view).origin,'content-type':'application/json'},body:JSON.stringify({option:1,change:'warmer palette'})});
   assert.equal(changed.status,200);assert.equal((await changed.json()).option.references.name,'Vercel','viewer refinement preserves references');
   await assert.rejects(run('make','notes','--like','Vercel','--no-references','--out',join(project,'bad.html')),e=>/conflicts/.test(e.stdout));
