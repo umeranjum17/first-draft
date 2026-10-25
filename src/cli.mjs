@@ -10,6 +10,7 @@ import { referenceDoctor, referenceFlags, referenceHelp, references } from './re
 import { discoverReference, discoveryHelp, explicitReferenceUrl } from './reference-discovery.mjs';
 import { KINDS, libraryCache, pullLibrary, readLibrary } from './reference-library.mjs';
 import { judgeRouteProblem } from './judge.mjs';
+import { captureCompetitors, discoverCompetitors, readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { planDirections } from './direct.mjs';
@@ -96,8 +97,17 @@ const readReferences = async (paths, modelOverride) => {
 };
 // A deterministic comparison gate avoids model calls for unrelated briefs; the user's model, never a brand list, identifies the name.
 const prepareReferences = async (values, prompt, c, images = [], inherited = null) => {
-  if (values['no-references'] && values.like !== undefined) throw new Error('--like conflicts with --no-references');
-  let metadata = !images.length ? inherited : null, added = optionReferenceImages(metadata), tokens_in = 0, tokens_out = 0;
+  if (values['no-references'] && (values.like !== undefined || values.competitors)) throw new Error(values.competitors ? '--competitors conflicts with --no-references' : '--like conflicts with --no-references');
+  let metadata = !images.length ? inherited : null, added = optionReferenceImages(metadata), tokens_in = 0, tokens_out = 0, competitors = null;
+  if (values.competitors) {
+    // Market context comes from the brief alone: --like names one reference instead, so the two are not mixed.
+    if (values.like !== undefined) throw new Error('--competitors searches the market for the brief; use --like to compare with one named product instead');
+    const found = await discoverCompetitors({ prompt, ...c });
+    tokens_in += found.tokens_in; tokens_out += found.tokens_out;
+    const captured = await captureCompetitors({ products: found.products, project: values.project, ...c });
+    tokens_in += captured.tokens_in; tokens_out += captured.tokens_out;
+    competitors = { version: captured.version, checked_at: captured.checked_at, competitors: captured.competitors, refused: captured.refused };
+  }
   if (!values['no-references'] && (values.like !== undefined || /\b(?:like|inspired\s+by|style\s+of|similar\s+to)\b|\b[a-z\d]+-like\b/i.test(prompt))) {
     const discovery = await discoverReference({ prompt, like:values.like, ...c });
     tokens_in += discovery.tokens_in; tokens_out += discovery.tokens_out;
@@ -111,7 +121,7 @@ const prepareReferences = async (values, prompt, c, images = [], inherited = nul
   images = [...images,...added];
   if (images.length > 6 || images.reduce((n,i)=>n+Buffer.from(i.dataUrl.slice(i.dataUrl.indexOf(',')+1),'base64').length,0)>10_000_000) throw new Error('Combined reference images exceed six images or 10 MB');
   if (images.length && !await imageSupport(routeOf(c.agent),c.model)) throw new Error(`${c.agent} / ${c.model} does not support reference images; none were sent`);
-  return { images, metadata, tokens_in, tokens_out };
+  return { images, metadata, competitors, tokens_in, tokens_out };
 };
 // The view's Next brief runs the same engine call as `refine`, on the agent the person set, read when the brief is sent.
 // A logo option (a sheet with its .logo/ folder) is refined with its logo files, and the new option gets its own folder.
@@ -149,6 +159,7 @@ commands[13]:
     --out <file.html>  output file; multiple options add -1, -2, etc.; {i} is replaced by the option number
     --out-dir <folder> alternative to --out; writes option-1.html, option-2.html, etc.
     --no-critic        skip the single critic pass (1-10 beside a plain page at 1280/390); refs pull enables an independent subscription judge, otherwise labelled self-assessment; low scores stay flagged, not revised
+    --competitors      find 3-5 real competitors of this brief from the prompt alone and capture their public pages through the same robots/terms review; the view shows them beside the options with their sources, and every refusal with its reason
   logo "<brief>" (--out <file.html> | --out-dir <folder>) [--options 1-5] [--direction <kind>] [--ref <image>] [--explore auto|none|codex|higgsfield] [--model <id>]   explore 9 rough concepts from the brief's metaphors (wordmark-led, abstract and symbol, three calls at once), each with a palette and a base shape of its own, critique them at 16 and 32 px (an initial dressed as an object is dropped unless the brief asks for a letter) and refine the best into logo options (a wordmark-led and an abstract one among them, never two of one base shape; drawn in parallel, three at a time, at most two engine runs each; image-first when an image provider is ready; one more round from the critic's advice if it drops every mark): each is a brand sheet (file.html) with its one-line idea and palette, and a file.logo/ folder with mark, wordmark and two lockups as SVG, each with a -dark twin, icon.svg, palette.json, the app icon as PNG at 16, 32, 48, 180, 192, 512 and 1024 px, favicon.ico and logo.json; each finished mark is critiqued again and redone or dropped; --ref images are the critic's only references (no site is fetched); needs Chrome or Chromium and a model that takes images
   styles [--logo]                     list the named design styles that make --direction <id> takes (or write your own direction in words); --logo lists the logo kinds logo --direction takes
   refine <option.html> "<change>" --out <file.html>   apply a follow-up prompt to one existing option: writes a new option file, the original is untouched
@@ -222,7 +233,7 @@ if (command === 'refs') {
 } else if (command === 'make' || command === 'redesign' || command === 'logo') {
   const redesign = command === 'redesign', logo = command === 'logo';
   const { values, positionals } = flags(rest, logo ? { ref: referenceFlags.ref, ...Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model', 'explore'].map((name) => [name, { type: 'string' }])) }
-    : { ...referenceFlags, ...assetFlags, ...(!redesign && { engine: { type: 'boolean' }, 'no-critic': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
+    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' } }), ...(!redesign && { engine: { type: 'boolean' }, 'no-critic': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !positionals.join(' ').trim() || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file',
     ['Run `first-draft-axi redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5`', 'Only have a screenshot? Run `first-draft-axi make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html`']);
@@ -336,6 +347,7 @@ if (command === 'refs') {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, made.html);
       writeOptionReferences(out,refs.metadata);
+      writeCompetitors(out,refs.competitors);
       const conceptOf = ({ id, round, territory, kind, name, from, idea, base, base_seen, shape, avoid, palette, sketch }) => ({ id, round, territory, kind, name, from, idea, base, base_seen, shape, avoid, palette, sketch });
       const picture = (p) => p?.error ? { provider: p.provider, error: p.error, seconds: p.seconds } : p && { provider: p.provider, prompt: p.prompt, image: 'exploration.webp', seconds: p.seconds };
       // Every attempt the critique did not keep as this option stays for review in <option>.dropped/, outside the options the view lists.
@@ -370,6 +382,7 @@ if (command === 'refs') {
       exploration: exploration.provider ? { provider: exploration.provider, images: drawn.options.filter((o) => o.made).map((o) => o.picture?.error ? { error: o.picture.error } : o.picture && { concept: o.concept.name, seconds: o.picture.seconds }) } : { off: exploration.off }, timing: drawn.timing }),
     ...(inventory && { redesign: { sources: resolve(values.out, 'sources', 'sources.json'), screens: inventory.pages.map(p=>({id:p.id,title:p.title})), pending: inventory.pending, limitations: inventory.limitations } }),
     ...(refs.metadata && { references:{name:refs.metadata.name,url:refs.metadata.url,fetched_at:refs.metadata.fetched_at} }),
+    ...(refs.competitors && { competitors: { checked_at: refs.competitors.checked_at, captured: refs.competitors.competitors.map(({ name, url, terms_url }) => ({ name, url, terms_url })), refused: refs.competitors.refused, sidecar: '.competitors.json beside each option' } }),
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
     help: [...(logo && files.some((f) => !f.passed) ? [`${files.filter((f) => !f.passed).length} option(s) did not pass the self-critique: each is its best attempt, flagged in its sheet and logo.json (passed: false)`] : []), ...(drawn?.kinds_missing ? [`No ${drawn.kinds_missing.join(' or ')} concept survived the critique, so the options lack that kind; concepts says why`] : []), ...(logo && files.length < count ? [`${files.length} of ${count} options were made: the concept critique kept ${drawn.concepts.filter((k) => k.status !== 'dropped').length} concept(s) to draw; concepts says why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), ...(critic?.off ? [`The critic was off (${critic.off}): tell the user no option was scored against the references`] : []), ...(critic?.judged?.off ? [`Independent judge unavailable (${critic.judged.off}); scores are the generator's self-assessment`] : []), ...(low.length ? [`${low.length} option(s) are below the bar: ${low.map((f) => `${basename(f.file)} ${f.critique.error?.replace(/\.$/, '') ?? `scored ${f.critique.score}/10 (plain page ${f.critique.plain_score}; ${PASS} needed) after ${f.critique.rounds} review(s)`}`).join(', ')}. Tell the user each score and its gaps; never show one as finished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
@@ -408,6 +421,10 @@ if (command === 'refs') {
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, made.html);
   writeOptionReferences(out,refs.metadata);
+  // A refined option keeps the market comparison and the refusals the option it came from shows.
+  let competitors = null;
+  try { competitors = logo ? null : readCompetitors(file); } catch (e) { fail('REFERENCE_FAILED', `the market comparison of ${file} cannot be read: ${e.message}`, [referenceHelp]); }
+  writeCompetitors(out, competitors);
   const written = logo && writeLogo(out, made.logo, { brief: change, refined_from: resolve(file), concept: logo.concept, agent: c.agent, model: c.model });
   console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in + refs.tokens_in, tokens_out: made.tokens_out + refs.tokens_out, ...(written && { logo_dir: written.dir, checks: written.logo.checks }) },
     ...(made.remote.length && { blocked_remote: made.remote }),

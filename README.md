@@ -53,6 +53,7 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
 - **Explore more than one direction.** Ask for 1–5 options, a named style, or a multi-screen flow.
 - **Compare at the right size.** Studio has Desktop, Phone and Both views; Play opens a screen flow.
 - **Point at the change.** Click a spot to leave a comment; numbered pins and plain JSON keep the feedback beside the design.
+- **See the market first.** `--competitors` finds 3–5 real products of the brief's kind, captures their public pages through the same robots/terms review as a reference, and shows them beside the options with their sources and every refusal.
 - **Keep the original.** Refine into a new option, or send the choices to [sign-off](https://github.com/umeranjum17/sign-off) for someone's pick.
 
 `first-draft-axi init` also installs the [agent skill](skills/first-draft-axi/SKILL.md) for Claude Code, Codex and pi in your repo. Commands return JSON, so your coding agent can drive the same workflow.
@@ -105,7 +106,7 @@ Options are prototypes, not production apps. Model assessments can be wrong; ind
 
 ## Reference
 
-[All flags and viewer routes](docs/guide.md#reference) · [Redesign an existing site](docs/guide.md#redesign-an-existing-product-first-slice) · [Assets](docs/guide.md#generated-assets) · [Logos](docs/guide.md#logos) · [References and judge](docs/guide.md#independent-judge-and-reference-cache) · [Engine](ENGINE.md)
+[All flags and viewer routes](docs/guide.md#reference) · [Redesign an existing site](docs/guide.md#redesign-an-existing-product-first-slice) · [Assets](docs/guide.md#generated-assets) · [Logos](docs/guide.md#logos) · [References and judge](docs/guide.md#independent-judge-and-reference-cache) · [Competitor search](docs/guide.md#what-the-market-does-competitors) · [Engine](ENGINE.md)
 
 ## Contributing
 

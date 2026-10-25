@@ -291,7 +291,8 @@ svg.i.fill { fill: currentColor; stroke: none; }
   .switch { max-width: none; height: 36px; }
   .page-canvas { height: auto; }
   .studio { display: flex; flex-direction: column; }
-  .work { order: -1; height: calc(100dvh - 96px - var(--dock, 76px)); padding: 0 8px; }
+  .work { order: -1; height: calc(100dvh - 96px - var(--dock, 76px)); padding: 0 8px; overflow-y: auto; overscroll-behavior: contain; }
+  /* the market card is tall on a phone: the panel scrolls, so every competitor and every refusal stays reachable */
   .work:has(.blank) { height: auto; min-height: 320px; }
   .side { padding: 0 8px; }
   .side-scroll { overflow: visible; padding: 20px 4px 12px; }
@@ -337,20 +338,47 @@ svg.i.fill { fill: currentColor; stroke: none; }
 .pin-bubble[hidden] { display: none; }
 
 /* Reference captures stay outside the design sandbox, beside the result, with their original source. */
-.references { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 140px)); gap: 12px; padding: 12px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-1); flex-shrink: 0; }
+.references { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(0, 140px)); gap: 12px; padding: 12px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-1); flex-shrink: 0; scroll-margin-top: 64px; }
 .reference-heading { min-width: 0; overflow-wrap: anywhere; }
 .reference-heading h2 { font-size: 13.5px; font-weight: 600; }
 .reference-heading p, .reference-heading details { font-size: 12px; margin-top: 4px; }
 .reference-heading details { max-height: 130px; overflow: auto; color: var(--text-2); }
 .reference-heading summary { cursor: pointer; color: var(--text); }
 .reference-link { color: var(--text); text-underline-offset: 3px; text-decoration-color: var(--border-2); }
-.reference-shot { min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; color: var(--muted); font-size: 11px; text-decoration: none; }
-.reference-shot img { display: block; width: 100%; height: 88px; object-fit: contain; background: var(--canvas); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--border); }
+.reference-shot, .market-shot { min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; color: var(--muted); font-size: 11px; text-decoration: none; }
+.reference-shot img, .market-shot img { display: block; width: 100%; height: 88px; object-fit: contain; background: var(--canvas); border-radius: 8px; box-shadow: inset 0 0 0 1px var(--border); }
 .reference-error { padding: 10px 12px; border-radius: 12px; background: var(--error-soft); color: var(--error); }
+/* The market beside the options: one card per competitor, its captures and its live source, then the refusals with their reasons. */
+/* Nothing in the market hides behind a scroll: the cards sit side by side and the refusal list follows them. */
+.references.market { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.market-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.market-card { min-width: 0; display: grid; gap: 4px; align-content: start; padding-top: 10px; border-top: 1px solid var(--border); }
+.market-text { min-width: 0; display: grid; gap: 4px; }
+.market-card h3 { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+.market-card p, .market-text > div { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.market-url { font-size: 11px; word-break: break-all; }
+.market-shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.market-card details { font-size: 12px; color: var(--text-2); }
+.market-card summary { cursor: pointer; color: var(--text); }
+.market-refused h3 { font-size: 12.5px; font-weight: 600; margin-top: 10px; }
+.market-refused ul { margin-top: 4px; padding-left: 16px; }
+.market-refused li { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
 @media (max-width: 859px) {
   .references { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+  .references.market { grid-template-columns: minmax(0, 1fr); }
+  /* On a phone the option keeps the canvas first: the market follows it in the same scrolled panel, not above it. */
+  .work > .references.market { order: 1; }
+  .work > .stage { min-height: 200px; } /* the option keeps a usable canvas however much context sits beside it */
+  /* A phone gets the same cards two up: three competitors and their refusals fit one screenful. */
+  .market-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .market-card { gap: 2px; padding-top: 8px; }
+  /* the two captures and their captions stay one line each, so three competitors and every refusal fit one screenful */
+  .market-shot { font-size: 10px; }
+  .market-shot span { white-space: nowrap; }
+  .market-card p, .market-text > div { font-size: 11px; }
   .reference-heading { grid-column: 1 / -1; }
   .reference-heading > p { display: inline; margin-right: 8px; }
   .reference-heading > div { display: inline; font-size: 12px; }
   .reference-shot img { height: 70px; }
+  .market-shot img { height: 60px; }
 }
