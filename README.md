@@ -7,11 +7,13 @@
 For developers and coding agents: explore HTML options using your own AI subscription.
 
 <picture>
-  <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="docs/ui/studio-phone-dark.webp">
-  <source media="(max-width: 600px)" srcset="docs/ui/studio-phone-light.webp">
-  <source media="(prefers-color-scheme: dark)" srcset="docs/ui/studio-dark.webp">
-  <img src="docs/ui/studio-light.webp" width="880" alt="The real First Draft Studio: switch options, preview desktop or phone, and write a change brief. Design canvas hidden; controls shown.">
+  <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="docs/media/reviewed-pair-phone-dark.gif">
+  <source media="(max-width: 600px)" srcset="docs/media/reviewed-pair-phone.gif">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/media/reviewed-pair-dark.gif">
+  <img src="docs/media/reviewed-pair.gif" width="880" alt="The real First Draft Studio holding two finished options: a Parley Books landing page and a Margin notes app, three seconds each.">
 </picture>
+
+<sub>Two real retained options in the Studio, unaltered: **Parley Books**, generator self-scored **8/10**, and **Margin**, **7/10** — `claude-sonnet-5-5`, runs `strip-landing` and `strip2-notes`, 24 October 2026. Self-scores, below our 9/10 bar, shown as [one named exception](docs/quality.md#the-readme-hero--24-october-2026).</sub>
 
 [Website](https://umeranjum17.github.io/first-draft/) · [Quick start](#quick-start) · [Docs](docs/guide.md) · [Agent skill](skills/first-draft-axi/SKILL.md)
 
@@ -46,7 +48,7 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
 
 ## Make, compare, refine
 
-*The hero shows real Studio controls; the design canvas is deliberately hidden. It is not a design sample. [Capture provenance](docs/ui/README.md).*
+*The hero is a native capture of the Studio with two retained options; [how it was captured](docs/ui/README.md).*
 
 - **Explore more than one direction.** Ask for 1–5 options, a named style, or a multi-screen flow.
 - **Compare at the right size.** Studio has Desktop, Phone and Both views; Play opens a screen flow.
@@ -64,7 +66,7 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
   <img src="docs/ui/make-light.webp" width="880" alt="Formatted real make output: Sonnet 5.5 took 304 seconds; its critic scored the draft 8 and the plain prompt 5, below the 9 out of 10 bar.">
 </picture>
 
-This is a **formatted excerpt of real CLI output**, not a generated page or an interactive critic screen: **Claude Sonnet 5.5, 24 October 2026**, 304 seconds, self-scored **8/10 versus 5/10** for its plain-prompt baseline. It failed the 9/10 quality bar. A generator rating itself is not independent evidence of quality.
+This is a **formatted excerpt of real CLI output** from a different run, not a generated page or an interactive critic screen: **Claude Sonnet 5.5, 24 October 2026**, 304 seconds, self-scored **8/10 versus 5/10** for its plain-prompt baseline. It failed the 9/10 quality bar. A generator rating itself is not independent evidence of quality.
 
 We also compared the same briefs on Sonnet 5.5 on that date:
 

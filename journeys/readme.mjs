@@ -55,10 +55,14 @@ try {
       assert.ok(actual.images.every(i => i.ok), `${label} ${width} ${theme}: missing image`);
       if (label === 'after') {
         assert.ok(actual.commands.every(p => !p.wide), `${width} ${theme}: command overflow`);
-        const ui = actual.images.filter(i => i.src.includes('/docs/ui/'));
-        assert.equal(ui.length, 2, 'Studio and critic board both load');
-        assert.ok(ui.every(i => i.src.endsWith('-dark.webp') === (theme === 'dark')), 'Correct theme assets');
-        assert.ok(ui.every(i => i.src.includes('-phone-') === (width === 390)), 'Correct phone crop');
+        const hero = actual.images.filter(i => i.src.includes('/docs/media/'));
+        assert.equal(hero.length, 1, 'the one reviewed hero picture loads');
+        assert.ok(hero[0].src.includes('-dark.gif') === (theme === 'dark'), 'Correct hero theme');
+        assert.ok(hero[0].src.includes('-phone') === (width === 390), 'Correct hero width');
+        const board = actual.images.filter(i => i.src.includes('/docs/ui/'));
+        assert.equal(board.length, 1, 'the real CLI excerpt loads');
+        assert.ok(board[0].src.endsWith('-dark.webp') === (theme === 'dark'), 'Correct board theme');
+        assert.ok(board[0].src.includes('-phone-') === (width === 390), 'Correct board width');
       }
       const name = `${label}-${width}-${theme}`;
       browser('screenshot', join(out, `${name}.png`));
@@ -67,7 +71,7 @@ try {
     }
   }
   writeFileSync(join(out, 'readme-states.json'), JSON.stringify(seen, null, 2));
-  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft README ${version} at ${head}` }, start: 'Candidate README source, rendered by the GitHub Markdown API with github-markdown-css 5.8.1; local faithful article layout, not the github.com repository shell', steps: ['Render README with the GitHub API', 'Open at phone 390 and desktop 1280, light and dark, in an isolated chrome-devtools-axi session', 'Wait for images to decode; check image loading, page and quick-start command overflow', 'Capture the first screen and the complete article in each case'], result: 'The README shows the product-first heading, real Studio controls with hidden design canvas, themed assets and three-command quick start at both widths and themes; no model generation was repeated' }, null, 2));
+  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft README ${version} at ${head}` }, start: 'Candidate README source, rendered by the GitHub Markdown API with github-markdown-css 5.8.1; local faithful article layout, not the github.com repository shell', steps: ['Render README with the GitHub API', 'Open at phone 390 and desktop 1280, light and dark, in an isolated chrome-devtools-axi session', 'Wait for images to decode; check image loading, page and quick-start command overflow', 'Capture the first screen and the complete article in each case'], result: 'The README shows the product-first heading, the approved real reviewed-options hero (animated GIF, themed and phone-specific), the real CLI excerpt and a three-command quick start at both widths and themes; no model generation was repeated' }, null, 2));
   console.log(`PASS: README 390/1280 light/dark at ${head}`);
 } finally {
   browser('stop');
