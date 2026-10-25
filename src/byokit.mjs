@@ -2,6 +2,7 @@
 import { accessSync, constants, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
+import { modelPool, poolNext, poolPick } from './model-pool.mjs';
 const CLI_ROUTES = ['claude', 'codex'];
 const cliBin = (route) => process.env.PATH?.split(delimiter).map((p) => resolve(p, route)).find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
 const cli = new Map(), launched = new Map();
@@ -30,6 +31,47 @@ function launch(route) {
   return launched.get(route);
 }
 export const installedCodex = () => launch('codex'); // Asset adapter reuses BYOKit's installed account by path.
+
+// The installed-CLI adapters a pooled answer can run, by the provider the pool names.
+const ADAPTERS = { claude: ['@byokit/decide/claude-code', 'claudeCode'], codex: ['@byokit/decide/codex', 'codex'], pi: ['@byokit/decide/pi', 'pi'] };
+const backendOn = async (route, { bin, account, model, timeoutMs }) => {
+  const [path, name] = ADAPTERS[route];
+  return (await import(path))[name]({ bin, ...(account && { account }), model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs });
+};
+
+// One answer from an installed CLI. With the optional account pool installed the helper names the account folder (a path, never a
+// credential) and first-draft moves on when that account runs out; without it, BYOKit's installed account answers, exactly as before.
+// A CLI that cannot answer counts as a limit on a pooled account: the helper rests it and the next account or route is asked.
+async function cliAnswer(route, { model, images, timeoutMs, signal }, call) {
+  const pool = modelPool();
+  if (!pool) {
+    const { bin, account } = await launch(route);
+    return call(await backendOn(route, { bin, account, model, timeoutMs }));
+  }
+  const deadline = Math.ceil((Date.now() + timeoutMs) / 1000), attempted = [];
+  let selection, cause;
+  for (;;) {
+    const left = deadline * 1000 - Date.now();
+    if (left < 1000) throw new Error(`the account pool ran out of time before an account answered (${cause ?? 'no pick'})`);
+    const answer = selection === undefined
+      ? await poolPick(pool, { model, deadline, attempted })
+      : await poolNext(pool, { selection, cause, model, deadline, attempted });
+    attempted.push(answer.selection_id);
+    const on = ADAPTERS[answer.provider] ? answer.provider : undefined, bin = on && cliBin(on);
+    if (!on || !bin || (images.length && on === 'pi')) { // not installable here, or a CLI that takes no images: ask for the next one
+      selection = answer; cause = 'unavailable';
+      continue;
+    }
+    try {
+      return await call(await backendOn(on, { bin, ...(on === 'claude' && { account: { set: answer.set, unset: answer.unset } }), model: answer.model, timeoutMs: left }));
+    } catch (e) {
+      if (e.code === 'aborted' || signal?.aborted) throw e;
+      // A model that answered off-schema is not an account limit: report it rather than spending the rest of the pool on it.
+      if (!['process', 'timeout', 'subscription_required'].includes(e.code)) throw e;
+      selection = answer; cause = e.code === 'process' ? 'quota' : e.code === 'timeout' ? 'timeout' : 'unavailable';
+    }
+  }
+}
 const MEMBER = 'first-draft';
 // The most a subscription CLI route lets one reply write (BYOKit's own limit): a page call asks for all of it, never less (wrapper-baseline test).
 export const OUTPUT_CAP = 16_384;
@@ -95,26 +137,26 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
   if (problem) throw new Error(problem);
   if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
   if (CLI_ROUTES.includes(route)) {
-    const { bin, account } = await launch(route);
-    const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
     const schema = { type: 'object', additionalProperties: false, required: ['text', 'calls'], properties: {
       text: { type: 'string' }, calls: { type: 'array', ...(singleCall && { minItems: 1, maxItems: 1 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
-    // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes): asked again once.
-    for (let attempt = 0; ; attempt++) {
-      const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({
-        system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
-      if (!answer.data) throw new Error('BYOKit returned no structured engine response');
-      const { text, calls } = answer.data;
-      let args;
-      try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
-        if (attempt) throw new Error(`the model's tool call was not valid JSON twice: ${e.message}`);
-        continue;
+    return cliAnswer(route, { model, images, timeoutMs, signal }, async (backend) => {
+      // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes): asked again once.
+      for (let attempt = 0; ; attempt++) {
+        const answer = await backend.generate({
+          system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
+        if (!answer.data) throw new Error('BYOKit returned no structured engine response');
+        const { text, calls } = answer.data;
+        let args;
+        try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
+          if (attempt) throw new Error(`the model's tool call was not valid JSON twice: ${e.message}`);
+          continue;
+        }
+        return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
+          content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: args[i] }))],
+          stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
       }
-      return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
-        content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: args[i] }))],
-        stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
-    }
+    });
   }
   const key = await planKey(route);
   const secret = process.env[key.upstream.method];
@@ -152,12 +194,12 @@ export async function writePage({ route, model, system, prompt, images = [], sig
   if (problem) throw new Error(problem);
   if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
   if (CLI_ROUTES.includes(route)) {
-    const { bin, account } = await launch(route);
-    const backend = route === 'claude' ? (await import('@byokit/decide/claude-code')).claudeCode : (await import('@byokit/decide/codex')).codex;
-    const answer = await backend({ bin, account, model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs }).generate({ system, prompt, images, signal, maxOutputTokens: maxTokens,
-      schema: { type: 'object', additionalProperties: false, required: ['html'], properties: { html: { type: 'string', description: 'The complete HTML document, from <!doctype html> to </html>' } } } });
-    if (typeof answer.data?.html !== 'string') throw new Error('BYOKit returned no page');
-    return { html: answer.data.html, tokens_in: answer.usage?.input_tokens ?? 0, tokens_out: answer.usage?.output_tokens ?? 0 };
+    return cliAnswer(route, { model, images, timeoutMs, signal }, async (backend) => {
+      const answer = await backend.generate({ system, prompt, images, signal, maxOutputTokens: maxTokens,
+        schema: { type: 'object', additionalProperties: false, required: ['html'], properties: { html: { type: 'string', description: 'The complete HTML document, from <!doctype html> to </html>' } } } });
+      if (typeof answer.data?.html !== 'string') throw new Error('BYOKit returned no page');
+      return { html: answer.data.html, tokens_in: answer.usage?.input_tokens ?? 0, tokens_out: answer.usage?.output_tokens ?? 0 };
+    });
   }
   const message = await respond({ route, model, maxTokens, signal, timeoutMs, images, context: { systemPrompt: system, messages: [{ role: 'user', content: prompt, timestamp: Date.now() }], tools: [] } });
   if (message.stopReason === 'error' || message.stopReason === 'aborted') throw new Error(message.errorMessage || message.stopReason);
