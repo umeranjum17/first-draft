@@ -9,6 +9,7 @@ import { embedMedia, mediaBrief, projectMedia } from './media.mjs';
 import { findBrowser, renderCheck } from './render-check.mjs';
 import { FILES, LOGO_CONTRACT, checkLogo, fillSheet, logoMedia, sheetErrors } from './logo.mjs';
 import { checkRedesign } from './redesign-check.mjs';
+import { heroLoop } from './assets.mjs';
 import { CLARITY_BRIEF, clarityOf } from './clarity.mjs';
 import { characterRule, flowOf, flowRule } from './flow.mjs';
 import { directionText, styleOf } from './styles.mjs';
@@ -228,10 +229,11 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   const main = verified?.path ?? (render.drawing && !logo ? 'App.jsx' : 'index.html');
   if (verified === null || (capped === null && verified.source !== files.get(main))) throw new Error(`engine did not verify ${main} with done${lastErrors ? `; the last done check failed: ${lastErrors}` : ''}`);
   if (start !== undefined && main === 'index.html' && bare(verified.source) === bare(start) && (!logo || JSON.stringify(verified.logoed) === JSON.stringify(logo.files))) throw new Error('the engine left the option unchanged');
-  const { html, errors, logo: drawnLogo } = await pageOf(main, verified.source, verified.logoed);
+  const { html: drawn, errors, logo: drawnLogo } = await pageOf(main, verified.source, verified.logoed);
   if (errors.length) throw new Error(`engine output fails the export: ${errors.map((x) => x.message).join('; ')}`);
+  // The generated still the design put in its hero becomes the page's hero loop (one paid video, after the design passed); the still stays as poster and fallback.
+  const { html, videos } = assets && !logo ? await heroLoop(drawn, images, assets) : { html: drawn, videos: [] };
   if (unplaced(html).length) throw new Error(`The design did not place every generated image into its screens: ${unplaced(html).map((a) => a.path).join(', ')}`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
-  return { html, ...(redesignPages && {redesign_check:{deterministic:'passed',semantic:semanticChecks.at(-1),reviews:semanticChecks.length,assessment:'Metrics and token consistency assessed by the configured model on exported HTML/CSS; not a visual-reference fidelity verdict.'}}), truncated: capped !== null, turns: Math.min(turns, TURN_CAP), tools, ...(assets && { images: images.map(({ provider, purpose, prompt, path, file, sheet, style_sheet }) => ({ provider, purpose, prompt, path, file, ...(sheet && { sheet }), ...(style_sheet && { style_sheet }) })), ...(refused.length && { images_refused: refused }) }), source: main, remote: [...new Set([...html.matchAll(REMOTE)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').filter((v) => !v.trim().startsWith('data:')).flatMap((v) => [...v.matchAll(REMOTE_URL)].map((url) => url[0])))],
-    tokens_in: output.inputTokens, tokens_out: output.outputTokens, render_check: render.status, ...(drawnLogo && { logo: drawnLogo }) };
+  return { html, ...(redesignPages && {redesign_check:{deterministic:'passed',semantic:semanticChecks.at(-1),reviews:semanticChecks.length,assessment:'Metrics and token consistency assessed by the configured model on exported HTML/CSS; not a visual-reference fidelity verdict.'}}), truncated: capped !== null, turns: Math.min(turns, TURN_CAP), tools, ...(assets && { images: images.map(({ provider, purpose, prompt, path, file, sheet, style_sheet }) => ({ provider, purpose, prompt, path, file, ...(sheet && { sheet }), ...(style_sheet && { style_sheet }) })), ...(refused.length && { images_refused: refused }), ...(videos.length && { videos }) }), source: main, remote: [...new Set([...html.matchAll(REMOTE)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').filter((v) => !v.trim().startsWith('data:')).flatMap((v) => [...v.matchAll(REMOTE_URL)].map((url) => url[0])))],    tokens_in: output.inputTokens, tokens_out: output.outputTokens, render_check: render.status, ...(drawnLogo && { logo: drawnLogo }) };
 }

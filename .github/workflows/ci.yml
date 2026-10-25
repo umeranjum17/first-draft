@@ -13,7 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
+      # The hero-video step encodes its loop with ffmpeg, and the asset journey uses the real binary.
+      - run: command -v convert && command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y imagemagick ffmpeg)
       - run: node scripts/check-samples.mjs
       - run: npm ci
       - run: npm test

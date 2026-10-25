@@ -26,8 +26,9 @@ journeys:
     command: node journeys/onboarding-flow.mjs --capture-only
     timeout: 15m
   assets:
-    command: node journeys/assets.mjs
-    spends: up to three images the design agent chooses (Higgsfield credits, Codex subscription quota with unknown overage) plus design-model turns; previews cost first
+    # mise exec: the installed codex, higgsfield and magick are mise shims that need a node runtime first.
+    command: mise exec node@26.1.0 -- node journeys/assets.mjs
+    spends: up to three stills the design agent chooses on Codex (subscription quota, no credits) plus one Higgsfield hero loop (Seedance 2.0 Mini, 5 credits at this account's estimate) and design-model turns; previews cost first
     timeout: 40m
   render-check:
     command: bash journeys/render-check.sh
