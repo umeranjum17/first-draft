@@ -53,7 +53,7 @@ try {
   view = spawn(process.execPath, [join(root, 'src/cli.mjs'), 'view', file, '--host', '127.0.0.1', '--port', '0'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   const url = await new Promise((ok, fail) => { let log = ''; view.stdout.on('data', (c) => { log += c; const m = log.match(/"url":"([^"]+)"/); if (m) ok(m[1]); }); view.once('exit', (code) => fail(new Error(`view exited ${code}: ${log}`))); });
   const browser = (...args) => run('chrome-devtools-axi', args);
-  const shot = (target, path) => { browser('open', target); browser('wait', '2500'); browser('screenshot', path); return `data:image/png;base64,${readFileSync(path).toString('base64')}`; };
+  const shot = (target, path) => { browser('open', target); browser('eval', '() => new Promise((r) => setTimeout(() => r(true), 2500))'); browser('screenshot', path); return `data:image/png;base64,${readFileSync(path).toString('base64')}`; };
   browser('open', url);
   const frames = [];
   for (const [i, screen] of screens.entries()) {
