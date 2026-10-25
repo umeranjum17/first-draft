@@ -46,7 +46,10 @@ Live benchmark, the mellow onboarding reference: `node journeys/onboarding-flow.
 `FD_DESIGN_AGENT`/`FD_DESIGN_MODEL`, `FD_ONBOARDING_REF=<the owner's reference image>` and spending approval. It previews the flow's image
 budget, makes one option, asserts six screens and that the sheet was drawn first and chained, then captures every screen in the real viewer
 (`first-draft-axi view`, `?screen=<id>#/o/1`) at 390 and 1280, each in light and dark, and writes `report.html` (the six screens beside the
-reference, the critic's score under each board, model and seconds under it) and `steps.json`. The nonpaid recapture,
+reference, the critic's score under each board, model and seconds under it) and `steps.json`, whose `proves` lines and `result` say what
+the captures show in the words of the claim (scene ending in the screen's own ground, no inset edge or thumbnail, every screen fitting one
+390 screen with the dots and the round next button visible and no option card cut, its own step label, the last screen's one filled
+button), so a merge card can read the captures against the run that made them. The nonpaid recapture,
 `FD_FLOW_SOURCE=<the run's support folder> FD_ONBOARDING_REF=... done-done run onboarding-flow-capture`, renders the same captures and report
 from the retained output and never generates.
 
