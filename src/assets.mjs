@@ -89,7 +89,7 @@ export async function detectAssets() {
 }
 // The approved providers and a generate(request, out) the design agent's generate_image_asset tool calls; null without --assets.
 // perOption bounds this option's images: a flow needs one style sheet and one picture per screen.
-export async function prepareAssets(values, count, perOption = IMAGES_PER_OPTION) {
+export async function prepareAssets(values, count, perOption) {
   if (values['no-assets'] && (values.assets || values['allow-asset-spend'])) throw new Error('--no-assets conflicts with asset generation flags');
   if (!values.assets) {
     if (values['allow-asset-spend']) throw new Error('--allow-asset-spend requires --assets <provider>');
@@ -107,7 +107,7 @@ export async function prepareAssets(values, count, perOption = IMAGES_PER_OPTION
     await assetProviders[provider].detect();
   }
   await run('magick', ['-version']); // Refuse before spending if optimization is unavailable.
-  const limit = Math.max(IMAGES_PER_OPTION, Math.min(13, perOption));
+  const limit = Math.max(IMAGES_PER_OPTION, Math.min(13, perOption ?? IMAGES_PER_OPTION));
   const max = limit * count;
   const quotes = await Promise.all(providers.map(async (provider) => ({ provider, ...await assetProviders[provider].estimate() })));
   const preview = { providers: quotes, max_images: max, per_option: limit, approved: Boolean(values['allow-asset-spend']) };
@@ -123,8 +123,8 @@ export async function prepareAssets(values, count, perOption = IMAGES_PER_OPTION
     const adapter = assetProviders[provider], sheet = sheets.get(out);
     const chained = Boolean(sheet && sheet.provider === provider && adapter.styleReference);
     // The first picture of a set is its style sheet: every later one of the same provider is drawn from it, never from a fresh idea.
-    const drawn = await adapter.generate({ prompt, aspectRatio, dir, ...(chained && { sheet: sheet.file }) });
-    if (!sheet && adapter.styleReference) sheets.set(out, { provider, file: drawn, prompt });
+    const drawn = await adapter.generate({ prompt: chained ? `${sheet.prompt}\n\nNew scene: ${prompt}` : prompt, aspectRatio, dir, ...(chained && { sheet: sheet.file }) });
+    if (perOption !== undefined && !sheet && adapter.styleReference) sheets.set(out, { provider, file: drawn, prompt });
     const isSheet = drawn === sheets.get(out)?.file;
     const file = join(dir, 'image.webp');
     await run('magick', [drawn, '-auto-orient', '-strip', '-resize', '1024x1024>', '-quality', '80', file]);

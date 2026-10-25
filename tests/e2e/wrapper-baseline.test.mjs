@@ -107,7 +107,7 @@ async function standIn(seen, { score = 9, flowScore = score, grid = false, delay
         'critic-plain-page': () => ['write_page', { html: PAGE('plain') }],
         'critic-review': () => ['review_designs', { design: { score, gaps: score < 10 ? ['the hero has no picture'] : [] }, plain: { score: 7, gaps: ['generic'] }, against: 'Notion', reads_as: 'a list of notes', fix: score < 10 ? 'Give the hero a picture.' : '', ...(needsFlow && { flow: { shell: { score: flowScore, reason: 'Every screen keeps the header, title, dots and next button' }, character: { score: flowScore, reason: 'The same character appears on every screen' } } }) }] }[kind]?.();
       const item = call ? { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: call[0], arguments: JSON.stringify(call[1]) }
-        : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'draw' && grid ? GRID : PAGE(++pages) }] };
+        : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'draw' && grid ? GRID : kind === 'draw' && /onboarding flow/.test(textOf(j)) ? PAGE(++pages).replace('<main>', Array.from({length:6}, (_, i) => `<section id="step-${i+1}" data-oc-screen="step-${i+1}"><h1>Step ${i+1}</h1></section>`).join('') + '<main>') : PAGE(++pages) }] };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
         + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));
@@ -217,6 +217,9 @@ test('a multi-screen flow gets the one-shell contract and a flow score in the sa
   assert.ok(draw.input[0].content.includes('ONE shell and ONE grid'), 'the flow keeps one grid and one shell on every screen');
   assert.equal(draw.input[0].content, systemPrompt(true, false, { count: 6, screens: [] }), 'the flow rule is the only difference from the plain contract');
   assert.match(textOf(draw), /^Brief: a mobile onboarding flow, 6 screens, for a mindfulness app called mellow\nScreens: Welcome, Promise, Mood\./);
+  const review = run.seen.find((s) => s.kind === 'critic-review').j;
+  assert.equal(review.input.flatMap((m) => Array.isArray(m.content) ? m.content : []).filter((c) => c.type === 'input_image').length, 14, 'all six design screens at both widths plus both plain views reach the critic');
+  assert.match(textOf(review), /design-phone-390-step-6/);
   const file = run.made.files[0];
   assert.deepEqual([file.critique.score, file.critique.passed, file.critique.flow.shell.score], [9, true, 9], 'a flow that keeps its shell and character passes');
   assert.match(file.critique.fix, /hero/);

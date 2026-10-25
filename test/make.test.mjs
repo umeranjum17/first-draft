@@ -765,6 +765,7 @@ test('asset CLI previews without spending, then the design agent generates image
   assert.doesNotMatch(readFileSync(log, 'utf8'), /"exec"|"create"/);
   const made = JSON.parse((await run(...args, '--allow-asset-spend')).stdout).made.files[0];
   assert.deepEqual(made.images.map((i) => [i.provider, i.purpose, i.path]), [['codex', 'illustration', 'assets/leaf-1.webp'], ['higgsfield', 'hero', 'assets/shop-photo-2.webp']]);
+  assert.equal(made.images.some((i) => i.sheet || i.style_sheet), false, 'ordinary images are independent, not a character set');
   assert.deepEqual(made.images_refused.map((r) => r.provider), ['midjourney']); assert.match(made.images_refused[0].reason, /provider must be one of: codex, higgsfield/);
   const offered = seen.find((s) => JSON.stringify(s.body).includes('generate_image_asset')).body.tools.find((tool) => tool.name === 'generate_image_asset');
   assert.deepEqual(offered.parameters.properties.provider.enum, ['codex', 'higgsfield'], 'the model is offered exactly the approved providers');
@@ -784,4 +785,14 @@ test('asset CLI previews without spending, then the design agent generates image
   await assert.rejects(run('redesign', 'https://example.com', 'Shop', '--out', join(dir, 'redesign'), '--assets', 'codex'), (e) => /redesign does not generate images/.test(e.stdout));
   await assert.rejects(run('make', 'Shop', '--out', join(dir, 'bad.html'), '--no-assets', '--assets', 'codex'), (e) => /conflicts/.test(e.stdout));
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'make', 'Shop', '--out', join(dir, 'ci.html'), '--assets', 'higgsfield', '--allow-asset-spend'], { env: { ...env, CI: 'true' } }), (e) => /disabled in CI/.test(e.stdout));
+  const flowServer = await standIn([], null, true, 'index.html', '<!doctype html><html><body><h1>Mellow</h1>' + ['welcome', 'mood', 'ready'].map((id, i) => `<section data-oc-screen="${id}"><img alt="${id}" src="assets/${id}-${i + 2}.webp"></section>`).join('') + '</body></html>', null,
+    [generate('codex', 'sheet', 'illustration'), ...['welcome', 'mood', 'ready'].map((id) => generate('codex', id, 'illustration'))]);
+  t.after(() => flowServer.close());
+  const flow = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'mobile onboarding flow, 3 screens, for mellow', '--out', join(dir, 'flow.html'), '--assets', 'codex', '--allow-asset-spend', '--options', '1', '--no-critic'],
+    { env: { ...env, FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${flowServer.address().port}` } })).stdout).made.files[0];
+  assert.equal(flow.images[0].sheet, true);
+  assert.ok(flow.images.slice(1).every((i) => i.style_sheet), 'each scene is chained to the character sheet');
+  const chained = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse).filter(([name, action, ...args]) => name === 'codex' && action === 'exec' && args.includes('-i'));
+  assert.equal(chained.length, 3);
+  assert.ok(chained.every((args) => args.at(-1).includes("sheet for Umer's botanical shop") && existsSync(args[args.indexOf('-i') + 1])), 'each image receives the original brief and the retained sheet');
 });
