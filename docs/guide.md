@@ -28,7 +28,7 @@ first-draft-axi post notes.html \
 
 ## Models
 
-Every generation goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), using the route and model **you** choose. First Draft never silently changes accounts or models.
+Every generation goes through [BYOKit](https://www.npmjs.com/package/@byokit/accounts), using the route and model **you** choose. Without the optional account pool below, First Draft never changes accounts or models on its own.
 
 | Use what you have | Route for `init --agent` |
 | --- | --- |
@@ -42,6 +42,19 @@ Subscriptions come first. They need no key: calls use your CLI's normal login wi
 Run `first-draft-axi doctor` to see your ready subscriptions, each with its exact `init` line. Set your route with `init --agent … --model …`, then run `first-draft-axi doctor` to check readiness **without a paid call**. MiniMax defaults to `MiniMax-M3.1-Flash-Preview` if `init` gets no `--model`.
 
 Key routes read the environment variable named by `doctor`; keys are never saved in First Draft's config. Config lives at `$FIRST_DRAFT_HOME/config.json`, default `~/.first-draft/config.json`.
+
+### Optional: spread calls across your accounts
+
+If you keep several Claude or Codex logins, the model pool helper from [Firstmate's account-pool add-on](https://github.com/umeranjum17/firstmate-addons/tree/main/account-pool) can start each call on the account with the most room and move on when one runs out. It is optional: with neither variable set, every call keeps its plain BYOKit route.
+
+```sh
+# the helper: a name on PATH, or an absolute path to it
+export FIRST_DRAFT_MODEL_POOL=fm-model-pool
+# its pool config file, an absolute path (the file the helper documents)
+export FIRST_DRAFT_ACCOUNT_POOL="$HOME/.config/model-pool/account-pool"
+```
+
+The helper answers with an account folder — a path, never a credential — and First Draft runs the call on that folder. A call that fails on that account is treated as a limit: First Draft asks the helper to rest the account and pick the next one. When every Claude account is under the helper's floor it falls over to the next route the helper offers, plan-billed only: an API key or a credits-enabled account is never used, and a route this computer cannot run is skipped. `first-draft-axi doctor` still reports the route you set; the pool is only consulted when a model call is made.
 
 ## Generated assets
 
