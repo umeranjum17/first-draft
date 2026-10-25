@@ -54,6 +54,7 @@ try {
   const url = await new Promise((ok, fail) => { let log = ''; view.stdout.on('data', (c) => { log += c; const m = log.match(/"url":"([^"]+)"/); if (m) ok(m[1]); }); view.once('exit', (code) => fail(new Error(`view exited ${code}: ${log}`))); });
   const browser = (...args) => run('chrome-devtools-axi', args);
   const shot = (target, path) => { browser('open', target); browser('wait', '2500'); browser('screenshot', path); return `data:image/png;base64,${readFileSync(path).toString('base64')}`; };
+  browser('open', url);
   const frames = [];
   for (const [i, screen] of screens.entries()) {
     browser('emulate', '--viewport', '390x900x1', '--color-scheme', 'light');
