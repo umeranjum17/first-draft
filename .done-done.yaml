@@ -18,6 +18,13 @@ journeys:
   assets-recapture:
     command: node journeys/assets.mjs --capture-only
     timeout: 10m
+  onboarding-flow:
+    command: node journeys/onboarding-flow.mjs
+    spends: one character style sheet and one scene per screen through the owner's Codex subscription (no credits), plus design-model turns; previews the image budget first
+    timeout: 60m
+  onboarding-flow-capture:
+    command: node journeys/onboarding-flow.mjs --capture-only
+    timeout: 15m
   assets:
     command: node journeys/assets.mjs
     spends: up to three images the design agent chooses (Higgsfield credits, Codex subscription quota with unknown overage) plus design-model turns; previews cost first

@@ -9,7 +9,7 @@ import { shootPublic } from './reference-capture.mjs';
 import { ReferenceNetwork, referenceUrl } from './reference-network.mjs';
 import { Renderer, findBrowser } from './render-check.mjs';
 
-export const KINDS = ['landing', 'app', 'dashboard', 'notes', 'docs'];
+export const KINDS = ['landing', 'app', 'dashboard', 'notes', 'docs', 'onboarding'];
 const VIEWS = [{ name: 'desktop', width: 1280, height: 800 }, { name: 'phone', width: 390, height: 844 }];
 const NOT_PERMITTED = 'no licence or terms found that explicitly permit automated screenshots, so it is kept as notes and a link';
 const sha = (b) => createHash('sha256').update(b).digest('hex');
@@ -25,7 +25,9 @@ export function readLibrary(file = new URL('./reference-library.json', import.me
     ids.add(e.id);
     if (!KINDS.includes(e.kind)) bad(`kind must be one of ${KINDS.join(', ')}`);
     if (typeof e.name !== 'string' || typeof e.notes !== 'string' || !e.notes.trim()) bad('needs a name and notes');
-    referenceUrl(e.url);
+    // A local entry is a reference the owner supplies as an image (their own screenshot): there is no public page to capture or licence.
+    if (e.local ? typeof e.why !== 'string' || !e.why.trim() : false) bad('a local entry needs why it is never captured');
+    if (!e.local) referenceUrl(e.url);
     if (e.permission) {
       const { licence, url, quote, basis } = e.permission;
       if (![licence, quote, basis].every((s) => typeof s === 'string' && s.trim()) || quote.length < 12) bad('permission needs licence, url, a quote of 12+ characters and basis');
@@ -46,7 +48,8 @@ export async function pullLibrary({ home, library, kind }) {
   if (!bin) throw new Error('refs pull needs Chrome or Chromium to capture references; nothing was pulled');
   const dir = libraryCache(home), at = new Date().toISOString(), rows = [];
   for (const e of lib.entries.filter((x) => !kind || x.kind === kind)) {
-    const row = { id: e.id, kind: e.kind, name: e.name, url: e.url, notes: e.notes };
+    const row = { id: e.id, kind: e.kind, name: e.name, ...(!e.local && { url: e.url }), notes: e.notes };
+    if (e.local) { rows.push({ ...row, captured: false, why: e.why }); continue; }
     if (!e.permission) { rows.push({ ...row, captured: false, why: e.why ?? NOT_PERMITTED }); continue; }
     const network = new ReferenceNetwork({ requests: 160, bytes: 30_000_000, queries: true }), renderer = new Renderer(bin, () => {}, false);
     let timer;

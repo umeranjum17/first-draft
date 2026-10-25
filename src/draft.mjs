@@ -11,6 +11,7 @@ import { embedFonts } from './fonts.mjs';
 import { embedMedia, mediaBrief, projectMedia } from './media.mjs';
 import { staticExport } from './make.mjs';
 import { renderCheck } from './render-check.mjs';
+import { flowOf, flowRule } from './flow.mjs';
 import { directionText } from './styles.mjs';
 import { stopwatch } from './timing.mjs';
 
@@ -23,8 +24,9 @@ const ONE_ACCENT = 'one accent colour, used on one thing per screen (the primary
 const BRAND = 'a landing, home or company page has one bold brand colour and one accent, the brand colour in big full-width bands and the accent on the primary action, and everything else neutral, as the human-side guidance says';
 // The page contract, one named rule at a time. Each rule is a wrapper addition to the plain call: it stays only with a paired, rendered
 // comparison in docs/wrapper-allowlist.json (CONTRIBUTING.md), which tests/e2e/wrapper-baseline.test.mjs enforces rule by rule.
-export const contractRules = (drawing, human) => [
+export const contractRules = (drawing, human, flow) => [
   { id: 'reply-format', text: 'Page contract: reply with one complete, self-contained HTML document (<!doctype html> to </html>), with its CSS inside.' },
+  ...(flow ? [{ id: 'flow-shell', text: `Restraint of a flow: ${flowRule()}` }] : []),
   { id: 'design-what-the-brief-names', text: 'Design what the brief names: an app, tool or product is shown as its own screens in use, not as a page that markets it, unless the brief asks for a landing, marketing or company page.' },
   human ? { id: 'brand-and-accent', text: `Restraint: ${BRAND}.` } : { id: 'one-accent', text: `Restraint: ${ONE_ACCENT}.` },
   { id: 'faint-patterns', text: 'Background patterns, grids and rules are barely visible (about 4-6% contrast), never lines that compete with the content.' },
@@ -40,7 +42,7 @@ export const contractRules = (drawing, human) => [
     : { id: 'no-script', text: 'Write no script, no on* event handler and no javascript: URL: the page is shown as a static document.' },
 ];
 // What the model is told besides the brief: the vendored guidance, first-draft's own guidance for a company or landing page when the brief is one, then the contract.
-export const systemPrompt = (drawing, human) => `${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human).map((r) => r.text).join(' ')}`;
+export const systemPrompt = (drawing, human, flow) => `${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human, flow).map((r) => r.text).join(' ')}`;
 export { HUMAN, TASTE };
 
 // How many options are drawn at once. Every call is the person's one subscription, shared with whatever else is signed into it: in the two live
@@ -50,11 +52,13 @@ export const OPTIONS_AT_ONCE = 2;
 export async function draft({ prompt, brief: original, agent, model, timeoutMs, direction, screens, references = [], seed }) {
   const warn = (warning) => process.stderr.write(`first-draft-axi: ${warning}\n`);
   const human = humanSideOf({ prompt: original ?? prompt, direction }); // a revision carries the brief it started from
+  const flow = flowOf(original ?? prompt, screens);
   const render = renderCheck(warn, { pageChecks: true, humanSide: human });
   const media = LANDING.test(prompt) && !references.length && !seed ? projectMedia(prompt) : []; // a landing page about this project gets its own screenshots
-  const system = systemPrompt(render.drawing, human);
+  const system = systemPrompt(render.drawing, human, flow);
   const brief = [`Brief: ${prompt}`, ...(direction ? [`Direction: ${directionText(direction)}`] : []),
-    ...(screens?.length ? [`Screens: ${screens.join(', ')}. Put each in its own top-level <section id="..." data-oc-screen>, the first being the opening screen, linked with in-page hash links (<a href="#id">), each with a visible way back.`] : []),
+    ...(screens?.length ? [`Screens: ${screens.join(', ')}. Put each in its own top-level <section id="..." data-oc-screen>, the first being the opening screen, linked with in-page hash links (<a href="#id">), each with a visible way back.`]
+      : flow ? [`Screens: the ${flow.count} screens of this flow, each in its own top-level <section id="..." data-oc-screen>, in order, linked with in-page hash links (<a href="#id">), each with a visible way back.`] : []),
     ...(media.length ? [mediaBrief(media)] : []), ...(references.length ? ['The attached images are visual references only: never copy their pixels, text or brand into the page.'] : [])].join('\n');
   const used = { tokens_in: 0, tokens_out: 0, calls: 0 };
   const { timed, seconds } = stopwatch(); // where the seconds went: the model's page calls (draw, repair) and the browser (render)

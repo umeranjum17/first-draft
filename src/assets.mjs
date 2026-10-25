@@ -20,15 +20,15 @@ const run = async (bin, args, options = {}) => {
 const hf = (args) => run('higgsfield', [...args, '--json']);
 const hfArgs = (prompt, aspectRatio = '1:1') => ['z_image', '--prompt', prompt, '--aspect_ratio', aspectRatio];
 const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4']; // the engine tool's own aspect ratios
-const IMAGES_PER_OPTION = 3; // the design agent decides how many; this bounds the spend the preview names
 // The hero loop: one short silent video made from the still the design put in its hero. Seedance 2.0 Mini at 5s is 2.5 credits at
 // 480p and 5 at 720p, the cheapest estimate of the models that take a start image; a start and an end image that are the same still
 // is what makes the loop return to its first frame instead of cutting.
 const VIDEO = { model: 'seedance_2_0_mini', duration: 5, resolution: '720p', aspectRatio: '16:9', perOption: 1, maxBytes: 1_200_000 };
 const videoPrompt = (prompt) => `A seamless looping hero shot of: ${String(prompt).split('\n')[0].trim().replace(/[.\s]+$/, '')}. Gentle continuous motion that starts and ends on exactly this still, so the loop has no visible cut: camera and subject return to the opening frame. No new objects, no text, no scene change.`;
-
+export const IMAGES_PER_OPTION = 3; // the design agent decides how many; this bounds the spend the preview names (a flow's set grows with its screens)
 // Adapter contract: detect() throws a setup hint; estimate() returns {amount,unit,detail} for one image;
-// generate({prompt,aspectRatio,dir}) returns a local raster path; use tells the design agent what the provider is good at.
+// generate({prompt,aspectRatio,dir,sheet}) returns a local raster path; use tells the design agent what the provider is good at.
+// styleReference says the provider draws from an attached picture: the first image of a set becomes the style sheet for the rest.
 // No adapter may retry or change accounts.
 export const assetProviders = {
   higgsfield: {
@@ -54,20 +54,24 @@ export const assetProviders = {
   },
   codex: {
     model: 'gpt-6-luna native image generation',
+    styleReference: true,
     use: 'ChatGPT image generation through the signed-in Codex CLI: illustrations, icons, logos, painterly or flat artwork and precise compositions.',
     async detect() {
       const row = await doctor('codex', 'configured');
       if (row.status !== 'ok') throw new Error(`Codex needs its subscription login: codex login; ${row.detail}`);
     },
     async estimate() { return { amount: null, unit: 'subscription quota', detail: 'One image-generation request; Codex exposes no price estimate. Quota and any overage are account-dependent, not free.' }; },
-    async generate({ prompt, aspectRatio, dir }) {
+    async generate({ prompt, aspectRatio, dir, sheet }) {
       const { bin, account } = await installedCodex();
       const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !account.unset.includes(k) && !/KEY|TOKEN|SECRET|^NODE_OPTIONS$/i.test(k)));
       Object.assign(env, account.set);
       const events = await run(bin, ['exec', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules', '--sandbox', 'workspace-write', '--cd', dir, '--enable', 'image_generation', '--json',
         '--model', 'gpt-6-luna', '-c', 'model_reasoning_effort="low"', '-c', 'mcp_servers={}', '-c', 'features.shell_tool=false', '-c', 'features.unified_exec=false', '-c', 'features.apps=false', '-c', 'features.plugins=false',
+        // A style sheet of the same character is attached as a native image input, so every scene of a set is drawn from the first.
+        ...(sheet ? ['-i', sheet] : []),
+        '--', // End variadic image arguments before the positional prompt.
         // The native tool keeps its image in Codex's own cache and cannot save elsewhere: asking it to save made the model call the tool a second time.
-        `Call the native image generation tool exactly once, then stop. One raster image, aspect ratio ${aspectRatio}, lowest quality and smallest size available. The host collects the image from the tool itself: do not save, copy or rename it. No shell commands, no SVG, no external services, no API keys. If image generation is unavailable, say so and stop. Image brief: ${prompt}`], { cwd: dir, env });
+        `Call the native image generation tool exactly once, then stop. One raster image, aspect ratio ${aspectRatio}, lowest quality and smallest size available. The host collects the image from the tool itself: do not save, copy or rename it. No shell commands, no SVG, no external services, no API keys. If image generation is unavailable, say so and stop. Image brief: ${sheet ? `The attached image is this set's character style sheet: draw the same character in exactly the same drawing style, with the same line weight and palette, in the new pose and scene the brief describes. ` : ''}${prompt}`], { cwd: dir, env });
       writeFileSync(join(dir, 'codex-events.jsonl'), events);
       const thread = events.split('\n').filter(Boolean).map((line) => JSON.parse(line)).find((e) => e.type === 'thread.started')?.thread_id;
       // Only this native run's image folder: never follow model-suggested paths or read login files.
@@ -95,7 +99,8 @@ export async function detectAssets() {
   }));
 }
 // The approved providers and a generate(request, out) the design agent's generate_image_asset tool calls; null without --assets.
-export async function prepareAssets(values, count) {
+// perOption bounds this option's images: a flow needs one style sheet and one picture per screen.
+export async function prepareAssets(values, count, perOption) {
   if (values['no-assets'] && (values.assets || values['allow-asset-spend'])) throw new Error('--no-assets conflicts with asset generation flags');
   if (!values.assets) {
     if (values['allow-asset-spend']) throw new Error('--allow-asset-spend requires --assets <provider>');
@@ -113,14 +118,13 @@ export async function prepareAssets(values, count) {
     await assetProviders[provider].detect();
   }
   await run('magick', ['-version']); // Refuse before spending if optimization is unavailable.
-  const max = IMAGES_PER_OPTION * count;
+  const limit = Math.max(IMAGES_PER_OPTION, Math.min(13, perOption ?? IMAGES_PER_OPTION));
+  const max = limit * count;
   const quotes = await Promise.all(providers.map(async (provider) => ({ provider, ...await assetProviders[provider].estimate() })));
   const video = providers.includes('higgsfield'); // only Higgsfield makes video here
-  const preview = { providers: quotes, max_images: max, ...(video && { video: await videoEstimate(), max_videos: VIDEO.perOption * count }), approved: Boolean(values['allow-asset-spend']) };
-  const spent = new Map(), loops = new Map(); // images and hero loops, per option output
-  return { preview, providers: providers.map((provider) => ({ provider, use: assetProviders[provider].use })), perOption: IMAGES_PER_OPTION,
-    // The hero loop, from the still the design chose. Same approval flag, same ceiling and the same no-retry rule as images; the still
-    // itself is only read, never regenerated.
+  const preview = { providers: quotes, max_images: max, per_option: limit, ...(video && { video: await videoEstimate(), max_videos: VIDEO.perOption * count }), approved: Boolean(values['allow-asset-spend']) };
+  const spent = new Map(), sheets = new Map(), loops = new Map(); // images per option output, the style sheet its set is drawn from, and hero loops
+  return { preview, providers: providers.map((provider) => ({ provider, use: assetProviders[provider].use, style_reference: Boolean(assetProviders[provider].styleReference) })), perOption: limit,
     ...(video && { async video({ image, prompt }) {
       if (!values['allow-asset-spend'] || process.env.CI) throw new Error('Asset spend is not approved: the hero video needs --allow-asset-spend');
       if ((loops.get(image.file) ?? 0) >= VIDEO.perOption) throw new Error(`This option's ${VIDEO.perOption}-video budget is spent`);
@@ -150,19 +154,24 @@ export async function prepareAssets(values, count) {
     } }),
     async generate({ provider, prompt, aspectRatio = '1:1', name }, out) {
     const calls = (spent.get(out) ?? 0) + 1;
-    if (!values['allow-asset-spend'] || process.env.CI || calls > IMAGES_PER_OPTION) throw new Error(`Asset spend is not approved or this option's ${IMAGES_PER_OPTION}-image budget is spent`);
+    if (!values['allow-asset-spend'] || process.env.CI || calls > limit) throw new Error(`Asset spend is not approved or this option's ${limit}-image budget is spent`);
     if (!providers.includes(provider)) throw new Error(`provider must be one of: ${providers.join(', ')}`);
     if (!ASPECTS.includes(aspectRatio)) throw new Error(`aspectRatio must be one of: ${ASPECTS.join(', ')}`);
     spent.set(out, calls);
     const parent = dirname(resolve(out)); mkdirSync(parent, { recursive: true });
     const dir = mkdtempSync(join(parent, `${basename(out, extname(out))}.assets-`));
-    const raw = await assetProviders[provider].generate({ prompt, aspectRatio, dir });
+    const adapter = assetProviders[provider], sheet = sheets.get(out);
+    const chained = Boolean(sheet && sheet.provider === provider && adapter.styleReference);
+    // The first picture of a set is its style sheet: every later one of the same provider is drawn from it, never from a fresh idea.
+    const drawn = await adapter.generate({ prompt: chained ? `${sheet.prompt}\n\nNew scene: ${prompt}` : prompt, aspectRatio, dir, ...(chained && { sheet: sheet.file }) });
+    if (perOption !== undefined && !sheet && adapter.styleReference) sheets.set(out, { provider, file: drawn, prompt });
+    const isSheet = drawn === sheets.get(out)?.file;
     const file = join(dir, 'image.webp');
-    await run('magick', [raw, '-auto-orient', '-strip', '-resize', '1024x1024>', '-quality', '80', file]);
+    await run('magick', [drawn, '-auto-orient', '-strip', '-resize', '1024x1024>', '-quality', '80', file]);
     if (!statSync(file).size || statSync(file).size > 800_000) throw new Error('Optimized asset must be between 1 byte and 800 KB');
-    if (raw !== file) unlinkSync(raw);
+    if (drawn !== file && !isSheet) unlinkSync(drawn); // the sheet stays on disk: the rest of the set is drawn from it
     const slug = String(name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'image';
-    return { path: `assets/${slug}-${calls}.webp`, file, provider, model: assetProviders[provider].model, mime: 'image/webp', dataUrl: `data:image/webp;base64,${readFileSync(file).toString('base64')}` };
+    return { path: `assets/${slug}-${calls}.webp`, file, provider, model: assetProviders[provider].model, mime: 'image/webp', dataUrl: `data:image/webp;base64,${readFileSync(file).toString('base64')}`, ...(isSheet && { sheet: true }), ...(chained && { style_sheet: true }) };
   } };
 }
 

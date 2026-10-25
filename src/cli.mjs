@@ -21,6 +21,7 @@ import { STYLES } from './styles.mjs';
 import { redesignSource } from './redesign.mjs';
 import { makeRedesign } from './redesign-writer.mjs';
 import { assetFlags, assetHelp, detectAssets, prepareAssets } from './assets.mjs';
+import { flowOf } from './flow.mjs';
 import { LOGO_DIRECTIONS, logoDirection, readLogo, writeLogo } from './logo.mjs';
 import { conceptSummary, drawLogos, pool } from './logo-concepts.mjs';
 import { PASS, openCritic } from './critic.mjs';
@@ -252,7 +253,9 @@ if (command === 'refs') {
   const images = await readReferences(values.ref, values.model);
   let assetSession;
   if (redesign && (values.assets || values['allow-asset-spend'])) fail('USAGE', 'redesign does not generate images; use make --assets', [assetHelp]);
-  try { assetSession = await prepareAssets(values, count); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
+  // A flow needs one style sheet and one picture per screen: its illustration set is as big as its screens.
+  const flow = flowOf(prompt, screens);
+  try { assetSession = await prepareAssets(values, count, flow ? (flow.screens.length || flow.count) + 1 : undefined); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
   if (assetSession) {
     if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
     process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
