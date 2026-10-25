@@ -273,6 +273,32 @@ const flowScene = () => {
   }
   return out;
 };
+// The flow's shell also has to say the same kind of thing on every screen without saying the same words: each screen's small label
+// above its title names that screen's own step, and the last screen ends on one action, its closing button, instead of that button
+// beside the round next button. Only the flow-wide cases are findings: one label repeated on every screen, and two actions at the end.
+const flowShell = () => {
+  const out = [];
+  const shown = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).opacity !== '0';
+  const text = (el) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+  const screens = [...document.querySelectorAll('[data-oc-screen]')].filter((e) => shown(e) && e.getBoundingClientRect().width > 0);
+  if (screens.length < 3) return out;
+  const labels = screens.map((screen) => {
+    const title = [...screen.querySelectorAll('h1, h2, h3')].find(shown);
+    for (let e = title?.previousElementSibling; e; e = e.previousElementSibling) if (shown(e) && text(e) && !e.querySelector('a, button, img, svg, [role=button]')) return text(e);
+    return null;
+  });
+  // The owner's repeated eyebrow kept its words and only changed its number ("01 / A moment for you" on all six), so the count in
+  // front of a label is not what makes it that screen's own step.
+  const words = (t) => t.toLowerCase().replace(/^[^\p{L}]*/u, '').replace(/^(step|stage|part)\s*[\divx]+\s*[.:/\u2013\u2014-]*\s*/u, '').trim();
+  if (labels.every(Boolean)) {
+    const keys = new Set(labels.map(words));
+    if (keys.size === 1 && [...keys][0]) out.push(`every screen repeats the same label above its title ("${labels[0]}"); give each screen its own short step label, in the same style and place`);
+  }
+  const last = screens.at(-1), id = last.id || last.getAttribute('data-oc-screen') || '';
+  const actions = [...last.querySelectorAll('button, a[href], [role=button]')].filter((e) => shown(e) && !e.closest('header, nav, p, li') && !e.hasAttribute('disabled') && e.getAttribute('aria-disabled') !== 'true');
+  if (actions.length > 1) out.push(`the last screen "${id}" offers ${actions.length} actions at once (${actions.map((e) => text(e) || e.getAttribute('aria-label') || e.tagName.toLowerCase()).join(', ')}); keep its closing button as the one action and drop the round next button beside it`);
+  return out;
+};
 const name = (el) => `<${el.tag}${el.id ? ` id="${el.id}"` : ''}${el.cls ? ` class="${el.cls}"` : ''}>`;
 
 export class Renderer {
@@ -333,7 +359,8 @@ export class Renderer {
     const clarity = this.clarity && screen === null ? await this.eval(c, `(${clarityPage.toString()})(${this.clarity.flash})`) : []; // the clarity page is the whole page, not one screen
     const human = this.humanSide && screen === null ? await this.eval(c, `(${humanSidePage.toString()})(${CARD_RUN}, ${HUES}, ${JSON.stringify(TITLE_WORDS)})`) : []; // the human-side checks are the whole page's too
     const scene = this.flow && screen === null ? await this.eval(c, `(${flowScene.toString()})()`) : []; // the flow's scenes are measured across the screens, as the person sees them together
-    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, scene, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    const shell = this.flow && screen === null ? await this.eval(c, `(${flowShell.toString()})()`) : []; // so are its step labels and the actions on its last screen
+    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, scene, shell, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -473,6 +500,7 @@ export class Renderer {
         if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
         for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
         for (const message of shot.scene ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'flow', message: `${context}: ${message}. Make the illustration part of the screen's own surface: let it run to the screen's left and right edges on the screen's own ground, or give it a soft edge that fades into that ground with a mask (mask-image: radial-gradient(...)), and take away the hard rim: no border, outline, frame, mat, drop shadow, oval or rounded clip. Then call done again.` });
+        for (const message of shot.shell ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'flow', message: `${context}: ${message}. Then call done again.` });
         for (const message of shot.human ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'human-side', message: `human side, ${context}: ${message}` });
         if (shot.stray?.length && theme === 'light') errors.push({ source: 'restraint', message: `${context}: a close control is on screen with nothing open: ${shot.stray.join('; ')}. Show it only while its drawer, dialog or banner is open (hide it by default and at this width), or remove it.` });
         if (shot.faint?.length) errors.push({ source: 'render', message: `${context} in ${theme}: text that cannot be read, colour against its own background: ${shot.faint.join('; ')}. Give it at least 4.5:1 contrast (an active or selected state needs its own text colour on its fill).` });

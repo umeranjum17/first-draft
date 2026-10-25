@@ -6,10 +6,10 @@ import { findBrowser, renderCheck } from '../src/render-check.mjs';
 
 const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const FADE = '.scene img{-webkit-mask-image:radial-gradient(130% 130% at 50% 45%,#000 52%,transparent 76%);mask-image:radial-gradient(130% 130% at 50% 45%,#000 52%,transparent 76%)}';
-const SCREENS = [['welcome', 'A little space'], ['feeling', 'How are you feeling today?'], ['first-step', 'You are all set']];
+const SCREENS = [['welcome', 'A little space', 'Welcome'], ['feeling', 'How are you feeling today?', 'How you feel'], ['first-step', 'You are all set', 'Your first step']];
 
 // Three flow screens, one scene each: the shared shell the flow keeps, nothing else drawn.
-const page = ({ fade = true, css = '' } = {}) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+const page = ({ fade = true, css = '', label = (i) => SCREENS[i][2] } = {}) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
 :root{--paper:#f6f1e8;--ink:#221f1c;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--paper:#1a1816;--ink:#f2ede4}}
 body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
@@ -17,10 +17,11 @@ section{box-sizing:border-box;min-height:520px;padding:24px}
 header{display:flex;justify-content:space-between}
 .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:24px 0 8px}
 h1{font-size:30px;margin:0 0 8px}
+.start{display:inline-block;margin-top:16px;padding:14px 22px;border-radius:999px;background:var(--ink);color:var(--paper)}
 .scene{margin:20px 0 0}
 .scene img{display:block;width:100%;max-width:320px;height:220px;background:#efe6d6}
 ${fade ? FADE : ''}${css}
-</style></head><body>${SCREENS.map(([id, title]) => `<section id="${id}" data-oc-screen="${id}"><header><a href="#${id}">Back</a><a href="#${SCREENS.at(-1)[0]}">Skip</a></header><p class="eyebrow">step</p><h1>${title}</h1><figure class="scene"><img src="${PIXEL}" alt="the character in its scene"></figure></section>`).join('')}</body></html>`;
+</style></head><body>${SCREENS.map(([id, title], i) => `<section id="${id}" data-oc-screen="${id}"><header><a href="#${id}">Back</a><a href="#${SCREENS.at(-1)[0]}">Skip</a></header><p class="eyebrow">${label(i)}</p><h1>${title}</h1><figure class="scene"><img src="${PIXEL}" alt="the character in its scene"></figure>${i === SCREENS.length - 1 ? '<a class="start" href="#welcome">Start</a>' : `<a class="next" href="#${SCREENS[i + 1][0]}">Next</a>`}</section>`).join('')}</body></html>`;
 
 const check = (t, options = { flow: true }) => {
   const render = renderCheck(() => {}, options);
@@ -53,6 +54,16 @@ test('a screen that drops its illustration keeps its own idea and is not a thumb
   if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
   const without = page().replace(/<figure class="scene"><img[^>]*><\/figure>(?=<\/section><section id="first-step")/, '');
   assert.deepEqual(await check(t)(without), [], 'a screen with no scene at all is allowed');
+});
+
+test('one step label repeated on every screen, or two actions on the last one, fails the flow shell', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  const run = check(t);
+  assert.deepEqual(await run(page()), [], 'each screen labelling its own step, and one action at the end, is the shell the flow keeps');
+  const repeated = page({ label: (i) => `0${i + 1} / A moment for you` });
+  assert.ok((await run(repeated)).some((f) => /every screen repeats the same label above its title \("01 \/ A moment for you"\)/.test(f)), 'the repeated eyebrow the owner saw on all six screens is refused, even when each one carries its own number');
+  const twoActions = page().replace('<a class="start" href="#welcome">Start</a>', '<a class="start" href="#welcome">Start</a><a class="next" href="#welcome">Next</a>');
+  assert.ok((await run(twoActions)).some((f) => /the last screen "first-step" offers 2 actions at once/.test(f)), 'a closing button beside the round next button is refused');
 });
 
 test('only a flow is held to the scene rule', async (t) => {
