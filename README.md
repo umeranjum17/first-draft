@@ -68,14 +68,21 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
 
 This is a **formatted excerpt of real CLI output** from a different run, not a generated page or an interactive critic screen: **Claude Sonnet 5.5, 24 October 2026**, 304 seconds, self-scored **8/10 versus 5/10** for its plain-prompt baseline. It failed the 9/10 quality bar. A generator rating itself is not independent evidence of quality.
 
-We also compared the same briefs on Sonnet 5.5 on that date:
+Same brief, same model (Claude Sonnet 5.5), 24 October 2026 — First Draft on the right:
 
-| Brief | Plain prompt | + frontend-design guidance | First Draft, before fixes |
-| --- | ---: | ---: | ---: |
-| SaaS landing | 6.5 | 8 | 4 |
-| Notes app | 3 | 5.5 | 4 |
+**a landing page for a small accounting software company** — First Draft wins, 8 to 6.5
 
-These are **one-run, worker-scored historical comparisons**, not averages or a claim that today's wrapper beats the plain model. They exposed wrapper regressions; [method, limits and rerun command](docs/quality.md) explain what changed and what remains unproven.
+| Plain prompt | First Draft ✅ |
+| --- | --- |
+| <img src="docs/ui/quality/landing-plain.webp" width="420" alt="Plain prompt: Ledgely, a stock green SaaS landing page"><h2>6.5 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/landing-first-draft.webp" width="420" alt="First Draft: Parley Books, a ledger-led accounting landing page"><h2>8 <sub>/ 10</sub></h2> |
+
+**a notes app** — First Draft wins, 7.5 to 3
+
+| Plain prompt | First Draft ✅ |
+| --- | --- |
+| <img src="docs/ui/quality/notes-plain.webp" width="420" alt="Plain prompt: a browser-default notes app with an emoji logo"><h2>3 <sub>/ 10</sub></h2> | <img src="docs/ui/quality/notes-first-draft.webp" width="420" alt="First Draft: Margin, a three-pane notes app with a note and a checklist"><h2>7.5 <sub>/ 10</sub></h2> |
+
+One run per cell, scored by the review worker, not customers and not an independent judge; before our fixes First Draft scored **4** on both of these. **[How good is it?](docs/quality.md)** has all four briefs side by side, the method, the limits, what we fixed and the rerun command.
 
 - [Published npm releases](https://www.npmjs.com/package/first-draft-axi?activeTab=versions): the install above was checked against **0.2.12**.
 - [CI](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml): builds and drives CLI/browser checks with local provider stand-ins, without paid generation. The **25 October 2026** local run passed **74 tests, zero failures, zero skips**.
