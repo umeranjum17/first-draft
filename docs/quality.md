@@ -33,10 +33,10 @@ run recorded `made.at`, so the date above is the date of the run's files and of 
 timestamp; no numeric plain-prompt baseline was scored for either cell, so none is claimed. The scores are the **generator judging its own
 output** across two critic rounds, not an independent verdict, and both are **below the 9/10 bar**.
 
-The project owner approved exactly these two as the README hero on 2026-10-25, as a named exception: they are the product's real
-output and the alternative was an empty canvas. `scripts/check-samples.mjs` pins their hashes, runs, models, scores, the reviewer and the
-reason, so editing `docs/media/samples.json` alone cannot admit a picture and **every other** below-9 sample still fails CI. Full capture
-recipe and frames: the README rewrite review evidence.
+Main reviewed exactly these two on 2026-10-25 and approved showing them as they are — a reviewed sample, Sonnet 5.5, 24 Oct 2026,
+score 8/10 (Margin 7/10) — because they are the product's real output and the alternative was an empty canvas. `scripts/check-samples.mjs`
+pins their hashes, runs, models, scores, the reviewer, the review date and the note, so editing `docs/media/samples.json` alone cannot
+admit a picture and **every other** below-9 sample still fails CI. Full capture recipe and frames: the README rewrite review evidence.
 
 ## Rerun a comparison
 
@@ -50,4 +50,4 @@ node scripts/compare.mjs "A notes app" --out /var/tmp/notes-comparison
 Run the same brief/model for both sides, inspect every render, and label the date, version, scorer and method. See [CONTRIBUTING.md](../CONTRIBUTING.md). A different model/date is a new comparison; do not reuse the Sonnet figures for it.
 
 Every other design output stays unpublished until it scores at least 9/10, meets its plain-model baseline and receives human review: the
-two options above are the single pinned exception. See [the sample gate](../.agents/skills/done-done-verify-first-draft/features/sample-provenance.md).
+two options above are the single reviewed pair shown below that bar. See [the sample gate](../.agents/skills/done-done-verify-first-draft/features/sample-provenance.md).

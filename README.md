@@ -13,7 +13,7 @@ For developers and coding agents: explore HTML options using your own AI subscri
   <img src="docs/media/reviewed-pair.gif" width="880" alt="The real First Draft Studio holding two finished options: a Parley Books landing page and a Margin notes app, three seconds each.">
 </picture>
 
-<sub>Two real retained options in the Studio, unaltered: **Parley Books**, generator self-scored **8/10**, and **Margin**, **7/10** — `claude-sonnet-5-5`, runs `strip-landing` and `strip2-notes`, 24 October 2026. Self-scores, below our 9/10 bar, shown as [one named exception](docs/quality.md#the-readme-hero--24-october-2026).</sub>
+<sub>Two real retained options in the Studio, unaltered: **Parley Books**, generator self-scored **8/10**, and **Margin**, **7/10** — `claude-sonnet-5-5`, runs `strip-landing` and `strip2-notes`, 24 October 2026. Self-scores, below our 9/10 bar: a [reviewed sample](docs/quality.md#the-readme-hero--24-october-2026), not a quality claim.</sub>
 
 [Website](https://umeranjum17.github.io/first-draft/) · [Quick start](#quick-start) · [Docs](docs/guide.md) · [Agent skill](skills/first-draft-axi/SKILL.md)
 

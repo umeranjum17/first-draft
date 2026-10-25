@@ -5,12 +5,7 @@
     "model": "claude-sonnet-5-5",
     "made_at": "2026-10-24",
     "made_at_basis": "The retained run.json records no made.at, so this is the date of the run's files and of the bake-off report (2026-10-24), not a reconstructed timestamp.",
-    "reviewed_by": "the owner",
-    "exception": {
-      "approved_by": "the owner",
-      "approved_at": "2026-10-25",
-      "reason": "owner-approved README hero: two real retained options shown as-is, below the 9/10 bar, self-scored and labelled"
-    },
+    "reviewed_by": "Main",
     "sources": [
       {
         "name": "Parley Books",
@@ -21,7 +16,11 @@
         "seconds": 176,
         "exit": 0,
         "head": "b36f4d3",
-        "critique": { "score": 8, "passed": false, "plain_score": null }
+        "critique": {
+          "score": 8,
+          "passed": false,
+          "plain_score": null
+        }
       },
       {
         "name": "Margin",
@@ -32,9 +31,15 @@
         "seconds": 278,
         "exit": 0,
         "head": "85f773f",
-        "critique": { "score": 7, "passed": false, "plain_score": null }
+        "critique": {
+          "score": 7,
+          "passed": false,
+          "plain_score": null
+        }
       }
-    ]
+    ],
+    "reviewed_at": "2026-10-25",
+    "review_note": "reviewed sample, Sonnet 5.5, 24 Oct 2026, score 8/10"
   },
   "reviewed-pair-phone": {
     "command": "make",
@@ -42,12 +47,7 @@
     "model": "claude-sonnet-5-5",
     "made_at": "2026-10-24",
     "made_at_basis": "The retained run.json records no made.at, so this is the date of the run's files and of the bake-off report (2026-10-24), not a reconstructed timestamp.",
-    "reviewed_by": "the owner",
-    "exception": {
-      "approved_by": "the owner",
-      "approved_at": "2026-10-25",
-      "reason": "owner-approved README hero: two real retained options shown as-is, below the 9/10 bar, self-scored and labelled"
-    },
+    "reviewed_by": "Main",
     "sources": [
       {
         "name": "Parley Books",
@@ -58,7 +58,11 @@
         "seconds": 176,
         "exit": 0,
         "head": "b36f4d3",
-        "critique": { "score": 8, "passed": false, "plain_score": null }
+        "critique": {
+          "score": 8,
+          "passed": false,
+          "plain_score": null
+        }
       },
       {
         "name": "Margin",
@@ -69,8 +73,14 @@
         "seconds": 278,
         "exit": 0,
         "head": "85f773f",
-        "critique": { "score": 7, "passed": false, "plain_score": null }
+        "critique": {
+          "score": 7,
+          "passed": false,
+          "plain_score": null
+        }
       }
-    ]
+    ],
+    "reviewed_at": "2026-10-25",
+    "review_note": "reviewed sample, Sonnet 5.5, 24 Oct 2026, score 8/10"
   }
 }

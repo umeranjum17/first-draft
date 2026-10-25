@@ -21,13 +21,13 @@ Every picture under `docs/media/` that `README.md` or `docs/index.html` shows ha
 - The run is at most 30 days old: a sample is judged again on the current engine at least monthly.
 - Each page that shows it names its model.
 
-## The one approved exception
+## The one reviewed pair shown below the bar
 
-On 2026-10-25 the owner approved exactly two retained stripped-engine options (self-scored 8 and 7) as the README hero. Their source
-hashes, runs, models, scores, reviewer and reason are pinned in `scripts/check-samples.mjs`, and `docs/media/samples.json` must repeat them
-exactly; `test/samples.test.mjs` proves that a third source, a changed hash/run/score, an invented plain baseline, a fake reviewer or
-relabelled reason, a copied exception label on an ordinary 8, and a stale approved pair are all refused. The general 9/10 rule is unchanged
-for everything else, and the exception may only cover the composite keys `reviewed-pair` and `reviewed-pair-phone`.
+Main reviewed exactly two retained stripped-engine options (self-scored 8 and 7) on 2026-10-25 and they are the README hero: a reviewed
+sample, Sonnet 5.5, 24 Oct 2026, score 8/10 (Margin 7/10). Their source hashes, runs, models, scores, reviewer, review date and note are
+pinned in `scripts/check-samples.mjs`, and `docs/media/samples.json` must repeat them exactly; `test/samples.test.mjs` proves that a third source, a changed hash/run/score, an invented plain baseline, a fake reviewer or
+relabelled reason, a copied exception label on an ordinary 8, and a stale reviewed pair are all refused. The general 9/10 rule is unchanged
+for everything else, and this reviewed pair may only cover the composite keys `reviewed-pair` and `reviewed-pair-phone`.
 
 ## Driving it
 

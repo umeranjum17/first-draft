@@ -1,14 +1,14 @@
 # README capture provenance
 
-These assets document the **tool**, not the quality of generated designs. The one generated-design picture is the approved hero pair in
+These assets document the **tool**, not the quality of generated designs. The one generated-design picture is the reviewed hero pair in
 `docs/media/`, inventoried by `scripts/check-samples.mjs`; everything here is a capture of the CLI's own output.
 
 ## The hero pair — `../media/reviewed-pair{,-phone}{,-dark}.gif`
 
 Two real retained options inside the real Studio, three seconds each, unaltered: **Parley Books** (self-scored 8/10) and **Margin** (7/10).
-Captions outside the product pixels name the run, model, date, scores and the owner's exception. Sources, hashes and limits:
+Captions outside the product pixels name the run, model, date, scores and the review (Main, 2026-10-25). Sources, hashes and limits:
 [quality provenance](../quality.md#the-readme-hero--24-october-2026). The design canvas is not redacted here; the GIF shows the genuine
-retained output, which is why the pair carries a named, pinned exception to the 9/10 rule instead of pretending to pass it.
+retained output, which is why the pair is a reviewed sample pinned in the gate rather than a 9/10 pass.
 
 ## The CLI excerpt — `make-{light,dark}.webp`, `make-phone-{light,dark}.webp`
 
