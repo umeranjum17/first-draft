@@ -77,7 +77,7 @@ We also compared the same briefs on Sonnet 5.5 on that date:
 
 These are **one-run, worker-scored historical comparisons**, not averages or a claim that today's wrapper beats the plain model. They exposed wrapper regressions; [method, limits and rerun command](docs/quality.md) explain what changed and what remains unproven.
 
-- [Published npm releases](https://www.npmjs.com/package/first-draft-axi?activeTab=versions): the install above was checked against **0.2.11**.
+- [Published npm releases](https://www.npmjs.com/package/first-draft-axi?activeTab=versions): the install above was checked against **0.2.12**.
 - [CI](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml): builds and drives CLI/browser checks with local provider stand-ins, without paid generation. The **25 October 2026** local run passed **74 tests, zero failures, zero skips**.
 - [Comparison contract](CONTRIBUTING.md): wrapper additions need paired rendered evidence; our own tool must not quietly lower the plain model's output bar.
 

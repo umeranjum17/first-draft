@@ -1,8 +1,8 @@
 {
   "name": "first-draft-axi",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "Pick a design direction before writing app code. A CLI for developers and coding agents.",
-  "keywords": ["ai", "cli", "design-tools", "prototyping", "html", "developer-tools", "coding-agents"],
+  "keywords": ["ai", "cli", "design", "design-tools", "prototyping", "html", "developer-tools", "coding-agents"],
   "license": "MIT",
   "repository": {
     "type": "git",
