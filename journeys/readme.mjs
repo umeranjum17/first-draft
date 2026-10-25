@@ -77,6 +77,7 @@ try {
         const chart = actual.images.filter(i => i.src.includes('/scores-'));
         assert.equal(chart.length, 1, 'the paired-bar score chart loads');
         assert.ok(chart[0].src.endsWith(`-${theme}.svg`), `${width} ${theme}: the chart follows the theme`);
+        assert.ok(chart[0].src.includes('-phone-') === (width === 390), `${width} ${theme}: the phone chart is the one with readable labels`);
         // Four briefs now, two of them again as they were before the fixes: every row shows both pictures.
         const rows = actual.images.filter(i => i.src.includes('/docs/ui/quality/') && !i.src.includes('/scores-'));
         assert.equal(rows.length, 12, 'every row shows its plain and First Draft picture');

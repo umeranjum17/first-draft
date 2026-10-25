@@ -3,6 +3,8 @@
 **On Claude Sonnet 5.5, on the same brief, First Draft scores 8, 8, 7 and 7.5 out of 10 against 6.5, 6, 6.5 and 3 for the plain prompt — better on all four, none at our 9/10 bar.**
 
 <picture>
+  <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="docs/ui/quality/scores-phone-dark.svg">
+  <source media="(max-width: 600px)" srcset="docs/ui/quality/scores-phone-light.svg">
   <source media="(prefers-color-scheme: dark)" srcset="docs/ui/quality/scores-dark.svg">
   <img src="docs/ui/quality/scores-light.svg" width="600" alt="Bar chart out of 10, First Draft against the plain prompt: landing 8 versus 6.5, dashboard 8 versus 6, onboarding 7 versus 6.5, notes 7.5 versus 3.">
 </picture>

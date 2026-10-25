@@ -20,6 +20,6 @@ with the README rewrite review evidence. No model was run and no quota was spent
 ## `quality/` — the bake-off cells shown on the quality page
 
 `quality/{landing,dashboard,onboarding,notes}-{plain,first-draft}.webp` and `quality/{landing,notes}-before-fixes.webp` are the retained 1280px
-first screens of the bake-off cells shown as picture pairs on the quality page (`webp`, 320px wide); `quality/scores-{light,dark}.svg` is
-the paired-bar chart of the same cell scores. Model, run, time, tokens and score for each row: [How good is it?](../quality.md). These
+first screens of the bake-off cells shown as picture pairs on the quality page (`webp`, 320px wide); `quality/scores-{,phone-}{light,dark}.svg` is
+the paired-bar chart of the same cell scores (the phone pair is drawn 360 wide with bigger labels so it stays readable at 390). Model, run, time, tokens and score for each row: [How good is it?](../quality.md). These
 are scorer-labelled comparison captures, not samples: the only below-9 picture admitted as a sample is the reviewed hero pair above.
