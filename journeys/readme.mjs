@@ -104,11 +104,16 @@ try {
       const name = `${label}-${width}-${theme}`;
       browser('screenshot', join(out, `${name}.png`));
       browser('screenshot', join(out, `${name}-full.png`), '--full-page');
+      if (label === 'after') {
+        // The first screen is the product hero, so frame the badge row itself for review.
+        browser('eval', '() => {document.querySelector(\'a[href="https://x.com/umership"]\').scrollIntoView({block:"center"});scrollBy(0,-140)}');
+        browser('screenshot', join(out, `${label}-${width}-${theme}-badges.png`));
+      }
       seen.push({ label, theme, ...actual });
     }
   }
   writeFileSync(join(out, 'readme-states.json'), JSON.stringify(seen, null, 2));
-  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft README ${version} at ${head}` }, start: 'Candidate README source, rendered by the GitHub Markdown API with github-markdown-css 5.8.1; local faithful article layout, not the github.com repository shell', steps: ['Render README and docs/quality.md with the GitHub API', 'Open each at phone 390 and desktop 1280, light and dark, in an isolated chrome-devtools-axi session', 'Wait for images to decode; check image loading, the X @umership badge image and link, the themed score chart, each row picture, page and quick-start command overflow', 'Capture each first screen and complete article'], result: 'The README shows the product-first heading, the approved real reviewed-options hero (animated GIF, themed and phone-specific), the real CLI excerpt and a three-command quick start, and its badge row now carries the X @umership badge beside npm, CI and MIT; its "How good is it?" link opens a quality page that leads with the paired-bar score chart and the plain and First Draft picture of each brief, at both widths and themes; no model generation was repeated' }, null, 2));
+  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft README ${version} at ${head}` }, start: 'Candidate README source, rendered by the GitHub Markdown API with github-markdown-css 5.8.1; local faithful article layout, not the github.com repository shell', steps: ['Render README and docs/quality.md with the GitHub API', 'Open each at phone 390 and desktop 1280, light and dark, in an isolated chrome-devtools-axi session', 'Wait for images to decode; check image loading, the X @umership badge image and link, the themed score chart, each row picture, page and quick-start command overflow', 'Capture each first screen and complete article, and a viewport frame of the X @umership badge row'], result: 'The README shows the product-first heading, the approved real reviewed-options hero (animated GIF, themed and phone-specific), the real CLI excerpt and a three-command quick start, and its badge row now carries the X @umership badge beside npm, CI and MIT; its "How good is it?" link opens a quality page that leads with the paired-bar score chart and the plain and First Draft picture of each brief, at both widths and themes; no model generation was repeated' }, null, 2));
   console.log(`PASS: README and docs/quality.md 390/1280 light/dark at ${head}`);
 } finally {
   browser('stop');
