@@ -43,6 +43,21 @@ try {
     const parsed = YAML.parse(response);
     const html = parsed.api_response?.body;
     assert.ok(html?.includes('<h1'), 'GitHub Markdown API did not return HTML');
+    if (label === 'after') {
+      // The candidate README's badge row carries the X @umership badge, and it links to the account.
+      assert.match(html, /<a[^>]*href="https:\/\/x\.com\/umership"/, 'the rendered README links to X @umership');
+      const xLink = html.match(/<a[^>]*href="https:\/\/x\.com\/umership"[^>]*>[\s\S]*?<\/a>/)?.[0] ?? '';
+      const xImg = xLink.match(/<img[^>]*alt="X @umership"[^>]*>/)?.[0] ?? '';
+      assert.ok(xImg, 'the X @umership link carries its badge image');
+      const src = xImg.match(/\bsrc="([^"]+)"/)?.[1] ?? '';
+      let badgeSrc = src;
+      try {
+        const u = new URL(src);
+        const hex = u.hostname === 'camo.githubusercontent.com' ? u.pathname.split('/').pop() : '';
+        if (hex && /^[0-9a-f]+$/i.test(hex)) badgeSrc = Buffer.from(hex, 'hex').toString('utf8');
+      } catch {}
+      assert.ok(badgeSrc.includes('img.shields.io/badge/X'), `the X badge image is the shields X badge: ${badgeSrc}`);
+    }
     writeFileSync(join(out, `${label}-github.html`), html);
     // The actual repository CSS/layout is simulated; the article is GitHub-rendered.
     // Resolve local assets to the candidate, so unpublished images can be reviewed.
@@ -53,7 +68,7 @@ try {
       browser('emulate', '--viewport', `${width}x${width === 390 ? 844 : 800}x1`, '--color-scheme', theme);
       browser('open', pathToFileURL(rendered).href);
       execFileSync('sleep', ['2']);
-      const state = browser('eval', 'async () => {await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));return {width:innerWidth,wide:document.documentElement.scrollWidth>innerWidth,images:[...document.images].map(i=>({src:i.currentSrc,ok:i.complete&&i.naturalWidth>0})),commands:[...document.querySelectorAll("pre")].map(p=>({wide:p.scrollWidth>p.clientWidth}))}}');
+      const state = browser('eval', 'async () => {await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));return {width:innerWidth,wide:document.documentElement.scrollWidth>innerWidth,images:[...document.images].map(i=>({src:i.currentSrc,alt:i.alt,ok:i.complete&&i.naturalWidth>0})),commands:[...document.querySelectorAll("pre")].map(p=>({wide:p.scrollWidth>p.clientWidth}))}}');
       const data = YAML.parse(state);
       const actual = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
       assert.equal(actual.width, width, `${label}: viewport width`);
@@ -71,6 +86,10 @@ try {
         assert.equal(board.length, 1, 'the real CLI excerpt loads');
         assert.ok(board[0].src.endsWith('-dark.webp') === (theme === 'dark'), 'Correct board theme');
         assert.ok(board[0].src.includes('-phone-') === (width === 390), 'Correct board width');
+        // The badge row carries the X @umership badge beside npm, CI and MIT.
+        const xBadge = actual.images.filter(i => i.alt === 'X @umership');
+        assert.equal(xBadge.length, 1, 'the X @umership badge image loads');
+        assert.ok(xBadge[0].ok, 'the X @umership badge image loaded');
       }
       // The quality page opens on the score chart and one picture pair per brief.
       if (label === 'quality-after') {
@@ -89,7 +108,7 @@ try {
     }
   }
   writeFileSync(join(out, 'readme-states.json'), JSON.stringify(seen, null, 2));
-  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft README ${version} at ${head}` }, start: 'Candidate README source, rendered by the GitHub Markdown API with github-markdown-css 5.8.1; local faithful article layout, not the github.com repository shell', steps: ['Render README and docs/quality.md with the GitHub API', 'Open each at phone 390 and desktop 1280, light and dark, in an isolated chrome-devtools-axi session', 'Wait for images to decode; check image loading, the themed score chart, each row picture, page and quick-start command overflow', 'Capture each first screen and complete article'], result: 'The README shows the product-first heading, the approved real reviewed-options hero (animated GIF, themed and phone-specific), the real CLI excerpt and a three-command quick start, and its "How good is it?" link opens a quality page that leads with the paired-bar score chart and the plain and First Draft picture of each brief, at both widths and themes; no model generation was repeated' }, null, 2));
+  writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft README ${version} at ${head}` }, start: 'Candidate README source, rendered by the GitHub Markdown API with github-markdown-css 5.8.1; local faithful article layout, not the github.com repository shell', steps: ['Render README and docs/quality.md with the GitHub API', 'Open each at phone 390 and desktop 1280, light and dark, in an isolated chrome-devtools-axi session', 'Wait for images to decode; check image loading, the X @umership badge image and link, the themed score chart, each row picture, page and quick-start command overflow', 'Capture each first screen and complete article'], result: 'The README shows the product-first heading, the approved real reviewed-options hero (animated GIF, themed and phone-specific), the real CLI excerpt and a three-command quick start, and its badge row now carries the X @umership badge beside npm, CI and MIT; its "How good is it?" link opens a quality page that leads with the paired-bar score chart and the plain and First Draft picture of each brief, at both widths and themes; no model generation was repeated' }, null, 2));
   console.log(`PASS: README and docs/quality.md 390/1280 light/dark at ${head}`);
 } finally {
   browser('stop');
