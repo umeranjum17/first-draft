@@ -17,7 +17,7 @@ For developers and coding agents: explore HTML options using your own AI subscri
 
 [Website](https://umeranjum17.github.io/first-draft/) · [Quick start](#quick-start) · [Docs](docs/guide.md) · [Agent skill](skills/first-draft-axi/SKILL.md)
 
-[![npm version](https://img.shields.io/npm/v/first-draft-axi)](https://www.npmjs.com/package/first-draft-axi) [![CI](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml/badge.svg)](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml) [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/first-draft-axi)](https://www.npmjs.com/package/first-draft-axi) [![CI](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml/badge.svg)](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml) [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![X @umership](https://img.shields.io/badge/X-%40umership-000000?logo=x&logoColor=white)](https://x.com/umership)
 
 </div>
 
