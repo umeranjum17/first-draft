@@ -74,7 +74,7 @@ first-draft-axi <the command> 2>&1 | tee -a evidence.txt; echo "exit ${PIPESTATU
 ```
 
 - `NO_ENGINE`: sign in as the line says, then rerun. Nothing was written.
-- `JUDGE_FAILED … not valid JSON`: the judging model garbled its answer. It is asked three times; if it still fails, rerun. Seen once in about ten judge calls, and no pages are kept from that run.
+- `JUDGE_FAILED … not valid JSON`: the judging model garbled its answer. It is asked three times; if it still fails, rerun. Across the runs behind this guide `make` died this way 3 times in 7 (after 6–7 minutes each, no pages kept), twice in a row in the last re-walk, so expect to rerun once and send `evidence.txt` if it fails twice.
 - `MAKE_FAILED … did not refine the design`: send `evidence.txt`; a refine on a normal `make` output should finish in minutes, not 14.
 - Stuck for more than 20 minutes with no output: Ctrl+C, then send `evidence.txt`.
 
