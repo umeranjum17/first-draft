@@ -12,6 +12,14 @@ import { clarityPage } from './clarity.mjs';
 import { CARD_RUN, HUES, TITLE_WORDS, humanSidePage } from './human-side.mjs';
 
 const VIEWPORTS = [[390, 844], [1280, 800]];
+// The judge's whole-page views: a tile is at most TILE px tall (the long edge a model reads without shrinking it), a view is at most MAX_TILES
+// tiles, and a page taller than that is scaled down to MIN_SCALE before the rest of it is cut. So a view costs at most 3 images, never one per screenful.
+export const TILE = 1500, MAX_TILES = 3, MIN_SCALE = 0.6;
+// The tiles of a page `pageHeight` px tall, top to bottom: [{ y, height, scale }], and how many of its px they cover.
+export function tilesOf(pageHeight) {
+  const covered = Math.min(pageHeight, Math.round(TILE * MAX_TILES / MIN_SCALE)), n = Math.min(MAX_TILES, Math.ceil(covered / TILE)), size = Math.ceil(covered / n);
+  return { covered, tiles: Array.from({ length: n }, (_, i) => ({ y: i * size, height: Math.min(size, covered - i * size), scale: Math.min(1, TILE / size) })) };
+}
 const DARK_BELOW = 0.18; // a page background lighter than this (0 black, 1 white) is a light page
 const NAMES = ['google-chrome-stable', 'google-chrome', 'chromium', 'chromium-browser', 'chrome', 'chromium-headless-shell', 'headless-shell'];
 const SPOTS = ['/opt/google/chrome/chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/lib/chromium/chromium', '/snap/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
@@ -468,6 +476,28 @@ export class Renderer {
     return shots;
   }
 
+  // The whole page, for the judge, at 1280 then 390 in each theme: one JPEG per tile (tilesOf), each saying which view and rows it shows.
+  async views(html, themes = ['light', 'dark']) {
+    const file = join(this.dir, `views-${++this.n}.html`);
+    writeFileSync(file, html);
+    const c = this.client, shots = [];
+    for (const [width, height] of VIEWPORTS.toReversed()) for (const theme of themes) {
+      await c.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: theme }] });
+      const loaded = c.once('Page.loadEventFired');
+      await c.send('Page.navigate', { url: `file://${file}` });
+      await loaded;
+      await this.eval(c, 'document.fonts.ready.then(() => 1)');
+      await this.settle(c);
+      const page_height = await this.eval(c, 'document.documentElement.scrollHeight'), { covered, tiles } = tilesOf(page_height);
+      for (const [i, t] of tiles.entries()) {
+        const { data } = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 78, captureBeyondViewport: true, clip: { x: 0, y: t.y, width, height: t.height, scale: t.scale } });
+        shots.push({ id: `${width === 390 ? 'phone' : 'desktop'}-${width}-${theme}${tiles.length > 1 ? `-tile-${i + 1}` : ''}`, width, theme, tile: i + 1, tiles: tiles.length, y: t.y, height: t.height, scale: +t.scale.toFixed(2), page_height, covered, mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${data}` });
+      }
+    }
+    return shots;
+  }
+
   // The check itself: the errors done must report, so the model can fix the page in the loop.
   async check(html, redesignPages) {
     this.redesign = Boolean(redesignPages);
@@ -575,6 +605,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, cl
     shoot: async (html, tall = 2400) => {
       if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to show the critic the design: ${e.message}`); });
       return render.shoot(html, tall);
+    },
+    // The whole page at 1280 and 390 in light and dark, tiled when tall (the judge's eyes); a browser that cannot start is the failure.
+    views: async (html, themes) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to show the judge the design: ${e.message}`); });
+      return render.views(html, themes);
     },
     close: () => render.close(),
   };

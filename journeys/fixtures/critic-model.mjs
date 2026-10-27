@@ -8,6 +8,8 @@ const page = (title) => `<!doctype html><html><head><title>Notes</title><style>:
 export const PLAIN = page('A plain page from one prompt');
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 export const userText = (body) => JSON.parse(body).input.filter((m) => m.role === 'user').map((m) => typeof m.content === 'string' ? m.content : m.content.filter((p) => p.type === 'input_text').map((p) => p.text).join('\n'));
+// The design image ids the review must answer for, read from the tool's own views enum: one entry each, as a real review would.
+export const viewsOf = (body) => (JSON.parse(body).tools.find((t) => t.name === 'review_designs' || t.name === 'judge_designs')?.parameters.properties.views.items.properties.view.enum ?? []).map((view) => ({ view, judged: `${view}: the notes list` }));
 export const images = (body) => JSON.parse(body).input.flatMap((m) => Array.isArray(m.content) ? m.content.filter((p) => p.type === 'input_image') : []).length;
 
 // A stand-in model: the plain page and the reviews by their tool, the scores in turn from `scores` ([design, plain] each; a landing brief's review also says which side it reads as and how many hero points it meets); each
@@ -24,7 +26,7 @@ export function standIn(seen, scores) {
       if (body.includes('"write_page"')) calls = [['write_page', { html: PLAIN }]];
       else if (body.includes('"review_designs"')) {
         const [design, plain] = scores[reviews++];
-        calls = [['review_designs', { design: { score: design, gaps: design < 10 ? [`version ${reviews}: the hero has no picture and the list is a wall of grey`] : [] }, plain: { score: plain, gaps: ['generic'] },
+        calls = [['review_designs', { views: viewsOf(body), design: { score: design, gaps: design < 10 ? [`version ${reviews}: the hero has no picture and the list is a wall of grey`] : [] }, plain: { score: plain, gaps: ['generic'] },
           against: 'Notion: its calm page list and real content', reads_as: 'a list of notes', fix: design < 10 ? `Give version ${reviews} a real hero picture and tint each note by its tag.` : '',
           ...(body.includes('"ai_side"') && { // a landing brief is also asked which side it reads as and for the nine hero points: below 9 it reads as the AI side with five met
             ai_side: { reads_as_ai: design < 9, tells: design < 9 ? [`version ${reviews}: soft pastel on every section and a card grid after a card grid`] : [] },

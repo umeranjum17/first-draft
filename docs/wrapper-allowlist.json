@@ -283,7 +283,7 @@
     "id": "critic-review",
     "source": "step",
     "kind": "measure",
-    "what": "One review of each option at 1280 and 390 beside the plain page and the reference products; a low score stays flagged and is never revised.",
+    "what": "One review of each option beside the plain page and the reference products, seeing the whole page in light and dark at 1280 and 390 (tiled when tall; --first-view for the top 800px in light only); a low score stays flagged and is never revised.",
     "verdict": "provisional",
     "calls": {"per": "option", "max": 1},
     "reason": "A measuring step: it changes no option. It is the independent subscription judge when one is set up (src/judge.mjs), else the same model scoring itself, labelled as such.",
