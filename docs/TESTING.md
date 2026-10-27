@@ -18,7 +18,7 @@ mkdir ~/fd-test && cd ~/fd-test
 
 first-draft-axi init --agent byokit:codex --model gpt-6.1-sol    # ~1 s
 first-draft-axi doctor                                           # 4–20 s, no model call, "ready": true
-first-draft-axi make "A notes app" --out notes.html              # 9–10 min, three options
+first-draft-axi make "A notes app" --out notes.html              # 7–10 min, three options
 first-draft-axi view notes.html --host 127.0.0.1                 # prints a URL within ~15 s; open it; Ctrl+C stops it
 first-draft-axi judge notes-1.html "A notes app" --plain notes.critic/plain.html   # 25–45 s
 first-draft-axi refine notes-2.html "Warmer palette" --out notes-warm.html         # 2–6 min
@@ -49,7 +49,7 @@ Posting needs a sign-off board. Use a throwaway one so your real board is never 
 
 | Step | Files / lines you should see |
 | --- | --- |
-| `make` | `notes-1.html`, `notes-2.html`, `notes-3.html` (70–180 KB each) and `notes.critic/plain.html`; JSON with `"render_check":"checked"`, `critic.judge.agent` = the *other* engine (`byokit:claude` when you made with codex), a `critique.score` and `plain_score` per option. Last run: scores 7, 7, 7 against plain 4, 3, 3 and `"passed":false`, because the bar is 9. A low score is reported, not hidden. |
+| `make` | `notes-1.html`, `notes-2.html`, `notes-3.html` (70–180 KB each) and `notes.critic/plain.html`; JSON with `"render_check":"checked"`, `critic.judge.agent` = the *other* engine (`byokit:claude` when you made with codex), a `critique.score` and `plain_score` per option. Last run: scores 7, 7, 7 against plain 5, 6, 5 and `"passed":false`, because the bar is 9. A low score is reported, not hidden. |
 | `judge` | `critique.score`, four `views` (1280 and 390, light and dark), `capture.images: 8` |
 | `refine` | `{"refined":{...}}` and a new `notes-warm.html`; `notes-2.html` is byte-for-byte unchanged |
 | `benchmark` | `benchmark.html` plus `benchmark.html.json`; `judge` reads `independent: byokit:claude / claude-sonnet-5-5`; one score row per `current`/`candidate`; some `refused` entries (Reddit's robots.txt, for one) are normal |
@@ -74,7 +74,7 @@ first-draft-axi <the command> 2>&1 | tee -a evidence.txt; echo "exit ${PIPESTATU
 ```
 
 - `NO_ENGINE`: sign in as the line says, then rerun. Nothing was written.
-- `JUDGE_FAILED … not valid JSON`: the judging model garbled its answer. It is asked three times; if it still fails, rerun. Across the runs behind this guide `make` died this way 3 times in 7 (after 6–7 minutes each, no pages kept), twice in a row in the last re-walk, so expect to rerun once and send `evidence.txt` if it fails twice.
+- `JUDGE_FAILED … gave no usable … answer in 3 attempts`: the judging model's reply could not be read three times (the message lists each attempt's parse error and says if the output was cut off); no score and no pages are kept. Just rerun `make`. If a call succeeded only on a retry, the JSON says so in `critique.judge_retries`. Before this guide's last fix, `make` died this way 3 times in 7 runs, always while the plain baseline page was written as JSON inside JSON; the final walk passed first time.
 - `MAKE_FAILED … did not refine the design`: send `evidence.txt`; a refine on a normal `make` output should finish in minutes, not 14.
 - Stuck for more than 20 minutes with no output: Ctrl+C, then send `evidence.txt`.
 
