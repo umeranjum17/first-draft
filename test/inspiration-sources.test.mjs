@@ -30,6 +30,8 @@ test('inspiration: free search, permitted captures, refused links, an emulator a
       '<a class="result__snippet" href="/x">A dashboard of shift coverage, distilled.</a>',
       `<a class="result__a" href="${origin}/restricted">Umer restricted gallery</a>`,
       '<a class="result__snippet" href="/x">A gallery of shipped screens.</a>',
+      `<a class="result__a" href="${origin}/synthetic">Chat Screenshot Generator</a>`,
+      '<a class="result__snippet" href="/x">Synthetic conversations, not shipped app screens.</a>',
       `<a class="result__a" href="${origin}/no-terms">Umer notes page</a>`,
       '<a class="result__snippet" href="/x">Notes without any terms page.</a>',
       '</body></html>'].join(''));
@@ -42,6 +44,7 @@ test('inspiration: free search, permitted captures, refused links, an emulator a
     if (url.pathname === '/terms-restricted') return send('text/html', `<h1>Permission</h1><p>${RESTRICTED}</p>`);
     if (url.pathname === '/restricted') return send('text/html', '<title>Umer restricted gallery</title><h1>Umer restricted gallery</h1><p>Shipped screens.</p><a href="/terms-restricted">Terms</a>');
     if (url.pathname === '/no-terms') return send('text/html', '<title>Umer notes page</title><h1>Umer notes page</h1><p>No terms here.</p>');
+    if (url.pathname === '/paywall') return send('text/html', '<h1>Subscribe to continue</h1><a href="/terms">Terms</a>');
     if (url.pathname === '/permitted') return send('text/html', REFERENCE_PAGE);
     return send('text/html', PAGE);
   });
@@ -62,6 +65,11 @@ const call = (name, a) => ({ name, arguments: JSON.stringify(a) });
 const has = (n) => tools.some((t) => t.name === n);
 let calls = [];
 if (has('plan_reference_searches')) calls = [call('plan_reference_searches', { product_type: 'mobile shift planning', queries: ['shift planning app', 'nurse rota ui'] })];
+else if (has('score_benchmark')) {
+  const q = JSON.parse(messages.at(-1).content.split('\\n\\nYour last')[0]), refs = q.captures.filter((c) => c.role === 'reference');
+  appendFileSync(process.env.FIRST_DRAFT_HOME + '/benchmark-inputs', JSON.stringify({ q, system: args[args.indexOf('--system-prompt') + 1], images: envelope.message.content.filter((c) => c.type === 'image').length }) + '\\n');
+  calls = [call('score_benchmark', { axes: q.axes.map((axis) => ({ axis, score: axis === 'imagery' ? null : 7, references: axis === 'imagery' ? [] : [process.env.FD_BAD_EVIDENCE ? q.captures.find((c) => c.role === 'counterexample').id : refs[0].id], observed: axis === 'imagery' ? 'No applicable reference imagery.' : refs[0].id + ' shows a clear reading order.', comparison: 'Target is denser; fixture assessment only.' })) })];
+}
 else if (has('assess_reference_terms')) { const q = JSON.parse(messages.at(-1).content), no = /prohibited/i.test(q.text);
   calls = [call('assess_reference_terms', { decision: no ? 'blocked' : 'allowed', quote: no ? ${JSON.stringify(RESTRICTED)} : process.env.FD_PERMISSION })]; }
 else { const results = messages.filter((m) => m.role === 'toolResult');
@@ -139,9 +147,55 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
 
   // The summary the CLI prints names what was captured and what stayed a link.
   assert.equal(made.inspiration.captured, 2);
-  assert.equal(made.inspiration.link_only, 3);
+  assert.equal(made.inspiration.link_only, 4);
   assert.equal(made.inspiration.sidecar, '.sources.json beside each option');
   assert.ok(made.inspiration.sources.some((s) => s.package === 'com.umer.rota' && s.internal_reference_only));
+
+  // Benchmark the same retained captures through the real CLI/adapter: all current/candidates, positive and negative evidence.
+  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5');
+  const input = join(project, 'screens.json'), sheet = join(project, 'benchmark.html');
+  const entries = ['reference', 'counterexample', 'current', 'candidate', 'candidate', 'candidate', 'candidate'].map((role, i) => ({ role, name: `Umer ${role} ${i} <script>`, file: PICTURE, source: 'Local fixture; no remote source', permission: 'Project-owned fixture', captured_at: null, theme: 'light' }));
+  entries[1].name = 'current app not captured - counterexamples from the captain';
+  writeFileSync(input, JSON.stringify(entries));
+  const bench = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--project', project)).stdout);
+  const report = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')), html = readFileSync(sheet, 'utf8');
+  assert.equal(bench.scores.length, 5, 'current and every candidate get their own comparison');
+  assert.equal(report.captures.length, 8, 'seven local captures and the permitted public capture');
+  assert.ok(report.discovery.queries.every((q) => /AI chat app phone chat/.test(q.query)));
+  assert.ok(report.discovery.sources.some((s) => /restricted/.test(s.name) && s.status === 'link-only'));
+  assert.ok(report.discovery.sources.some((s) => /Generator/.test(s.name) && /Synthetic screenshot generator/.test(s.why)));
+  assert.ok(report.discovery.searches.some((s) => s.status === 'refused' && /robots/.test(s.why)));
+  assert.ok(html.includes('reference-based scores') && html.includes('not comparable'));
+  assert.ok(html.includes('Image 1 shows a clear reading order.') && !html.includes('capture-'), 'sheet uses readable image labels, not raw model IDs');
+  assert.ok(html.includes('proof clarity') && !html.includes('proof_clarity'));
+  assert.ok(html.includes('&lt;script&gt;') && !html.includes('<script>'));
+  assert.equal((html.match(/<img width="390"/g) ?? []).length, 8);
+  assert.ok(html.includes('unknown (owner supplied)'));
+  assert.ok(html.includes('current app not captured - counterexamples from the captain'));
+  const wire = readFileSync(join(base.FIRST_DRAFT_HOME, 'benchmark-inputs'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(wire.length, 5);
+  for (const w of wire) {
+    assert.match(w.system, /Never credit a feature/);
+    assert.match(w.system, /Counterexamples are negative evidence/);
+    assert.match(w.system, /marketing homepage is not a chat screen/);
+    assert.match(w.system, /within five seconds \(not verification of claimed backend outcomes\)/);
+    assert.equal(w.q.captures.filter((r) => r.role === 'reference').length, 2);
+    assert.equal(w.q.captures.filter((r) => r.role === 'counterexample').length, 1);
+    assert.equal(w.images, 4, 'real raster inputs reach the native subscription boundary');
+  }
+  base.FD_BAD_EVIDENCE = '1';
+  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery'), (e) => /Invalid reference evidence/.test(e.stdout));
+  delete base.FD_BAD_EVIDENCE;
+  assert.equal(JSON.parse(readFileSync(`${sheet}.json`, 'utf8')).scores.length, 0, 'counterexample citations cannot earn a score');
+  const offline = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--no-discovery', '--no-judge')).stdout);
+  assert.equal(offline.judge, 'not requested');
+  writeFileSync(input, JSON.stringify(entries.map((e) => ({ ...e, theme: 'dark' }))));
+  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery', '--no-judge'), (e) => /matching theme/.test(e.stdout));
+  writeFileSync(input, JSON.stringify(entries.filter((e) => e.role !== 'reference')));
+  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery'), (e) => /No real reference captures/.test(e.stdout));
+  assert.match(JSON.parse(readFileSync(`${sheet}.json`, 'utf8')).judge, /^failed:/);
+  // The shared public capture refuses an access gate before terms review or screenshotting.
+  await assert.rejects(run('references', '--like', `${origin}/paywall`, '--capture', '--project', project), (e) => /Paywall\/access gate refused/.test(e.stdout));
 
   // The view shows the sources list beside the option, with a link-only entry and the captured screens.
   const view = spawn(process.execPath, [CLI, 'view', out, '--host', '127.0.0.1', '--port', '0'], { env: base, stdio: ['ignore', 'pipe', 'pipe'] });
