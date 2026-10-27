@@ -173,7 +173,7 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
 
 const HELP = `first-draft-axi ${VERSION}
 usage: first-draft-axi <command> [flags]
-commands[14]:
+commands[15]:
   benchmark --product <type> --screen <view> --out <sheet.html> [--input <captures.json>] [--width 390|1280] [--theme light|dark] [--project <folder>] [--no-discovery] [--no-judge]   discover permitted public references; compare retained captures and score every current/candidate against real reference pixels
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
