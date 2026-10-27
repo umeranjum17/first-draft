@@ -27,6 +27,14 @@ test('no engine, stale unauthenticated configuration and OpenCode-only credentia
   };
   await refuse(['make', 'Notes for Umer', '--out', out]);
   await refuse(['doctor']);
+  await refuse(['benchmark', '--product', 'notes', '--screen', 'notes', '--out', out]);
+  for (const flag of ['--no-judge', '--no-discovery']) {
+    await assert.rejects(run('benchmark', '--product', 'notes', '--screen', 'notes', '--out', out, flag), e => {
+      const value = JSON.parse(e.stdout); assert.equal(e.code, 1);
+      assert.equal(value.error.code, 'BENCHMARK_FAILED'); assert.match(value.error.message, /test-only.*FIRST_DRAFT_TEST_BENCHMARK=1/); return true;
+    });
+    assert.equal(existsSync(out), false); assert.equal(existsSync(`${out}.json`), false);
+  }
   await refuse(['logo', 'Umer notes', '--out', out]);
   await refuse(['redesign', dir, 'Clear notes for Umer', '--out', out]);
   await refuse(['refine', seed, 'Clear notes', '--out', out]);
@@ -40,7 +48,7 @@ test('no engine, stale unauthenticated configuration and OpenCode-only credentia
   writeFileSync(join(dir, 'claude'), `#!${process.execPath}\nconsole.log('{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty"}');\n`, { mode: 0o700 });
   const doctor = JSON.parse((await run('doctor')).stdout);
   assert.deepEqual(doctor.engine, { agent: 'byokit:claude', model: 'claude-sonnet-5-5' });
-  for (const args of [['make','Notes for Umer','--out',out], ['logo','Umer notes','--out',out], ['redesign',dir,'Clear notes','--out',out]]) await refuse(args, /No independent AI judge.*Sign in to ChatGPT: codex login/);
+  for (const args of [['make','Notes for Umer','--out',out], ['logo','Umer notes','--out',out], ['redesign',dir,'Clear notes','--out',out], ['benchmark','--product','notes','--screen','notes','--out',out]]) await refuse(args, /No independent AI judge.*Sign in to ChatGPT: codex login/);
   await assert.rejects(run('init', '--agent', 'byokit:claude', '--model', 'claude-sonnet-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-opus-5-5'), e => /BAD_JUDGE/.test(e.stdout));
   await assert.rejects(run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini', '--judge', 'byokit:codex', '--judge-model', 'gpt-6.1-sol'), e => /BAD_JUDGE/.test(e.stdout));
   await assert.rejects(run('make', 'Notes', '--out', out, '--no-critic'), e => /USAGE/.test(e.stdout));

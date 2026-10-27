@@ -165,7 +165,8 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
 const HELP = `first-draft-axi ${VERSION}
 usage: first-draft-axi <command> [flags]
 commands[15]:
-  benchmark --product <type> --screen <view> --out <sheet.html> [--input <captures.json>] [--width 390|1280] [--theme light|dark] [--project <folder>] [--no-discovery] [--no-judge]   discover permitted public references; compare retained captures and score every current/candidate against real reference pixels
+  benchmark --product <type> --screen <view> --input <captures.json> --out <sheet.html> [--width 390|1280] [--theme light|dark] [--project <folder>]   authenticated engine and independent judge required; publish only complete reference-based assessments
+    --no-discovery / --no-judge are test-only plumbing, refused unless FIRST_DRAFT_TEST_BENCHMARK=1; never for user results
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
@@ -232,9 +233,9 @@ if (command === 'check') {
 } else if (command === 'benchmark') {
   const { values } = flags(rest, { product: { type: 'string' }, screen: { type: 'string' }, input: { type: 'string' }, width: { type: 'string', default: '390' }, theme: { type: 'string', default: 'light' }, project: { type: 'string' }, out: { type: 'string' }, 'no-discovery': { type: 'boolean' }, 'no-judge': { type: 'boolean' } });
   try {
-    const c = values['no-discovery'] ? read() : await agentOrThrow();
+    const c = read();
     console.log(JSON.stringify(await benchmark({ ...values, width: Number(values.width), discovery: !values['no-discovery'], judge: !values['no-judge'], c })));
-  } catch (e) { fail('BENCHMARK_FAILED', e.message); }
+  } catch (e) { fail(e.code === 'NO_ENGINE' ? e.code : 'BENCHMARK_FAILED', e.message); }
 } else if (command === 'refs') {
   const [action, ...more] = rest;
   const { values } = flags(more, { kind: { type: 'string' }, library: { type: 'string' } });

@@ -12,7 +12,7 @@ first-draft-axi benchmark --product "AI chat app" --screen "phone chat" \
   --out ./benchmark.html
 ```
 
-`--input` is optional for discovery alone. It is a JSON array of captures:
+`--input` must supply at least one current or candidate capture. It is a JSON array of captures:
 
 ```
 [{"role":"current","name":"Crewhouse chat","file":"current.png",
@@ -27,11 +27,11 @@ Paths resolve beside the manifest. Roles: `current`, `candidate`, `reference`, `
 
 The product and screen form two explicit search queries (no extra planning model). Existing search, terms and capture modules do acquisition, including every refusal. This slice supports permission-checked public HTML captures in light theme, not app-store image extraction, press-image cropping or authenticated apps. For dark comparisons, discovered pages are recorded as unavailable without attempting a light capture, rather than mislabelled. Public page captures are candidates for references, not automatically proof of the requested app screen. The judge must establish applicable visible evidence or abstain.
 
-The self-contained sheet and adjacent `.json` report contain current screens, all candidates, references, counterexamples and source/refusal metadata. Captures remain in `<project>/.first-draft/refs`; no media enters the package. `--no-discovery` compares supplied captures offline. `--no-judge` writes an unscored sheet without a model; neither flag silently fabricates results.
+The self-contained sheet and adjacent `.json` report contain current screens, all candidates, references, counterexamples and source/refusal metadata. Captures remain in `<project>/.first-draft/refs`; no media enters the package. The authenticated engine is resolved centrally from supported existing credentials and named in `engine`; the judge must use a different engine, not just another model name. `--no-discovery` and `--no-judge` are test-only plumbing, refused unless `FIRST_DRAFT_TEST_BENCHMARK=1` is explicitly set. Even those private fixture runs require an authenticated engine; an unscored test sheet is labelled as plumbing, never a user result. Normal runs cannot disable discovery or judging.
 
 ## Reference-aware round
 
-Use the configured independent subscription judge (same default/configuration as the existing judge), with real normalized PNGs. Score each current/candidate separately against the same reference captures and optional negative examples. Each of the existing seven axes returns a 1–10 score, cited reference image IDs, what those pixels show, and where the target stands. Nonapplicable evidence must produce a null score and explanation. No reward for features absent from the cited references; no homepage-as-chat, imaginary interactions, prose-only calibration or counterexample-as-positive-reference. A model assessment is not a certification of fidelity or best-in-class coverage. Judge failure is explicit and preserves the unscored sheet.
+Use the configured independent subscription judge (same default/configuration as the existing judge), with real normalized PNGs. Score each current/candidate separately against the same reference captures and optional negative examples. Each of the existing seven axes returns a 1–10 score, cited reference image IDs, what those pixels show, and where the target stands. Nonapplicable evidence must produce a null score and explanation. No reward for features absent from the cited references; no homepage-as-chat, imaginary interactions, prose-only calibration or counterexample-as-positive-reference. A model assessment is not a certification of fidelity or best-in-class coverage. Missing engines and judges refuse with one provider sign-in step. Scores are collected for every target before either result file is written: a missing reference, failed/invalid judgement or lost login publishes no unscored or partial comparison. A failed run leaves an existing complete result unchanged. Per-axis abstention remains an explicit model judgement, not an invented quality score.
 
 ## Proof and next slice
 
@@ -52,7 +52,7 @@ Replace null with the actual capture time when known. Then run exactly:
 ```
 first-draft-axi benchmark --product "AI chat app" --screen "phone chat" \
   --input crewhouse-chat-captures.json --width 390 --theme dark \
-  --no-discovery --out crewhouse-chat-benchmark.html
+  --out crewhouse-chat-benchmark.html
 ```
 
-This scores the newly added current row and every retained candidate against the same positive captures, without regenerating the design or making another public-discovery pass. The capture itself remains the owning lane's responsibility; this command does not access a running app.
+This scores the newly added current row and every retained candidate against the same positive captures, without regenerating the design. Public discovery still runs under its existing permission checks; neither judging nor discovery can be disabled in this user workflow. The capture itself remains the owning lane's responsibility; this command does not access a running app.

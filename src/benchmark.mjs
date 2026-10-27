@@ -5,12 +5,16 @@ import { references } from './references.mjs';
 import { ReferenceNetwork } from './reference-network.mjs';
 import { searchReferences } from './reference-search.mjs';
 import { captureSources } from './reference-sources.mjs';
-import { judgeBenchmark } from './judge.mjs';
+import { judgeBenchmark, resolveJudge } from './judge.mjs';
+import { resolveEngine } from './byokit.mjs';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const text = (s) => typeof s === 'string' && s.trim() && s.length <= 2000;
 
 export async function benchmark({ product, screen, input, width = 390, theme = 'light', project, out, discovery = true, judge = true, c = {} }) {
   if (!text(product) || !text(screen) || ![390, 1280].includes(width) || !['light', 'dark'].includes(theme) || !out) throw new Error('benchmark needs --product, --screen, --out, --width 390|1280 and --theme light|dark');
+  if ((!discovery || !judge) && process.env.FIRST_DRAFT_TEST_BENCHMARK !== '1') throw new Error('--no-discovery and --no-judge are test-only plumbing; FIRST_DRAFT_TEST_BENCHMARK=1 is required, never for user results');
+  c = await resolveEngine(c);
+  if (judge) c.review = await resolveJudge(c, c.judge);
   const rows = [];
   if (input) {
     if (statSync(input).size > 100_000) throw new Error('Benchmark input exceeds 100 KB');
@@ -27,6 +31,8 @@ export async function benchmark({ product, screen, input, width = 390, theme = '
       rows.push({ ...e, image });
     }
   }
+  const targets = rows.filter((r) => ['current', 'candidate'].includes(r.role));
+  if (judge && !targets.length) throw new Error('Benchmark needs at least one current or candidate capture to judge');
   let found = { searches: [], sources: [] };
   if (discovery) {
     const network = new ReferenceNetwork({ requests: 14, bytes: 4_000_000, queries: true });
@@ -45,17 +51,14 @@ export async function benchmark({ product, screen, input, width = 390, theme = '
     }
   }
   rows.forEach((r, i) => { r.id = `capture-${i + 1}`; r.image.id = r.id; const png = Buffer.from(r.image.dataUrl.slice(22), 'base64'); r.native_width = png.readUInt32BE(16); r.native_height = png.readUInt32BE(20); });
-  const report = { version: 1, product, screen, width, theme, checked_at: new Date().toISOString(), captures: rows, discovery: found, scores: [], judge: 'not requested' };
+  const report = { version: 1, product, screen, width, theme, checked_at: new Date().toISOString(), captures: rows, discovery: found, engine: { agent: c.agent, model: c.model }, scores: [], judge: 'test-only unscored plumbing; not a user result' };
   const save = () => { mkdirSync(dirname(resolve(out)), { recursive: true }); writeFileSync(`${out}.json`, JSON.stringify(report, null, 2)); writeFileSync(out, benchmarkSheet(report)); };
-  save(); // Even a failed judge leaves a usable, explicitly unscored comparison.
   if (judge) {
-    try {
-      for (const target of rows.filter((r) => ['current', 'candidate'].includes(r.role))) report.scores.push({ id: target.id, ...await judgeBenchmark({ c, product, screen, target, rows }) });
-      report.judge = report.scores.length ? 'reference-based model assessment; not a fidelity certification' : 'not scored: no current/candidate captures';
-    } catch (e) { report.judge = `failed: ${e.message}`; save(); throw new Error(`Benchmark judge failed: ${e.message}; unscored/partial sheet retained at ${out}`); }
-    save();
+    for (const target of targets) report.scores.push({ id: target.id, ...await judgeBenchmark({ c, product, screen, target, rows }) });
+    report.judge = `independent: ${[...new Set(report.scores.map(s => `${s.agent} / ${s.model}`))].join(', ')}; reference-based model assessment; not a fidelity certification`;
   }
-  return { sheet: resolve(out), report: resolve(`${out}.json`), captures: rows.length, references: rows.filter((r) => r.role === 'reference').length, scores: report.scores, judge: report.judge, refused: [...found.searches.filter((s) => s.status === 'refused'), ...found.sources.filter((s) => s.status !== 'captured')] };
+  save(); // Publish only a complete assessment; a failed run cannot replace a previous good result.
+  return { sheet: resolve(out), report: resolve(`${out}.json`), captures: rows.length, references: rows.filter((r) => r.role === 'reference').length, engine: report.engine, scores: report.scores, judge: report.judge, refused: [...found.searches.filter((s) => s.status === 'refused'), ...found.sources.filter((s) => s.status !== 'captured')] };
 }
 
 export function benchmarkSheet(r) {

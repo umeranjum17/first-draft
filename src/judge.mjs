@@ -1,5 +1,5 @@
 // Every judgement comes from an authenticated engine independent of the generator.
-import { engineOf, engineRequired, imageSupport, resolveEngine, routeOf } from './byokit.mjs';
+import { doctor, engineOf, engineRequired, resolveEngine, routeOf } from './byokit.mjs';
 import { ask } from './logo-concepts.mjs';
 import { flowOf } from './flow.mjs';
 import { referencesFor } from './reference-library.mjs';
@@ -11,10 +11,7 @@ export const BENCHMARK_SYSTEM = `Judge one retained screen against the supplied 
 export async function judgeBenchmark({ c, product, screen, target, rows }) {
   const refs = rows.filter((r) => r.role === 'reference');
   if (!refs.length) throw new Error('No real reference captures; prose and counterexamples cannot calibrate a benchmark');
-  const j = judgeOf(c, c.judge), problem = judgeRouteProblem(j.agent);
-  if (problem) throw new Error(problem);
-  if (j.model === c.model) throw new Error('Benchmark judge must differ from the configured generator');
-  if (!await imageSupport(routeOf(j.agent), j.model)) throw new Error(`${j.agent} / ${j.model} cannot see reference captures`);
+  const j = await resolveJudge(c, c.review ?? c.judge);
   const shown = [...refs, ...rows.filter((r) => r.role === 'counterexample'), target];
   const result = await ask({ ...j, timeoutMs: c.timeoutMs }, { system: BENCHMARK_SYSTEM,
     user: JSON.stringify({ product, screen, target: target.id, axes: AXES, captures: shown.map(({ image, ...metadata }) => metadata) }), images: shown.map((r) => r.image),
@@ -24,7 +21,10 @@ export async function judgeBenchmark({ c, product, screen, target, rows }) {
   }, (v) => !Array.isArray(v?.axes) || v.axes.length !== AXES.length ? ['Return all seven axes'] : v.axes.flatMap((a, i) =>
     a?.axis !== AXES[i] || !(a.score === null || Number.isInteger(a.score) && a.score >= 1 && a.score <= 10) || !Array.isArray(a.references)
     || a.references.some((id) => !refs.some((r) => r.id === id)) || (a.score === null ? a.references.length !== 0 : !a.references.length)
-    || ![a.observed, a.comparison].every((s) => typeof s === 'string' && s.trim() && s.length <= 1200) ? [`Invalid reference evidence or score for ${AXES[i]}`] : []));
+    || ![a.observed, a.comparison].every((s) => typeof s === 'string' && s.trim() && s.length <= 1200) ? [`Invalid reference evidence or score for ${AXES[i]}`] : [])).catch(async (error) => {
+      if ((await doctor(routeOf(j.agent), j.model)).status !== 'ok') throw engineRequired(routeOf(j.agent), 'No independent AI judge is usable');
+      throw error;
+    });
   return { ...result.value, model: j.model, agent: j.agent, tokens_in: result.tokens_in, tokens_out: result.tokens_out };
 }
 const SUBSCRIPTIONS = ['claude', 'codex'];

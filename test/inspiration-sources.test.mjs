@@ -160,7 +160,8 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   assert.ok(made.inspiration.sources.some((s) => s.package === 'com.umer.rota' && s.internal_reference_only));
 
   // Benchmark the same retained captures through the real CLI/adapter: all current/candidates, positive and negative evidence.
-  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5');
+  await assert.rejects(run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5'), e => /BAD_JUDGE/.test(e.stdout));
+  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:codex', '--judge-model', 'gpt-6.1-sol');
   const input = join(project, 'screens.json'), sheet = join(project, 'benchmark.html');
   const entries = ['reference', 'counterexample', 'current', 'candidate', 'candidate', 'candidate', 'candidate'].map((role, i) => ({ role, name: `Umer ${role} ${i} <script>`, file: PICTURE, source: 'Local fixture; no remote source', permission: 'Project-owned fixture', captured_at: null, theme: 'light' }));
   entries[1].name = 'current app not captured - counterexamples from the captain';
@@ -168,6 +169,9 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   const bench = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--project', project)).stdout);
   const report = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')), html = readFileSync(sheet, 'utf8');
   assert.equal(bench.scores.length, 5, 'current and every candidate get their own comparison');
+  assert.deepEqual(bench.engine, {agent:'byokit:claude',model:'claude-opus-5-5'});
+  assert.ok(bench.scores.every(s => s.agent === 'byokit:codex' && s.model === 'gpt-6.1-sol'));
+  assert.match(bench.judge, /^independent: byokit:codex/);
   assert.equal(report.captures.length, 8, 'seven local captures and the permitted public capture');
   assert.ok(report.discovery.queries.every((q) => /AI chat app phone chat/.test(q.query)));
   assert.ok(report.discovery.sources.some((s) => /restricted/.test(s.name) && s.status === 'link-only'));
@@ -191,17 +195,38 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
     assert.equal(w.q.captures.filter((r) => r.role === 'counterexample').length, 1);
     assert.equal(w.images, 4, 'real raster inputs reach the native subscription boundary');
   }
+  const failedSheet = join(project, 'failed-benchmark.html');
+  const noResult = () => { assert.equal(existsSync(failedSheet), false); assert.equal(existsSync(`${failedSheet}.json`), false); };
+  // Normal CLI flags cannot bypass the policy, even when both engines are ready.
+  for (const flag of ['--no-discovery', '--no-judge']) await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', failedSheet, flag), e => /test-only.*FIRST_DRAFT_TEST_BENCHMARK=1/.test(e.stdout));
+  noResult();
+  base.FIRST_DRAFT_TEST_BENCHMARK = '1'; // Explicit private fixture plumbing only; never a user result.
+  const broken = (...extra) => run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', failedSheet, '--no-discovery', ...extra);
+  const configFile = join(base.FIRST_DRAFT_HOME, 'config.json'), config = readFileSync(configFile, 'utf8');
+  writeFileSync(configFile, JSON.stringify({...JSON.parse(config),judge:{agent:'byokit:claude',model:'claude-sonnet-5-5'}}));
+  await assert.rejects(broken(), e => /NO_ENGINE/.test(e.stdout) && /Invalid independent judge configuration.*codex login/.test(e.stdout)); noResult();
+  writeFileSync(configFile, config);
   base.FD_BAD_EVIDENCE = '1';
-  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery'), (e) => /Invalid reference evidence/.test(e.stdout));
+  await assert.rejects(broken(), e => /Invalid reference evidence/.test(e.stdout)); noResult();
   delete base.FD_BAD_EVIDENCE;
-  assert.equal(JSON.parse(readFileSync(`${sheet}.json`, 'utf8')).scores.length, 0, 'counterexample citations cannot earn a score');
-  const offline = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--no-discovery', '--no-judge')).stdout);
-  assert.equal(offline.judge, 'not requested');
+  base.FD_BENCH_FAIL_TARGET = 'capture-4'; // Current succeeds, then the first candidate fails: no partial sheet.
+  await assert.rejects(broken(), e => /BENCHMARK_FAILED/.test(e.stdout)); noResult();
+  delete base.FD_BENCH_FAIL_TARGET;
+  base.FD_JUDGE_FAILURE = 'credentials'; // Native launch loses its login after readiness; diagnostics must name one sign-in step.
+  await assert.rejects(broken(), e => { const r=JSON.parse(e.stdout); assert.equal(e.code,1); assert.equal(r.error.code,'NO_ENGINE'); assert.match(r.error.message,/Sign in to ChatGPT: codex login/); assert.equal((r.error.message.match(/Sign in to/g)??[]).length,1); return true; }); noResult();
+  delete base.FD_JUDGE_FAILURE; rmSync(join(base.FIRST_DRAFT_HOME, 'judge-signed-out'));
+  assert.equal(readFileSync(sheet, 'utf8'), html, 'failed comparisons cannot replace a previous complete result');
+  assert.equal(readFileSync(`${sheet}.json`, 'utf8'), JSON.stringify(report, null, 2));
+  const offline = JSON.parse((await broken('--no-judge')).stdout);
+  assert.equal(offline.judge, 'test-only unscored plumbing; not a user result');
+  rmSync(failedSheet); rmSync(`${failedSheet}.json`);
   writeFileSync(input, JSON.stringify(entries.map((e) => ({ ...e, theme: 'dark' }))));
-  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery', '--no-judge'), (e) => /matching theme/.test(e.stdout));
+  await assert.rejects(broken('--no-judge'), e => /matching theme/.test(e.stdout)); noResult();
   writeFileSync(input, JSON.stringify(entries.filter((e) => e.role !== 'reference')));
-  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery'), (e) => /No real reference captures/.test(e.stdout));
-  assert.match(JSON.parse(readFileSync(`${sheet}.json`, 'utf8')).judge, /^failed:/);
+  await assert.rejects(broken(), e => /No real reference captures/.test(e.stdout)); noResult();
+  writeFileSync(input, JSON.stringify(entries.filter((e) => !['current','candidate'].includes(e.role))));
+  await assert.rejects(broken(), e => /at least one current or candidate/.test(e.stdout)); noResult();
+  delete base.FIRST_DRAFT_TEST_BENCHMARK;
   // The shared public capture refuses an access gate before terms review or screenshotting.
   await assert.rejects(run('references', '--like', `${origin}/paywall`, '--capture', '--project', project), (e) => /Paywall\/access gate refused/.test(e.stdout));
 

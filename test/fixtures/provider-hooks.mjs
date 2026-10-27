@@ -1,4 +1,4 @@
-// Explicit test-only loader. Not shipped in the npm package; the normal CLI has no fixture switches.
+// Explicit test-only loader. Not shipped in the npm package; the normal CLI has no provider fixture switches.
 import { registerHooks } from 'node:module';
 import { accessSync, constants, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
