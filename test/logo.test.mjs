@@ -302,7 +302,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.deepEqual(logo.critique.map((c) => [c.round, c.verdict, c.score]), [[['first', 'redo', 6], ['redo', 'keep', 9]], [['first', 'redo', 5]], [['first', 'keep', 9]]][i]);
     assert.deepEqual(f.critique, logo.critique.at(-1));
     assert.equal(logo.passed, i !== 1);
-    assert.match(logo.critic, /same model/);
+    assert.equal(logo.critic, 'independent: byokit:codex / gpt-6.1-sol; not trademark clearance');
     assert.deepEqual({ reason: logo.palette.reason, light: logo.palette.light, dark: logo.palette.dark }, pal);
     assert.deepEqual(logo.concept.palette, pal, 'the palette was chosen with the concept');
     assert.ok(Object.entries(logo.palette.contrast.light).every(([role, v]) => role === 'ground' || v >= 3), JSON.stringify(logo.palette.contrast));
@@ -349,7 +349,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   const url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
   const sent = await fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify({ option: 2, change: 'a rounder leaf' }) });
   assert.equal(sent.status, 200, await sent.clone().text());
-  assert.deepEqual(await sent.json(), { option: { n: 4, label: 'tea-2-refined', file: 'tea-2-refined.html' } });
+  assert.deepEqual(await sent.json(), { option: { n: 4, label: 'tea-2-refined', file: 'tea-2-refined.html' }, engine: {agent:'byokit:opencode-go',model:'muse-spark-1.3-contributor'} });
   assert.notEqual(readFileSync(join(dir, 'tea-2-refined.logo', 'mark.svg'), 'utf8'), readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'));
   assert.ok(existsSync(join(dir, 'tea-2-refined.logo', 'favicon.ico')));
 });

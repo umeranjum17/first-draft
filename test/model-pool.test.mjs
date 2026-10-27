@@ -33,8 +33,13 @@ if (args.includes('auth')) {
 }`;
 
 const codex = `import { appendFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 const args = process.argv.slice(2), root = process.env.FIRST_DRAFT_HOME;
 appendFileSync(root + '/codex.log', JSON.stringify(args) + '\\n');
+if (args[0] === 'app-server') {
+  createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(line); if(q.id) console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:null}:{}})); });
+  await new Promise(resolve => process.stdin.once('end', resolve)); process.exit(0);
+}
 if (args[0] === 'login') {
   console.log('Logged in using ChatGPT account umer@example.invalid');
   process.exit(0);
@@ -119,10 +124,15 @@ test('pooled model calls: a limit re-picks the account, a dry pool falls over, n
   assert.match(readFileSync(plain, 'utf8'), /Notes from the installed account/);
   assert.equal(log('pool.log').length, before, 'no helper, no pool call');
 
-  // BYOKit also probes a pooled account when the CLI's default login is signed out.
+  // A signed-out default is not made usable by an unadmitted pool pick: discovery must refuse with one sign-in step.
   env.FD_AUTH_OUT = '1'; env.FIRST_DRAFT_ACCOUNT_POOL = join(dir, 'account-pool');
-  const pooled = JSON.parse((await run('doctor')).stdout);
-  assert.equal(pooled.ready, true); assert.equal(pooled.engine.agent, 'byokit:claude');
+  await assert.rejects(run('doctor'), e => {
+    const result = JSON.parse(e.stdout);
+    assert.equal(e.code, 1); assert.equal(result.error.code, 'NO_ENGINE');
+    assert.equal(result.error.message, 'No usable AI engine. Sign in to Claude: claude auth login');
+    assert.equal(result.engine, undefined);
+    return true;
+  });
 
   // No credential value reaches output, a log or a page.
   for (const written of [...seen, readFileSync(page, 'utf8'), readFileSync(plain, 'utf8'), text('claude.log'), text('pool.log')])

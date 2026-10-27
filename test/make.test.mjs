@@ -409,7 +409,7 @@ test('make sends a page with a strong grid, four hues, a stray close, unreadable
   if (findBrowser()) { // the browser measures what only a browser can: text under a fixed bar, a close control on screen
     assert.match(asked, /covered by fixed or sticky navigation/);
     assert.match(asked, /close control is on screen with nothing open/);
-    assert.match(asked, /text that cannot be read.*"Overview"/);
+    assert.match(asked, /text that cannot be read.*\\+"Overview\\+"/);
   }
   refuseRepair = true; seen.length = 0;
   const refused = join(dir, 'refused-repair.html');
