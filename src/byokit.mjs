@@ -182,7 +182,7 @@ export async function imageSupport(route, model) {
 }
 
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
-export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false }) {
+export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false, asOnce = false }) {
   const problem = await check(route, model);
   if (problem) throw new Error(problem);
   if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
@@ -191,7 +191,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
       text: { type: 'string' }, calls: { type: 'array', ...(singleCall && { minItems: 1, maxItems: 1 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
     return cliAnswer(route, { model, images, timeoutMs, signal }, async (backend) => {
-      // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes): asked again once.
+      // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes; Sonnet 5.5 did in a judge call, which lost a finished make): asked again twice.
       for (let attempt = 0; ; attempt++) {
         const answer = await backend.generate({
           system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
@@ -199,7 +199,8 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
         const { text, calls } = answer.data;
         let args;
         try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
-          if (attempt) throw new Error(`the model's tool call was not valid JSON twice: ${e.message}`);
+          if (asOnce) throw Object.assign(new Error(`not valid JSON: ${e.message}`), { code: 'bad_json', detail: e.message }); // the caller counts and records the attempts
+          if (attempt >= 2) throw new Error(`the model's tool call was not valid JSON three times: ${e.message}`);
           continue;
         }
         return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),

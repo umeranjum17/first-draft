@@ -25,8 +25,8 @@ if (args.includes('auth')) {
   let input = ''; for await (const c of process.stdin) input += c;
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) throw Error('API credential reached child');
   if (!args.includes('--safe-mode') || !args.includes('--strict-mcp-config')) throw Error('unsafe execution');
-  if (args[args.indexOf('--json-schema') + 1].includes('write_page')) {
-    console.log(JSON.stringify({ type:'result', subtype:'success', is_error:false, structured_output:{text:'',calls:[{name:'write_page',arguments:JSON.stringify({html:'<!doctype html><html><body><h1>Umer baseline</h1></body></html>'})}]}, usage:{input_tokens:0,output_tokens:0} })); process.exit(0);
+  if (input.includes('Build one self-contained HTML page for this brief')) { // the plain baseline: the document itself, not a tool call
+    console.log(JSON.stringify({ type:'result', subtype:'success', is_error:false, structured_output:{html:'<!doctype html><html><body><h1>Umer baseline</h1></body></html>'}, usage:{input_tokens:0,output_tokens:0} })); process.exit(0);
   }
   if (args[args.indexOf('--model') + 1] !== 'claude-opus-5-5') throw Error('model changed');
   if (args[args.indexOf('--json-schema') + 1].includes('"html"')) { // make's one-call page (draft.mjs): the page comes back as one string
@@ -93,7 +93,7 @@ if (args.includes('auth')) {
   assert.equal(one.files[0].turns, 1);
   assert.equal(one.tokens_out, 10);
   assert.match(readFileSync(page, 'utf8'), /Umer’s one-call notes/);
-  const generated = () => calls().filter(args => args.includes('-p') && !args[args.indexOf('--json-schema') + 1]?.includes('write_page')).length;
+  const generated = () => calls().filter(args => args.includes('-p') && !args[args.indexOf('--system-prompt') + 1]?.startsWith('You are a product designer')).length;
   assert.equal(generated(), 11);
   writeFileSync(join(dir, 'bad.png'), Buffer.from('89504e470d0a1a0a', 'hex'));
   writeFileSync(join(dir, 'not-image.jpg'), 'not an image');

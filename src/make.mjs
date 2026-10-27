@@ -65,7 +65,10 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   for (const [name, text] of await loadFrameTemplates(join(TEMPLATES, 'frames'))) files.set(`frames/${name}`, text); // as upstream's host seeds its workspace
   for (const [name, text] of await loadDesignSkills(join(TEMPLATES, 'design-skills'))) files.set(`skills/${name}`, text);
   const bare = (h) => h.replace(POLICY, '').replace(/<head>\s*<\/head>/i, '').replace(/\s+/g, '');
-  const start = seed?.replace(POLICY, ''); // refine: the chosen option is the starting index.html, without the policy make adds back
+  // refine: the chosen option is the starting index.html, without the policy make adds back. Its embedded fonts are one 50 KB line each, which the editor cannot show or anchor an edit on and which push a small page over the rewrite-in-one-create limit: the engine sees a short token and the page gets the font back.
+  const fonts = [];
+  const start = seed?.replace(POLICY, '').replace(/(data:font\/[\w.+-]+;base64,)[A-Za-z0-9+/=]+/g, (_, head) => `${head}FONT${fonts.push(_)}`);
+  const withFonts = (h) => h.replace(/data:font\/[\w.+-]+;base64,FONT(\d+)/g, (m, n) => fonts[n - 1] ?? m);
   if (start !== undefined) files.set('index.html', start);
   if (logo?.palette) files.set('logo/palette.json', `${JSON.stringify(logo.palette, null, 2)}\n`); // a concept's palette is the host's; the engine reads it and draws with it
   for (const [name, text] of Object.entries(logo?.files ?? {})) files.set(`logo/${name}`, text);
@@ -106,7 +109,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
       else if (render.drawing) ({ html, errors } = await render.snapshot(buildStandaloneDocument(source, { path })));
       const exported=staticExport(html);errors.push(...exported.errors);
       if (logoed) errors.push(...sheetErrors(exported.html, logo));
-      const embedded = embedMedia(await embedFonts(exported.html, warn), drawnLogo?.svgs ? [...media, ...logoMedia(drawnLogo)] : media);
+      const embedded = embedMedia(withFonts(await embedFonts(exported.html, warn)), drawnLogo?.svgs ? [...media, ...logoMedia(drawnLogo)] : media);
       const page = drawnLogo?.svgs ? fillSheet(embedded, { idea: logo.idea, kind: logo.kind, palette: drawnLogo.palette }) : embedded;
       errors.push(...unplaced(page).map((a) => ({ source: 'assets', message: `the generated image ${a.path} is not shown: place it in its screen as <img src="${a.path}" alt="...">` })));
       if (!errors.length) errors.push(...await render.verify(page, { signal }));

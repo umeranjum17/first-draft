@@ -23,7 +23,7 @@ export function standIn(seen, scores) {
     req.on('end', () => {
       seen.push(body);
       let calls, text = 'The design is ready.';
-      if (body.includes('"write_page"')) calls = [['write_page', { html: PLAIN }]];
+      if (body.includes('Build one self-contained HTML page for this brief')) text = PLAIN; // the plain page comes back as the document itself
       else if (body.includes('"review_designs"')) {
         const [design, plain] = scores[reviews++];
         calls = [['review_designs', { views: viewsOf(body), design: { score: design, gaps: design < 10 ? [`version ${reviews}: the hero has no picture and the list is a wall of grey`] : [] }, plain: { score: plain, gaps: ['generic'] },

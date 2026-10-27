@@ -60,6 +60,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (args.includes('auth')) { console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' })); process.exit(0); }
 let raw = ''; for await (const c of process.stdin) raw += c;
+if (raw.includes('Build one self-contained HTML page for this brief')) { console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { html: process.env.FD_PAGE }, usage: { input_tokens: 0, output_tokens: 0 } })); process.exit(0); }
 const envelope = JSON.parse(raw), { messages, tools } = JSON.parse(envelope.message.content.at(-1).text);
 appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-inputs', JSON.stringify({ tools: tools.map((t) => t.name) }) + '\\n');
 const call = (name, a) => ({ name, arguments: JSON.stringify(a) });

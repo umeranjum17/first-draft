@@ -106,7 +106,7 @@ Options are prototypes, not production apps. Model assessments can be wrong; ind
 
 ## Reference
 
-[All flags and viewer routes](docs/guide.md#reference) · [Redesign an existing site](docs/guide.md#redesign-an-existing-product-first-slice) · [Assets](docs/guide.md#generated-assets) · [Logos](docs/guide.md#logos) · [References and judge](docs/guide.md#independent-judge-and-reference-cache) · [Competitor search](docs/guide.md#what-the-market-does-competitors) · [Free inspiration sources](docs/inspiration.md) · [Engine](ENGINE.md)
+[Testing guide](docs/TESTING.md) · [All flags and viewer routes](docs/guide.md#reference) · [Redesign an existing site](docs/guide.md#redesign-an-existing-product-first-slice) · [Assets](docs/guide.md#generated-assets) · [Logos](docs/guide.md#logos) · [References and judge](docs/guide.md#independent-judge-and-reference-cache) · [Competitor search](docs/guide.md#what-the-market-does-competitors) · [Free inspiration sources](docs/inspiration.md) · [Engine](ENGINE.md)
 
 ## Contributing
 

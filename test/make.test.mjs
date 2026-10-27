@@ -474,6 +474,12 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /Welcome back, warm and cosy/);
   assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /default-src 'none'/);
   assert.equal(readFileSync(option, 'utf8'), original, 'the refined option is untouched');
+  // An option's embedded fonts are one long line each, which the engine's editor cannot show: it sees a short token, never the payload.
+  const fonted = join(dir, 'fonted.html'), seenBefore = warm.length;
+  writeFileSync(fonted, original.replace('</head>', `<style>@font-face{font-family:T;src:url(data:font/woff2;base64,${'QUJD'.repeat(5000)})}</style></head>`));
+  await warmRun('refine', fonted, 'warmer palette', '--out', join(dir, 'fonted-warm.html'));
+  assert.match(JSON.stringify(warm[seenBefore].body), /data:font\/woff2;base64,FONT1/);
+  assert.doesNotMatch(JSON.stringify(warm.slice(seenBefore).map((w) => w.body)), /QUJDQUJD/);
   await assert.rejects(run('refine', option, 'no change', '--out', option), (e) => /USAGE/.test(e.stdout));
   await assert.rejects(run('refine', option, 'no change', '--out', join(dir, 'same.html')), (e) => /left the option unchanged/.test(e.stdout));
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'refine', option, 'script fixture', '--out', join(dir, 'script.html')], { env: { ...env, FIRST_DRAFT_CHROME: '/nonexistent' } }), e => /only script-free HTML/.test(e.stdout));
@@ -493,6 +499,7 @@ else {
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-calls', args[args.indexOf('--model') + 1] + '\\n');
   let input = ''; for await (const c of process.stdin) input += c;
   if (input.includes('failure fixture')) process.exit(1);
+  if(input.includes('Build one self-contained HTML page for this brief')){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({html:'<!doctype html><html><body>Umer baseline</body></html>'})}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));process.exit(0);}
   const { messages, tools } = JSON.parse(input);
   if(tools[0]?.name==='write_page'){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'write_page',arguments:JSON.stringify({html:'<!doctype html><html><body>Umer baseline</body></html>'})}]})}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));process.exit(0);}
   const results = messages.filter((m) => m.role === 'toolResult');

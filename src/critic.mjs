@@ -4,14 +4,13 @@ import { dirname } from 'node:path';
 import { humanSideOf } from './human-side.mjs';
 import { flowOf } from './flow.mjs';
 import { AXES, openJudge } from './judge.mjs';
+import { routeOf, writePage } from './byokit.mjs';
 import { ask } from './logo-concepts.mjs';
 import { findBrowser, renderCheck } from './render-check.mjs';
 import { stopwatch } from './timing.mjs';
 
 export const PASS = 9;
 
-const PAGE = { name: 'write_page', description: 'The complete page.', parameters: { type: 'object', additionalProperties: false, required: ['html'], properties: {
-  html: { type: 'string', description: 'one complete, self-contained HTML document' } } } };
 const verdict = (gaps) => ({ type: 'object', additionalProperties: false, required: ['score', 'gaps'], properties: {
   score: { type: 'integer', minimum: 1, maximum: 10 }, gaps: { type: 'array', maxItems: gaps, items: { type: 'string', maxLength: 300 }, description: 'each a specific place where it falls short of the references' } } });
 const rated = (reason) => ({ type: 'object', additionalProperties: false, required: ['score', 'reason'], properties: {
@@ -96,10 +95,12 @@ export async function openCritic({ c, brief, references = [], plainOut, plainSou
   const shoot = (html) => { const run = busy.then(() => flow ? render.capture(html, flow.count) : full ? render.views(html) : render.shoot(html, 800)); busy = run.catch(() => {}); return run; }; // options are judged at once: one browser page, one shot at a time
   const plainPage = () => plain ??= timed('plain', async () => {
     if (plainSource) return { file: plainSource, shots: await shoot(readFileSync(plainSource, 'utf8')) };
-    const page = await ask(c, { system: 'You are a product designer who also writes front-end code.', user: `Build one self-contained HTML page for this brief:\n\n${brief}`, tool: PAGE },
-      (v) => typeof v?.html === 'string' && /<html|<body|<!doctype/i.test(v.html) ? [] : ['html must be one complete HTML document']);
+    // The page comes back as the document itself (writePage), not as a tool call carrying it as JSON inside JSON, which models garble at this length.
+    const page = await writePage({ route: routeOf(c.agent), model: c.model, timeoutMs: c.timeoutMs, signal: AbortSignal.timeout(c.timeoutMs ?? 600_000), system: 'You are a product designer who also writes front-end code.',
+      prompt: `Build one self-contained HTML page for this brief:\n\n${brief}\n\nReply with the complete HTML document.` });
+    if (!/<html|<body|<!doctype/i.test(page.html)) throw new Error(`${c.agent} (${c.model}) did not return an HTML document for the plain baseline; nothing was scored. Re-run the command`);
     add(page);
-    return { html: page.value.html, shots: await shoot(page.value.html) };
+    return { html: page.html, shots: await shoot(page.html) };
   });
   const review = async (html) => {
     const theirs = await plainPage(), mine = await shoot(html);
@@ -109,14 +110,14 @@ export async function openCritic({ c, brief, references = [], plainOut, plainSou
     const r = await ask(judge.c, { system: JUDGE_SYSTEM(judge.kind, references.length, landing, flow, full), tool: JUDGED(landing, flow, ids), user: JSON.stringify({ brief, capture_set: set, capture_notes: notes, image_order: shots.map((s) => s.id), references: judge.refs.images.map((i) => i.label), reference_notes: judge.refs.shown, not_captured: judge.refs.notes }),
         images: [...shots, ...judge.refs.images.map(({ id, mime, dataUrl }) => ({ id, mime, dataUrl })), ...references] }, judgedProblems(landing, flow, ids));
     add(r);
-    return { ...r.value, capture: { mode, images: set.length, set } };
+    return { ...r.value, capture: { mode, images: set.length, set }, retries: r.retries };
   };
   const passes = (r) => r.design.score >= PASS && r.design.score >= r.plain.score && !r.ai_side?.reads_as_ai && (!r.flow || (r.flow.shell.score >= PASS && r.flow.character.score >= PASS));
   const judgeOne = async (made) => {
     const started = Date.now(), r = await timed('review', () => review(made.html));
     const baseline = await plainPage();
     if (baseline.html && !plainFile) { mkdirSync(dirname(plainOut), { recursive: true }); writeFileSync(plainOut, baseline.html); plainFile = plainOut; }
-    return { made, critique: { score: r.design.score, views: r.views, capture: r.capture, passed: passes(r), plain_score: r.plain.score, rounds: 1, scores: [r.design.score], against: r.against, reads_as: r.reads_as, gaps: r.design.gaps, fix: r.fix, ...(r.flow && { flow: r.flow }), ...(r.axes && { axes: r.axes }), ...(r.ai_side && { ai_side: r.ai_side, hero: { met: r.hero.filter((h) => h.met).length, of: 9, points: r.hero } }), seconds: (Date.now() - started) / 1000, judge: judge.label } };
+    return { made, critique: { score: r.design.score, views: r.views, capture: r.capture, passed: passes(r), plain_score: r.plain.score, rounds: 1, scores: [r.design.score], against: r.against, reads_as: r.reads_as, gaps: r.design.gaps, fix: r.fix, ...(r.flow && { flow: r.flow }), ...(r.axes && { axes: r.axes }), ...(r.ai_side && { ai_side: r.ai_side, hero: { met: r.hero.filter((h) => h.met).length, of: 9, points: r.hero } }), seconds: (Date.now() - started) / 1000, judge: judge.label, ...(r.retries && { judge_retries: r.retries.map(({ attempt, error }) => ({ attempt, error })) }) } };
   };
   return { judge: judgeOne, warm: () => plainPage().catch(() => {}), /* the plain page is written while the options are drawn; the first review reports a failure */ timing: seconds, get judged() { return { model: judge.c.model, agent: judge.c.agent, kind: judge.kind, references: judge.refs.shown }; }, used, plainFile: () => plainFile, close: () => render.close() };
 }
