@@ -44,7 +44,8 @@ test('reference discovery: named-brand prompt, explicit override, no-reference a
     await assert.rejects(run('references', '--like', url), e => /REFERENCE_DISCOVERY_FAILED/.test(e.stdout));
   }
   assert.equal(seen.length, 0);
-  await assert.rejects(run('references', 'make it like Vercel'), e => /NO_AGENT/.test(e.stdout));
+  assert.deepEqual((await discover('make it like Vercel')).candidate, candidate, 'ready credentials work without saved configuration');
+  seen.length = 0;
   await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
   const result = await discover('make it like Vercel');
   assert.deepEqual(result.candidate, candidate);

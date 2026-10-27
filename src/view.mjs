@@ -175,7 +175,7 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       writeCompetitors(file, readCompetitors(from.file));
       const added = { n: options.length + 1, label: basename(file, extname(file)), file };
       options.push(added);
-      reply(200, { option: shown(added) });
+      reply(200, { option: shown(added), ...(made.engine && { engine: made.engine }) });
     } catch (e) { reply(500, e.shown ?? { error: e.message }); } finally { running = false; }
   };
   const view = createServer((req, res) => {

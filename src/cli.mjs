@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-// first-draft-axi: a prompt to design mocks. The agent is the person's own choice; first-draft picks none.
+// first-draft-axi: authenticated generation and independent AI judgement, never degraded output.
 import { isUtf8 } from 'node:buffer';
 import { checkConsistency } from './consistency-check.mjs';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { doctor as routeDoctor, imageSupport, modelRouteProblem, readySubscriptions, routeOf } from './byokit.mjs';
+import { doctor as routeDoctor, engineOf, imageSupport, modelRouteProblem, readySubscriptions, resolveEngine, routeOf } from './byokit.mjs';
 import { referenceDoctor, referenceFlags, referenceHelp, references } from './references.mjs';
 import { discoverReference, discoveryHelp, explicitReferenceUrl } from './reference-discovery.mjs';
 import { KINDS, libraryCache, pullLibrary, readLibrary } from './reference-library.mjs';
-import { judgeRouteProblem } from './judge.mjs';
+import { judgeRouteProblem, resolveJudge } from './judge.mjs';
 import { captureCompetitors, discoverCompetitors, readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { appHelp, captureApp } from './reference-apps.mjs';
 import { appEntry, captureSources, readSources, writeSources } from './reference-sources.mjs';
@@ -36,7 +36,7 @@ import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
 
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
-const PICK = 'which BYOKit route and model to use (first-draft picks none), then run `first-draft-axi init --agent byokit:<route> --model <model>`';
+const PICK = 'an optional preferred route and model with `first-draft-axi init --agent byokit:<route> --model <model>`';
 const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
 const CONFIG = () => join(HOME(), 'config.json');
@@ -74,19 +74,10 @@ const flags = (args, options) => {
 const agentOrThrow = async (model) => {
   const c = read();
   if (model) c.model = model;
-  // `shown` is what the view tells a person: no config path, and the set-up hint worded for them.
-  const no = (code, message, shown = message) => Object.assign(new Error(message), { code, help: [ASK], shown: { error: shown, help: [`Choose ${PICK}`] } });
-  if (!c.agent) {
-    const help = (await readySubscriptions()).map((s) => `${s.label}: ${s.init}`);
-    const error = no('NO_AGENT', 'No model source is set.');
-    if (help.length) { error.help = help; error.shown.help = help; }
-    throw error;
-  }
-  if (!routeOf(c.agent)) throw no('BAD_AGENT', `agent ${c.agent} is not byokit:<route>; this release runs BYOKit routes only`);
   const refusal = modelRouteProblem(routeOf(c.agent), c.model);
-  if (refusal) throw no('SUBSCRIPTION_ONLY', refusal);
-  if (!c.model) throw no('NO_MODEL', `no model is set for ${c.agent} in ${CONFIG()}`, `No model is set for ${c.agent} yet.`);
-  return c;
+  if (c.agent && refusal) throw Object.assign(new Error(refusal), { code: 'SUBSCRIPTION_ONLY' });
+  try { return await resolveEngine(c); }
+  catch (e) { e.shown = { error: e.message }; throw e; }
 };
 const agentOrAsk = async (model) => {
   try { return await agentOrThrow(model); } catch (e) { fail(e.code ?? 'CONFIG', e.message, e.help); }
@@ -161,10 +152,10 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
     if (logo) {
       const made = await make({ prompt:change,...c,seed:logo.seed,logo });
       writeLogo(to, made.logo, { brief:change, refined_from:from, concept:logo.concept, agent:c.agent, model:c.model });
-      return { html:made.html, reference:null };
+      return { html:made.html, reference:null, engine:{ agent:c.agent, model:c.model } };
     }
     const refs = await prepareReferences({},change,c,[],inherited);
-    return { html:(await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief })).html, reference:refs.metadata };
+    return { html:(await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief })).html, reference:refs.metadata, engine:{ agent:c.agent, model:c.model } };
   } catch (e) {
     const error = `${c.agent} (${c.model}) did not refine the design: ${e.message}`;
     throw Object.assign(new Error(error), { shown: { error, help: ['Run `first-draft-axi doctor` in a terminal to check the agent'] } });
@@ -174,7 +165,8 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
 const HELP = `first-draft-axi ${VERSION}
 usage: first-draft-axi <command> [flags]
 commands[15]:
-  benchmark --product <type> --screen <view> --out <sheet.html> [--input <captures.json>] [--width 390|1280] [--theme light|dark] [--project <folder>] [--no-discovery] [--no-judge]   discover permitted public references; compare retained captures and score every current/candidate against real reference pixels
+  benchmark --product <type> --screen <view> --input <captures.json> --out <sheet.html> [--width 390|1280] [--theme light|dark] [--project <folder>]   authenticated engine and independent judge required; publish only complete reference-based assessments
+    --no-discovery / --no-judge are test-only plumbing, refused unless FIRST_DRAFT_TEST_BENCHMARK=1; never for user results
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
@@ -190,7 +182,7 @@ commands[15]:
     --model <id>       override the configured model for this run only (same BYOKit route)
     --out <file.html>  output file; multiple options add -1, -2, etc.; {i} is replaced by the option number
     --out-dir <folder> alternative to --out; writes option-1.html, option-2.html, etc.
-    --no-critic        skip the single critic pass (1-10 beside a plain page); by default it sees the whole page in light and dark at 1280 and 390, tiled when tall; refs pull enables an independent subscription judge, otherwise labelled self-assessment; low scores stay flagged, not revised
+    The independent AI critic is required: a different authenticated engine sees the whole page in light and dark at 1280 and 390; low scores stay flagged, never replaced by self-assessment
     --first-view       the critic sees only the top 800px in light at 1280 and 390 (the cheap look); default is the whole page, light and dark, both widths
     --competitors      find 3-5 real competitors of this brief from the prompt alone and capture their public pages through the same robots/terms review; the view shows them beside the options with their sources, and every refusal with its reason
     --inspiration      search the free open web, Hacker News and the designer subreddits (r/UI_Design, r/UXDesign, r/web_design) for references of this brief's product type, capture only the pages whose own terms permit it, and keep every refusal as a link with a written description; the view shows the sources list beside the options
@@ -203,11 +195,11 @@ commands[15]:
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B|$FIRST_DRAFT_BOARD] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
   doctor                              show whether the configured agent is ready, with no paid call
   init [--harness claude,codex,pi] [--global]   set this repo up: the .first-draft/ work folder and the first-draft-axi skill for claude, codex and pi (safe to re-run; --global links the skill from the home folder)
-  init --agent byokit:<route> --model <model> [--judge byokit:codex|byokit:claude --judge-model <model>]   save generator and optional independent subscription judge (default byokit:codex / gpt-6.1-sol)
+  init --agent byokit:<route> --model <model> [--judge byokit:codex|byokit:claude --judge-model <model>]   save generator and optional independent subscription judge (default: the other installed subscription engine)
   refs pull [--kind ${KINDS.join('|')}] [--library <file.json>]   capture only explicitly licensed public references into the local cache, never the package; unpermitted products remain notes and links
   refs list [--library <file.json>]   show source links and capture status
   judge <option.html> "<brief>" --plain <baseline.html> [--first-view] [--data <file.json>]   score retained output without generating or changing either page; judges the whole page in light and dark at 1280 and 390 (tiled when tall, capture set recorded in critique.capture), or only the top 800px in light with --first-view --data refuses a data mismatch
-The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key or api key route, or byokit:codex / byokit:claude for the installed subscription CLI (Claude example: init --agent byokit:claude --model claude-opus-5-5).
+first-draft resolves an authenticated Claude or Codex subscription or BYOKit key route already on this machine; init optionally saves a preference. An independent subscription judge must use a different engine and model. No usable engine means one sign-in instruction and no generated output. OpenCode native logins are not executable through this build's BYOKit; supported OpenCode key accounts remain usable.
 Journeys, tests and demos post with --evidence --media <shot>... (an Evidence card: options and Play links, no pick asked), never --recommend: that files a Decide card for the owner.
 Agent quick start (the first-draft-axi skill has the same): \`init\` once per repo (installs the skill for claude, codex and pi); redesign a live page: \`redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5\`; from a screenshot only: \`make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html --model claude-sonnet-5-5\`; then \`view\` and \`post\`. --model names the model for one run on the configured BYOKit route (the fleet uses byokit:claude, the signed-in claude CLI: no key or token is ever needed or printed).
 A design is the --out path given to make (x.html finds x-1.html ... x-N.html), a folder of options, or option files.
@@ -223,6 +215,7 @@ const [command, ...rest] = process.argv.slice(2);
 if (!command || command === '--help' || command === '-h' || rest.includes('--help') || rest.includes('-h')) { console.log(HELP); process.exit(0); }
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
+try {
 if (command === 'check') {
   const { values, positionals } = flags(rest, { data: { type: 'string' } });
   if (!values.data || !positionals.length) fail('USAGE', 'check needs one or more HTML pages and --data <file.json>');
@@ -240,9 +233,9 @@ if (command === 'check') {
 } else if (command === 'benchmark') {
   const { values } = flags(rest, { product: { type: 'string' }, screen: { type: 'string' }, input: { type: 'string' }, width: { type: 'string', default: '390' }, theme: { type: 'string', default: 'light' }, project: { type: 'string' }, out: { type: 'string' }, 'no-discovery': { type: 'boolean' }, 'no-judge': { type: 'boolean' } });
   try {
-    const c = values['no-discovery'] ? read() : await agentOrThrow();
+    const c = read();
     console.log(JSON.stringify(await benchmark({ ...values, width: Number(values.width), discovery: !values['no-discovery'], judge: !values['no-judge'], c })));
-  } catch (e) { fail('BENCHMARK_FAILED', e.message); }
+  } catch (e) { fail(e.code === 'NO_ENGINE' ? e.code : 'BENCHMARK_FAILED', e.message); }
 } else if (command === 'refs') {
   const [action, ...more] = rest;
   const { values } = flags(more, { kind: { type: 'string' }, library: { type: 'string' } });
@@ -271,7 +264,6 @@ if (command === 'check') {
   }
   const c = await agentOrAsk(), critic = await openCritic({ c, brief, home: HOME(), judgeSet: c.judge, plainSource: values.plain, firstView: values['first-view'] });
   try {
-    if (critic.off) throw new Error(critic.off);
     const { critique } = await critic.judge({ html: readFileSync(file, 'utf8') });
     console.log(JSON.stringify({ file: resolve(file), generator: { agent: c.agent, model: c.model }, critique, judge: critic.judged, ...critic.used }));
   } catch (e) { console.log(JSON.stringify({ error: { code: 'JUDGE_FAILED', message: e.message } })); process.exitCode = 1; } finally { critic.close?.(); }
@@ -283,7 +275,7 @@ if (command === 'check') {
     const c = !values.capture && explicitReferenceUrl(values.like) ? {} : await agentOrThrow();
     const discovery = await discoverReference({ prompt, like: values.like, ...c });
     const captured = values.capture ? await captureReference({ candidate: discovery.candidate, project: values.project, ...c }) : null;
-    console.log(JSON.stringify({ reference_discovery: discovery, ...(captured && { reference_capture: { fetched:true, cache:captured.cache,cached:captured.cached,name:captured.metadata.name,url:captured.metadata.url,brief:captured.metadata.brief,licence_note:captured.metadata.licence_note,fetched_at:captured.metadata.fetched_at,screenshots:2 } }) }));
+    console.log(JSON.stringify({ ...(c.agent && { engine: { agent:c.agent, model:c.model } }), reference_discovery: discovery, ...(captured && { reference_capture: { fetched:true, cache:captured.cache,cached:captured.cached,name:captured.metadata.name,url:captured.metadata.url,brief:captured.metadata.brief,licence_note:captured.metadata.licence_note,fetched_at:captured.metadata.fetched_at,screenshots:2 } }) }));
   } catch (e) { fail(e.help ? e.code : values.capture ? 'REFERENCE_CAPTURE_FAILED' : 'REFERENCE_DISCOVERY_FAILED', e.message, e.help ?? [discoveryHelp]); }
 } else if (command === 'assets') {
   console.log(JSON.stringify({ providers: await detectAssets(), help: [assetHelp] }));
@@ -294,7 +286,7 @@ if (command === 'check') {
 } else if (command === 'make' || command === 'redesign' || command === 'logo') {
   const redesign = command === 'redesign', logo = command === 'logo';
   const { values, positionals } = flags(rest, logo ? { ref: referenceFlags.ref, ...Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model', 'explore'].map((name) => [name, { type: 'string' }])) }
-    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' }, inspiration: { type: 'boolean' }, app: { type: 'string', multiple: true }, device: { type: 'string' }, data: { type: 'string' }, 'skip-check': { type: 'boolean' } }), ...(!redesign && { engine: { type: 'boolean' }, 'no-critic': { type: 'boolean' }, 'first-view': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
+    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' }, inspiration: { type: 'boolean' }, app: { type: 'string', multiple: true }, device: { type: 'string' }, data: { type: 'string' }, 'skip-check': { type: 'boolean' } }), ...(!redesign && { engine: { type: 'boolean' }, 'first-view': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !positionals.join(' ').trim() || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file',
     ['Run `first-draft-axi redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5`', 'Only have a screenshot? Run `first-draft-axi make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html`']);
@@ -325,6 +317,8 @@ if (command === 'check') {
   if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
   if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
   const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
+  const c = await agentOrAsk(values.model);
+  c.review = await resolveJudge(c, c.judge);
   const images = await readReferences(values.ref, values.model);
   let assetSession;
   if (redesign && (values.assets || values['allow-asset-spend'] || values['hero-video'])) fail('USAGE', 'redesign does not generate images; use make --assets', [assetHelp]);
@@ -335,10 +329,10 @@ if (command === 'check') {
     if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
     process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
   }
-  const c = await agentOrAsk(values.model);
   const started = Date.now();
   let refs;
   try { refs = logo ? { images, tokens_in:0, tokens_out:0 } : await prepareReferences(values,prompt,c,images); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
+  const critic = logo || redesign ? null : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.review, firstView: values['first-view'], plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
   let inventory;
   if (redesign) {
     try {
@@ -381,10 +375,6 @@ if (command === 'check') {
   // A new option is one page from one call (draft.mjs); generated images and --engine use the multi-turn engine.
   const engine = assetSession || values.engine;
   const build = (i, numbered) => (redesign ? makeRedesign : engine ? make : draft)({ prompt, ...c, screens, assets: assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) }, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction: directionOf(i) });
-  // make's critic: every option scored against real products and a plain page of the same brief (kept in <out>.critic/, outside the
-  // options the view lists), once; low scores stay flagged (critic.mjs).
-  const critic = logo || redesign ? null : values['no-critic'] ? { off: '--no-critic: no option was scored' }
-    : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.judge, firstView: values['first-view'], plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
   // The default one-call options are independent, so they are drawn and judged OPTIONS_AT_ONCE at a time, and the critic's plain page is written
   // beside them. A logo's options were drawn already; redesign pages, the engine loop (--engine) and generated assets (paid, one budget) keep their order.
   const slots = [], stages = {}; // stages: the seconds each kind of work took, summed over the options (the critic reports its own)
@@ -404,7 +394,7 @@ if (command === 'check') {
     let critique;
     if (critic?.judge) {
       try { ({ made, critique } = await critic.judge(made)); }
-      catch (e) { critique = { error: `the critic did not score this option: ${e.message}` }; }
+      catch (e) { critic.close(); fail('JUDGE_FAILED', e.message); }
     }
     const out = resolve(numbered);
     try {
@@ -423,7 +413,7 @@ if (command === 'check') {
       }
       if (logo) written = writeLogo(out, made.logo, { brief: prompt, direction, concept: conceptOf(option.concept), passed: option.passed,
         critique: option.critiques, explored: conceptSummary(drawn), baseline: drawn.baseline.file ?? { error: drawn.baseline.error }, exploration: picture(option.picture) ?? exploration.off, timing: { ...drawn.timing, option_s: option.seconds },
-        ...(drawn.second_round && { second_round: drawn.second_round }), critic: 'the same model, against written principles and the person\'s --ref images; not an independent judgement or trademark clearance', agent: c.agent, model: c.model },
+        ...(drawn.second_round && { second_round: drawn.second_round }), critic: `independent: ${c.review.agent} / ${c.review.model}; not trademark clearance`, agent: c.agent, model: c.model },
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
     const consistency = values.data !== undefined ? checkConsistency(made.html, consistencyData) : values['skip-check'] ? { note: 'consistency check explicitly skipped', mismatches: [] } : null;
@@ -448,7 +438,7 @@ if (command === 'check') {
   if (critic?.used) { tokens_in += critic.used.tokens_in; tokens_out += critic.used.tokens_out; }
   const low = files.filter((f) => f.critique && !f.critique.passed);
   console.log(JSON.stringify({ made: { command, at: new Date(started).toISOString(), files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check, ...(Object.keys(stages).length && { timing: { options: stages, ...(critic?.timing && { critic: critic.timing() }) } }),
-      ...(critic && { critic: critic.off ? { off: critic.off } : { pass: PASS, ...(critic.plainFile() && { plain: critic.plainFile() }), judge: critic.judged } }) },
+      judge: { agent: c.review.agent, model: c.review.model }, ...(critic && { critic: { pass: PASS, ...(critic.plainFile() && { plain: critic.plainFile() }), judge: critic.judged } }) },
     ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, baseline: drawn.baseline.file ? { file: drawn.baseline.file, logo_dir: drawn.baseline.logo_dir } : { error: drawn.baseline.error }, ...(drawn.kinds_missing && { kinds_missing: drawn.kinds_missing }), ...(drawn.second_round && { second_round: drawn.second_round }),
       exploration: exploration.provider ? { provider: exploration.provider, images: drawn.options.filter((o) => o.made).map((o) => o.picture?.error ? { error: o.picture.error } : o.picture && { concept: o.concept.name, seconds: o.picture.seconds }) } : { off: exploration.off }, timing: drawn.timing }),
     ...(inventory && { redesign: { sources: resolve(values.out, 'sources', 'sources.json'), screens: inventory.pages.map(p=>({id:p.id,title:p.title})), pending: inventory.pending, limitations: inventory.limitations } }),
@@ -457,7 +447,7 @@ if (command === 'check') {
     ...(refs.sources && { inspiration: { searched_at: refs.sources.searched_at, product_type: refs.sources.product_type, queries: refs.sources.queries.map((q) => q.query), searches: refs.sources.searches.map(({ source, url, status, found, why }) => ({ source, status, url, found, ...(why && { why }) })), captured: refs.sources.sources.filter((s) => s.status === 'captured').length, link_only: refs.sources.sources.filter((s) => s.status === 'link-only').length, sources: refs.sources.sources.map(({ name, url, package: pkg, status, description, found_via, why, internal_reference_only }) => ({ name, ...(url !== null ? { url } : { package: pkg }), found_via, description, status, ...(why && { why }), ...(internal_reference_only && { internal_reference_only }) })), sidecar: '.sources.json beside each option' } }),
     ...(blocked.size && { blocked_remote: [...blocked] }),
     ...(cut.length && { truncated: cut }),
-    help: [...(logo && files.some((f) => !f.passed) ? [`${files.filter((f) => !f.passed).length} option(s) did not pass the self-critique: each is its best attempt, flagged in its sheet and logo.json (passed: false)`] : []), ...(drawn?.kinds_missing ? [`No ${drawn.kinds_missing.join(' or ')} concept survived the critique, so the options lack that kind; concepts says why`] : []), ...(logo && files.length < count ? [`${files.length} of ${count} options were made: the concept critique kept ${drawn.concepts.filter((k) => k.status !== 'dropped').length} concept(s) to draw; concepts says why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), ...(critic?.off ? [`The critic was off (${critic.off}): tell the user no option was scored against the references`] : []), ...(critic?.judged?.off ? [`Independent judge unavailable (${critic.judged.off}); scores are the generator's self-assessment`] : []), ...(low.length ? [`${low.length} option(s) are below the bar: ${low.map((f) => `${basename(f.file)} ${f.critique.error?.replace(/\.$/, '') ?? `scored ${f.critique.score}/10 (plain page ${f.critique.plain_score}; ${PASS} needed) after ${f.critique.rounds} review(s)`}`).join(', ')}. Tell the user each score and its gaps; never show one as finished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
+    help: [...(logo && files.some((f) => !f.passed) ? [`${files.filter((f) => !f.passed).length} option(s) did not pass the independent critique: each is its best attempt, flagged in its sheet and logo.json (passed: false)`] : []), ...(drawn?.kinds_missing ? [`No ${drawn.kinds_missing.join(' or ')} concept survived the critique, so the options lack that kind; concepts says why`] : []), ...(logo && files.length < count ? [`${files.length} of ${count} options were made: the concept critique kept ${drawn.concepts.filter((k) => k.status !== 'dropped').length} concept(s) to draw; concepts says why`] : []), ...(cut.length ? [`${cut.length} design(s) ran out of the engine's turns before finishing: each holds the last version that passed done, so a screen may be missing or unpolished`] : []), ...(low.length ? [`${low.length} option(s) are below the bar: ${low.map((f) => `${basename(f.file)} ${f.critique.error?.replace(/\.$/, '') ?? `scored ${f.critique.score}/10 (plain page ${f.critique.plain_score}; ${PASS} needed) after ${f.critique.rounds} review(s)`}`).join(', ')}. Tell the user each score and its gaps; never show one as finished`] : []), blocked.size ? 'The designs name remote files; the pages load none of them, so those parts show empty' : 'The pages load nothing from the network',
       `See them on the tailnet: first-draft-axi view ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath}`,
       `Post them for review: first-draft-axi post ${outPath.includes('{i}') ? files.map((f) => f.file).join(' ') : outPath} --title "<question>" --recommend a`] }));} else if (command === 'post') {
   const { values, positionals } = flags(rest, { title: { type: 'string' }, recommend: { type: 'string' }, evidence: { type: 'boolean' }, media: { type: 'string', multiple: true }, option: { type: 'string', multiple: true }, tradeoff: { type: 'string' }, key: { type: 'string' }, board: { type: 'string' }, host: { type: 'string' }, port: { type: 'string' } });
@@ -508,17 +498,12 @@ if (command === 'check') {
     help: [`See both: first-draft-axi view ${resolve(file)} ${out}`] }));
 } else if (command === 'doctor') {
   const rows = [{ status: 'ok', label: 'node', detail: process.version }, await engineDoctor(), referenceDoctor()];
-  let c;
-  try { c = read(); } catch (e) { fail('CONFIG', e.message, [`Fix ${CONFIG()}, then run \`first-draft-axi doctor\``]); }
   const subscriptions = await readySubscriptions();
-  const setup = subscriptions.map((s) => `${s.label}: ${s.init}`);
-  const unready = (check) => { console.log(JSON.stringify({ subscriptions, ready: false, checks: [...rows, check], help: setup.length ? setup : [ASK] })); process.exit(1); };
-  if (!c.agent) unready({ status: 'fail', label: 'agent', detail: 'No model source is set.', fix: setup[0] ?? ASK });
-  if (!routeOf(c.agent)) unready({ status: 'fail', label: 'agent', detail: `${c.agent} is not byokit:<route>`, fix: ASK });
-  rows.push(c.model ? { status: 'ok', label: 'model', detail: c.model } : { status: 'fail', label: 'model', detail: `no model is set for ${c.agent}`, fix: ASK });
-  rows.push(await routeDoctor(routeOf(c.agent), c.model));
+  let c;
+  try { c = await agentOrThrow(); } catch (e) { fail(e.code ?? 'CONFIG', e.message); }
+  rows.push({ status: 'ok', label: 'model', detail: `${c.agent} / ${c.model}` }, await routeDoctor(routeOf(c.agent), c.model));
   const ready = rows.every((r) => r.status !== 'fail');
-  console.log(JSON.stringify({ subscriptions, ready, checks: rows, help: [ready ? 'Run `first-draft-axi make "<prompt>" --out <file.html>`' : 'Fix the failing checks, then run `first-draft-axi doctor` again'] }));
+  console.log(JSON.stringify({ subscriptions, engine: { agent: c.agent, model: c.model }, ready, checks: rows, help: [ready ? 'Run `first-draft-axi make "<prompt>" --out <file.html>`' : 'Fix the failing checks, then run `first-draft-axi doctor` again'] }));
   if (!ready) process.exit(1);
 } else if (command === 'init') {
   const { values } = flags(rest, { agent: { type: 'string' }, model: { type: 'string' }, judge: { type: 'string' }, 'judge-model': { type: 'string' }, harness: { type: 'string' }, global: { type: 'boolean' } });
@@ -535,7 +520,7 @@ if (command === 'check') {
     if (refusal) fail('SUBSCRIPTION_ONLY', refusal);
     if (!values.judge !== !values['judge-model']) fail('USAGE', '--judge and --judge-model go together');
     const judge = values.judge && { agent: values.judge, model: values['judge-model'] };
-    if (judge && (judgeRouteProblem(judge.agent) || modelRouteProblem(routeOf(judge.agent), judge.model) || judge.model === values.model)) fail('BAD_JUDGE', 'Choose a different model on byokit:codex or byokit:claude, subscription only');
+    if (judge && (judgeRouteProblem(judge.agent) || modelRouteProblem(routeOf(judge.agent), judge.model) || await engineOf(judge.agent) === await engineOf(values.agent) || judge.model.replace(/^openai-codex\//, '') === values.model.replace(/^openai-codex\//, ''))) fail('BAD_JUDGE', 'Choose a different engine and model on byokit:codex or byokit:claude, subscription only');
     save({ ...values, judge });
     console.log(JSON.stringify({ subscriptions: await readySubscriptions(), saved: { config: CONFIG(), agent: values.agent, model: values.model, ...(judge && { judge }) } }));
   } else {
@@ -569,3 +554,4 @@ if (command === 'check') {
 } else {
   fail('USAGE', `unknown command ${command}`, ['Run `first-draft-axi --help`']);
 }
+} catch (e) { fail(e.code ?? 'RUN_FAILED', e.message); }

@@ -19,7 +19,7 @@ async function lab(t, scores) {
   mkdirSync(join(dir, 'google-chrome')); // X_OK alone accepts a directory: the real CLI must skip it too.
   const seen = [], server = await standIn(seen, scores);
   t.after(() => server.close());
-  const env = { ...process.env, CI: 'true', PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'synthetic', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const env = { ...process.env, FD_JUDGE_SCORES: JSON.stringify(scores), CI: 'true', PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'synthetic', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = async (...args) => {
     try { return JSON.parse((await promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir })).stdout); }
     catch (e) { e.message += `\n${e.stdout ?? ''}\n${e.stderr ?? ''}`; throw e; }
@@ -28,7 +28,7 @@ async function lab(t, scores) {
   return { dir, seen, env, run };
 }
 
-test('make scores once, keeps a low option flagged without revising, and --no-critic scores nothing', async (t) => {
+test('make requires an independent engine, scores once, keeps low options flagged, and rejects --no-critic', async (t) => {
   if (!findBrowser()) return t.skip('no Chrome or Chromium');
   const { dir, seen, run } = await lab(t, [[6, 7], [9, 7], [9, 7]]);
   for (const engine of [true, false]) {
@@ -37,8 +37,8 @@ test('make scores once, keeps a low option flagged without revising, and --no-cr
     const c = made.files[0].critique;
     assert.deepEqual([c.score, c.passed, c.rounds, c.scores], engine ? [6, false, 1, [6]] : [9, true, 1, [9]]);
     assert.match(readFileSync(out, 'utf8'), /Notes, version 1/);
-    assert.match(c.judge, /same model.*no references are pulled/s);
-    assert.match(help.join('\n'), /self-assessment/);
+    assert.match(c.judge, /independent:.*byokit:codex/s);
+    assert.ok(!help.join('\n').includes('self-assessment'));
     assert.equal(help.some(h => h.includes('below the bar')), engine);
     assert.equal(readFileSync(made.critic.plain, 'utf8'), PLAIN);
     // the capture set is on the judge's JSON, and the review names what it judged in every design view
@@ -48,29 +48,29 @@ test('make scores once, keeps a low option flagged without revising, and --no-cr
     assert.ok(c.capture.set.every(i => i.tiles === 2 && i.page_height === 2500 && i.covered === 2500));
     assert.deepEqual(c.views.map(v => v.view).sort(), c.capture.set.filter(i => i.side === 'design').map(i => i.id).sort());
   }
-  const asked = seen.filter(b => b.includes('"review_designs"'));
+  const asked = readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(asked.length, 2);
-  // the fixture page is 2500px tall: two tiles in each of light/dark at 1280/390, for the design and for the plain page
-  assert.ok(asked.every(b => images(b) === 16));
-  assert.match(asked[0], /capture_notes.*tile 2 of 2 = rows 1250-2500/s);
-  assert.match(asked[0], /Judge every view, the lower page and the dark theme/);
+  assert.ok(asked.every(b => b.images === 16));
+  assert.match(asked[0].input, /capture_notes.*tile 2 of 2 = rows 1250-2500/s);
+  assert.match(asked[0].system, /Judge every view, the lower page and the dark theme/);
+  assert.ok(!seen.some(b => b.includes('"review_designs"')), 'generator never assesses itself');
   // --first-view is the cheap look: light only, the top of the page at 1280 and 390, four images in all
   const first = await run('make', 'A notes app for Umer', '--out', join(dir, 'first.html'), '--options', '1', '--first-view');
   const fc = first.made.files[0].critique;
   assert.deepEqual([fc.capture.mode, fc.capture.images, fc.capture.set.map(i => `${i.side}-${i.width}-${i.theme}`)], ['first-viewport', 4, ['design-1280-light', 'design-390-light', 'plain-1280-light', 'plain-390-light']]);
-  assert.equal(images(seen.filter(b => b.includes('"review_designs"')).at(-1)), 4);
-  assert.match(seen.filter(b => b.includes('"review_designs"')).at(-1), /first-viewport assessment/);
+  const native = JSON.parse(readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim().split('\n').at(-1));
+  assert.equal(native.images, 4);
+  assert.match(native.system, /first-viewport assessment/);
   const out = join(dir, 'off.html'), before = seen.length;
-  const off = await run('make', 'A notes app for Umer', '--out', out, '--options', '1', '--no-critic');
-  assert.equal(off.made.files[0].critique, undefined);
-  assert.match(off.made.critic.off, /--no-critic/);
+  await assert.rejects(run('make', 'A notes app for Umer', '--out', out, '--options', '1', '--no-critic'), e => /Unknown option/.test(e.stdout));
+  assert.equal(existsSync(out), false);
   assert.equal(existsSync(join(dir, 'off.critic')), false);
-  assert.ok(seen.slice(before).every(b => !b.includes('"review_designs"') && !b.includes('"write_page"')));
+  assert.equal(seen.length, before);
 });
 
-test('refs pull -> independent subscription judge -> explicit fallbacks, through the public CLI', async (t) => {
+test('refs pull -> independent subscription judge -> refusal, never self-assessment, through the public CLI', async (t) => {
   if (!findBrowser()) return t.skip('no Chrome or Chromium');
-  const { dir, seen, env, run } = await lab(t, Array(8).fill([7, 6]));
+  const { dir, seen, env, run } = await lab(t, Array(8).fill([6, 7]));
   const refs = await referenceStandIn(dir);
   t.after(() => refs.server.close());
   env.FIRST_DRAFT_TEST_REF_ORIGIN = refs.origin;
@@ -99,28 +99,26 @@ test('refs pull -> independent subscription judge -> explicit fallbacks, through
   assert.equal(judged.critique.score, 6);
   assert.equal(seen.length, before, 'retained judging generates neither design nor baseline');
   assert.equal(readFileSync(out, 'utf8'), original);
-  for (const [name, value, why] of [['FD_JUDGE_AUTH', 'out', /not ready/], ['FD_JUDGE_FAILURE', '1', /independent judge failed/]]) {
+  for (const [name, value, why] of [['FD_JUDGE_AUTH', 'out', /No independent AI judge/], ['FD_JUDGE_FAILURE', '1', /Codex|model could not answer/]]) {
     env[name] = value;
-    const fallback = await run('judge', out, 'A notes app for Umer', '--plain', baseline);
-    assert.match(fallback.judge.off, why);
-    assert.match(fallback.critique.judge, /same model/);
-    assert.equal(fallback.critique.axes, undefined);
+    await assert.rejects(run('judge', out, 'A notes app for Umer', '--plain', baseline), e => why.test(e.stdout));
+    assert.equal(readFileSync(out, 'utf8'), original);
     delete env[name];
   }
   const config = join(dir, 'config.json'), saved = JSON.parse(readFileSync(config, 'utf8'));
   for (const judge of [{ agent: 'byokit:opencode-go', model: 'other' }, { agent: 'byokit:codex', model: saved.agent_config[saved.agent].model }, { agent: 'byokit:codex' }]) {
     writeFileSync(config, JSON.stringify({ ...saved, judge }));
-    const fallback = await run('judge', out, 'A notes app for Umer', '--plain', baseline);
-    assert.match(fallback.judge.off, /subscription|model that made|invalid judge configuration/);
+    await assert.rejects(run('judge', out, 'A notes app for Umer', '--plain', baseline), e => /Invalid independent judge configuration/.test(e.stdout));
   }
   writeFileSync(config, JSON.stringify(saved));
   const otherKind = await run('judge', out, 'An analytics dashboard', '--plain', baseline);
-  assert.match(otherKind.judge.off, /no reference of a dashboard/);
+  assert.equal(otherKind.judge.agent, 'byokit:codex');
+  assert.match(otherKind.critique.judge, /independent/);
   writeFileSync(join(dir, 'refs-library/umer-notes/desktop-light.png'), 'changed');
-  assert.match((await run('judge', out, 'A notes app for Umer', '--plain', baseline)).judge.off, /changed since it was captured/);
+  await assert.rejects(run('judge', out, 'A notes app for Umer', '--plain', baseline), e => /changed since it was captured/.test(e.stdout));
 });
 
-test('landing AI-side and nine-point hero checks survive in both critics, without another design pass', async (t) => {
+test('landing AI-side and nine-point hero checks survive in the required independent critic', async (t) => {
   if (!findBrowser()) return t.skip('no Chrome or Chromium');
   const { dir, seen, env, run } = await lab(t, [[8, 5], [9, 5]]);
   const brief = 'a landing page for a small accounting software company for teams';
@@ -129,8 +127,9 @@ test('landing AI-side and nine-point hero checks survive in both critics, withou
   assert.deepEqual([c.score, c.passed, c.rounds, c.ai_side.reads_as_ai, c.hero.met, c.hero.of, c.hero.points.length], [8, false, 1, true, 5, 9, 9]);
   const high = await makeLanding('high');
   assert.deepEqual([high.files[0].critique.passed, high.files[0].critique.ai_side.reads_as_ai, high.files[0].critique.hero.met], [true, false, 9]);
-  assert.equal(seen.filter(b => b.includes('"review_designs"')).length, 2, 'one review each, no critic revision');
-  assert.match(seen.find(b => b.includes('"review_designs"')), /AI-side tells are: soft pastel on everything.*nine points in order/s);
+  const native = readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(native.length, 2, 'one independent review each');
+  assert.match(native[0].system, /AI-side tells are: soft pastel on everything.*nine points in order/s);
   assert.ok(seen.some(b => !b.includes('"review_designs"') && b.includes('# Human side, not AI side')));
   const refs = await referenceStandIn(dir); t.after(() => refs.server.close());
   const lib = JSON.parse(readFileSync(refs.library, 'utf8'));

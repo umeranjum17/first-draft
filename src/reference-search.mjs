@@ -6,17 +6,11 @@ import { ReferenceNetwork, referenceUrl } from './reference-network.mjs';
 
 const SUBS = ['UI_Design', 'UXDesign', 'web_design'];
 const CAP = 12;
-// One seam for tests and offline runs: an exact loopback fixture origin serves the same three shapes.
-const bases = () => {
-  const f = process.env.FIRST_DRAFT_TEST_REF_ORIGIN;
-  if (!f) return {
-    web: (q) => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
-    hn: (q) => `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=15`,
-    reddit: (sub, q) => `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(q)}&restrict_sr=1&sort=relevance&t=year&limit=10`,
-  };
-  const o = new URL(f).origin;
-  return { web: (q) => `${o}/web?q=${encodeURIComponent(q)}`, hn: (q) => `${o}/hn?query=${encodeURIComponent(q)}`, reddit: (sub, q) => `${o}/reddit/${sub}?q=${encodeURIComponent(q)}` };
-};
+const bases = () => ({
+  web: (q) => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`,
+  hn: (q) => `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=15`,
+  reddit: (sub, q) => `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(q)}&restrict_sr=1&sort=relevance&t=year&limit=10`,
+});
 
 const text = (s) => String(s).replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 const line = (s, n = 180) => { const t = text(s); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };

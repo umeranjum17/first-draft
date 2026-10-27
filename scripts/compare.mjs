@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // A paired comparison for docs/wrapper-allowlist.json: the same brief, the same model, rendered at 1280 and 390 side by side.
-//   node scripts/compare.mjs "<brief>" --out <folder> [--model <id>] [--no-critic]     writes plain.html (the model's one plain call) and
+//   node scripts/compare.mjs "<brief>" --out <folder> [--model <id>]     writes plain.html (the model's one plain call) and
 //        make.html (this checkout's default make, one option), renders both and prints where the side-by-side page is
 //   node scripts/compare.mjs "<brief>" --out <folder> --pages name=a.html name=b.html   renders pages you already have (no model call):
 //        for a branch against main, or the plain model against a pull request's page
@@ -15,9 +15,9 @@ import { promisify } from 'node:util';
 import { writePage } from '../src/byokit.mjs';
 import { renderCheck } from '../src/render-check.mjs';
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, model: { type: 'string' }, pages: { type: 'boolean' }, 'no-critic': { type: 'boolean' } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, model: { type: 'string' }, pages: { type: 'boolean' } } });
 const fail = (message) => { console.log(JSON.stringify({ error: { code: 'USAGE', message } })); process.exit(1); };
-if (!values.out || !positionals.length) fail('usage: compare.mjs "<brief>" --out <folder> [--model <id>] [--no-critic] | --pages name=file.html name=file.html');
+if (!values.out || !positionals.length) fail('usage: compare.mjs "<brief>" --out <folder> [--model <id>] | --pages name=file.html name=file.html');
 const out = resolve(values.out), [brief, ...rest] = positionals;
 mkdirSync(out, { recursive: true });
 
@@ -38,7 +38,7 @@ if (values.pages) {
   variants.push({ name: 'plain', html: plain.html, seconds: Math.round((Date.now() - since) / 1000), tokens_out: plain.tokens_out });
   since = Date.now();
   const file = join(out, 'make.html');
-  const { stdout } = await promisify(execFile)(process.execPath, [new URL('../src/cli.mjs', import.meta.url).pathname, 'make', brief, '--out', file, '--options', '1', '--model', model, ...(values['no-critic'] ? ['--no-critic'] : [])], { maxBuffer: 64 << 20, timeout: 3 * timeoutMs });
+  const { stdout } = await promisify(execFile)(process.execPath, [new URL('../src/cli.mjs', import.meta.url).pathname, 'make', brief, '--out', file, '--options', '1', '--model', model], { maxBuffer: 64 << 20, timeout: 3 * timeoutMs });
   const made = JSON.parse(stdout).made;
   variants.push({ name: 'make', html: readFileSync(file, 'utf8'), seconds: Math.round((Date.now() - since) / 1000), tokens_out: made.tokens_out, critic_score: made.files[0].critique?.score, timing: made.timing });
 }

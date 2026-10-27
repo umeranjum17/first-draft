@@ -1,5 +1,5 @@
-// A different subscription-backed model, beside captured references of the same page kind; otherwise explicit self-assessment.
-import { doctor, imageSupport, routeOf } from './byokit.mjs';
+// Every judgement comes from an authenticated engine independent of the generator.
+import { doctor, engineOf, engineRequired, resolveEngine, routeOf } from './byokit.mjs';
 import { ask } from './logo-concepts.mjs';
 import { flowOf } from './flow.mjs';
 import { referencesFor } from './reference-library.mjs';
@@ -11,10 +11,7 @@ export const BENCHMARK_SYSTEM = `Judge one retained screen against the supplied 
 export async function judgeBenchmark({ c, product, screen, target, rows }) {
   const refs = rows.filter((r) => r.role === 'reference');
   if (!refs.length) throw new Error('No real reference captures; prose and counterexamples cannot calibrate a benchmark');
-  const j = judgeOf(c, c.judge), problem = judgeRouteProblem(j.agent);
-  if (problem) throw new Error(problem);
-  if (j.model === c.model) throw new Error('Benchmark judge must differ from the configured generator');
-  if (!await imageSupport(routeOf(j.agent), j.model)) throw new Error(`${j.agent} / ${j.model} cannot see reference captures`);
+  const j = await resolveJudge(c, c.review ?? c.judge);
   const shown = [...refs, ...rows.filter((r) => r.role === 'counterexample'), target];
   const result = await ask({ ...j, timeoutMs: c.timeoutMs }, { system: BENCHMARK_SYSTEM,
     user: JSON.stringify({ product, screen, target: target.id, axes: AXES, captures: shown.map(({ image, ...metadata }) => metadata) }), images: shown.map((r) => r.image),
@@ -24,7 +21,10 @@ export async function judgeBenchmark({ c, product, screen, target, rows }) {
   }, (v) => !Array.isArray(v?.axes) || v.axes.length !== AXES.length ? ['Return all seven axes'] : v.axes.flatMap((a, i) =>
     a?.axis !== AXES[i] || !(a.score === null || Number.isInteger(a.score) && a.score >= 1 && a.score <= 10) || !Array.isArray(a.references)
     || a.references.some((id) => !refs.some((r) => r.id === id)) || (a.score === null ? a.references.length !== 0 : !a.references.length)
-    || ![a.observed, a.comparison].every((s) => typeof s === 'string' && s.trim() && s.length <= 1200) ? [`Invalid reference evidence or score for ${AXES[i]}`] : []));
+    || ![a.observed, a.comparison].every((s) => typeof s === 'string' && s.trim() && s.length <= 1200) ? [`Invalid reference evidence or score for ${AXES[i]}`] : [])).catch(async (error) => {
+      if ((await doctor(routeOf(j.agent), j.model)).status !== 'ok') throw engineRequired(routeOf(j.agent), 'No independent AI judge is usable');
+      throw error;
+    });
   return { ...result.value, model: j.model, agent: j.agent, tokens_in: result.tokens_in, tokens_out: result.tokens_out };
 }
 const SUBSCRIPTIONS = ['claude', 'codex'];
@@ -36,22 +36,22 @@ export const pageKind = (brief) => /\b(docs|documentation|api reference|develope
   : /\b(dashboard|analytics|admin|metrics|kpis?|reporting)\b/i.test(brief) ? 'dashboard'
   : /\b(notes?|notebook|journal|to-?dos?|tasks?|planner)\b/i.test(brief) ? 'notes' : 'app';
 
-export const judgeOf = (_c, set) => set ?? { agent: 'byokit:codex', model: 'gpt-6.1-sol' };
+export const judgeOf = (c, set) => set ?? { agent: c.agent === 'byokit:codex' ? 'byokit:claude' : 'byokit:codex', model: c.agent === 'byokit:codex' ? 'claude-sonnet-5-5' : 'gpt-6.1-sol' };
+
+export async function resolveJudge(c, set) {
+  const generator = await engineOf(c.agent);
+  const j = judgeOf(generator === 'codex' ? { ...c, agent: 'byokit:codex' } : c, set);
+  if (typeof j.agent !== 'string' || typeof j.model !== 'string' || !j.model.trim() || judgeRouteProblem(j.agent) || await engineOf(j.agent) === generator || j.model.replace(/^openai-codex\//, '') === c.model.replace(/^openai-codex\//, '')) throw engineRequired(c.agent === 'byokit:claude' ? 'codex' : 'claude', 'Invalid independent judge configuration');
+  return resolveEngine({ ...j, timeoutMs: c.timeoutMs }, { exclude: c, subscription: true, images: true });
+}
 
 export const judgeRouteProblem = (agent) => SUBSCRIPTIONS.includes(routeOf(agent)) ? undefined
   : `the judge runs on a subscription (byokit:claude or byokit:codex), never an API key; ${agent} is not one`;
 
 export async function openJudge({ c, brief, home, set, references = 0 }) {
   const kind = pageKind(brief);
-  let refs;
-  try { refs = referencesFor(home, kind); } catch (e) { return { kind, off: `references unavailable: ${e.message}` }; }
-  // A kind with no licensed public capture (an onboarding flow) is still judged when the person gives their own reference image.
-  if (!refs.images.length && !references) return { kind, off: refs.pulled ? `no reference of a ${kind} page was captured, so there was nothing to judge it beside` : 'no references are pulled on this machine (run first-draft-axi refs pull)' };
-  const j = judgeOf(c, set);
-  if (typeof j.agent !== 'string' || typeof j.model !== 'string' || !j.model.trim()) return { kind, off: 'invalid judge configuration: name a subscription route and a specific model' };
-  const problem = judgeRouteProblem(j.agent) ?? (j.model?.replace(/^openai-codex\//, '') === c.model?.replace(/^openai-codex\//, '') ? `the judge (${j.model}) is the model that made the design` : undefined)
-    ?? await doctor(routeOf(j.agent), j.model).then((r) => r.status === 'fail' ? `${j.agent} / ${j.model} is not ready: ${r.detail}` : undefined);
-  if (problem) return { kind, off: problem };
-  return { kind, refs, c: { agent: j.agent, model: j.model, timeoutMs: c.timeoutMs },
-    label: `independent: ${j.model} (${j.agent}), not the model that made the design (${c.model}), beside ${refs.shown.length ? refs.shown.map((r) => `${r.name} (${r.kind})`).join(' and ') : `${references} reference image(s) the person gave`}` };
+  const j = await resolveJudge(c, set);
+  const refs = referencesFor(home, kind);
+  return { kind, refs, c: j,
+    label: `independent: ${j.model} (${j.agent}), not the model that made the design (${c.model}), beside ${refs.shown.length ? refs.shown.map((r) => `${r.name} (${r.kind})`).join(' and ') : references ? `${references} reference image(s) the person gave` : 'the model-generated plain baseline; no captured references'}` };
 }

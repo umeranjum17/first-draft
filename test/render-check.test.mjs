@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { plainPage } from './fixtures/plain-page.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 
@@ -26,6 +27,7 @@ function standIn(seen, [first, second] = [BROKEN, FIXED], path = 'index.html') {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (plainPage(res, body)) return;
       seen.push(body);
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const n = seen.length - 1;
@@ -74,7 +76,7 @@ test('every screen must fit phone and desktop in both themes, and errors are rep
   }
 });
 
-test('with no browser on the machine the render check is skipped with one warning line', async (t) => {
+test('with no browser the required critic refuses before generating or writing any page', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-render-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [], server = await standIn(seen);
@@ -83,11 +85,9 @@ test('with no browser on the machine the render check is skipped with one warnin
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' ? [...args, ...(args.includes('--count') ? [] : ['--options', '1']), '--engine'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'notes.html');
-  const { stdout, stderr } = await run('make', 'a notes page', '--out', out);
-  assert.equal(JSON.parse(stdout).made.render_check, 'skipped');
-  assert.equal(stderr.trim().split('\n').length, 1, 'one clear warning line');
-  assert.match(stderr, /no Chrome or Chromium was found/);
-  assert.equal(existsSync(out), true);
+  await assert.rejects(run('make', 'a notes page', '--out', out), e => /independent critic requires Chrome or Chromium/.test(e.stdout));
+  assert.equal(seen.length, 0);
+  assert.equal(existsSync(out), false);
 });
 
 test('a named dark style must render a dark page: a light page fails done, one dark in light and in dark passes; a page with no style still needs a light and a dark theme', async (t) => {

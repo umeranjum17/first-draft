@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { installJudge } from '../journeys/fixtures/judge-cli.mjs';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const PERMISSION = 'Anonymous automated browsers may store screenshots of this entire website privately as visual design references. Do not copy our text or assets into generated designs.';
@@ -55,7 +56,7 @@ test('inspiration: free search, permitted captures, refused links, an emulator a
   // Stand-in model: plans the searches, reviews the terms, then writes one page through the engine's tool loop.
   const bin = join(dir, 'bin'); mkdirSync(bin);
   writeFileSync(join(bin, 'claude'), `#!${process.execPath}
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (args.includes('auth')) { console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' })); process.exit(0); }
 let raw = ''; for await (const c of process.stdin) raw += c;
@@ -64,7 +65,8 @@ appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-inputs', JSON.stringify({
 const call = (name, a) => ({ name, arguments: JSON.stringify(a) });
 const has = (n) => tools.some((t) => t.name === n);
 let calls = [];
-if (has('plan_reference_searches')) calls = [call('plan_reference_searches', { product_type: 'mobile shift planning', queries: ['shift planning app', 'nurse rota ui'] })];
+if (has('write_page')) calls = [call('write_page', { html: process.env.FD_PAGE })];
+else if (has('plan_reference_searches')) calls = [call('plan_reference_searches', { product_type: 'mobile shift planning', queries: ['shift planning app', 'nurse rota ui'] })];
 else if (has('score_benchmark')) {
   const q = JSON.parse(messages.at(-1).content.split('\\n\\nYour last')[0]), refs = q.captures.filter((c) => c.role === 'reference');
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/benchmark-inputs', JSON.stringify({ q, system: args[args.indexOf('--system-prompt') + 1], images: envelope.message.content.filter((c) => c.type === 'image').length }) + '\\n');
@@ -74,10 +76,11 @@ else if (has('assess_reference_terms')) { const q = JSON.parse(messages.at(-1).c
   calls = [call('assess_reference_terms', { decision: no ? 'blocked' : 'allowed', quote: no ? ${JSON.stringify(RESTRICTED)} : process.env.FD_PERMISSION })]; }
 else { const results = messages.filter((m) => m.role === 'toolResult');
   calls = results.length === 0 ? [call('set_todos', { items: [{ text: 'Write the rota screen', checked: false }] })]
-    : results.length === 1 ? [call('str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: process.env.FD_DESIGN }), call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: process.env.FD_PAGE })]
+    : results.length === 1 ? [call('str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: readFileSync(process.env.FD_DESIGN_PATH, 'utf8') }), call('str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: process.env.FD_PAGE })]
     : results.length === 3 ? [call('done', { path: 'index.html' })] : []; }
 console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: '', calls }, usage: { input_tokens: 7, output_tokens: 8 } }));
 `, { mode: 0o700 });
+  installJudge(bin, { preserveClaude: true });
   // Stand-in adb: one attached emulator, a package with a launcher, and a real PNG from its screen.
   writeFileSync(join(bin, 'adb'), `#!${process.execPath}
 import { readFileSync } from 'node:fs';
@@ -94,14 +97,19 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
 `, { mode: 0o700 });
 
   const project = join(dir, 'project'); mkdirSync(project);
-  const base = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: join(dir, 'config'), FIRST_DRAFT_TEST_REF_ORIGIN: origin, FD_PERMISSION: PERMISSION, FD_DESIGN: DESIGN, FD_PAGE: PAGE, FD_ADB_PNG: PICTURE };
+  const designFile = join(dir, 'DESIGN.md'); writeFileSync(designFile, DESIGN);
+  const base = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: join(dir, 'config'), FIRST_DRAFT_TEST_REF_ORIGIN: origin, FD_PERMISSION: PERMISSION, FD_DESIGN_PATH: designFile, FD_PAGE: PAGE, FD_ADB_PNG: PICTURE };
   for (const key of ['CHROME_DEVTOOLS_AXI_AUTO_CONNECT', 'CHROME_DEVTOOLS_AXI_BROWSER_URL', 'CHROME_DEVTOOLS_AXI_PORT', 'FIRST_DRAFT_CHROME']) delete base[key];
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env: base, cwd: project, timeout: 120_000, maxBuffer: 12_000_000 });
   await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
 
+  const judgeReady = JSON.parse((await promisify(execFile)(process.execPath, ['--input-type=module','-e',`import {doctor} from ${JSON.stringify(new URL('../src/byokit.mjs', import.meta.url).href)};console.log(JSON.stringify(await doctor('codex','gpt-6.1-sol')));`], {env:base,cwd:project})).stdout);
+  assert.equal(judgeReady.status, 'ok', JSON.stringify(judgeReady));
   const out = join(project, 'rota.html');
-  const made = JSON.parse((await run('make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--no-critic', '--inspiration', '--app', 'com.umer.rota', '--device', 'emulator-test', '--out', out)).stdout);
+  const made = JSON.parse((await run('make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--inspiration', '--app', 'com.umer.rota', '--device', 'emulator-test', '--out', out)).stdout);
 
+  assert.deepEqual(made.made.judge, {agent:'byokit:codex',model:'gpt-6.1-sol'});
+  assert.equal(made.made.agent, 'byokit:claude');
   // 1. Search first: both queries over the open web and Hacker News, and the subreddits recorded as refused.
   const sources = JSON.parse(readFileSync(`${out}.sources.json`, 'utf8'));
   assert.deepEqual(sources.queries.map((q) => q.query), ['shift planning app', 'nurse rota ui']);
@@ -152,7 +160,8 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   assert.ok(made.inspiration.sources.some((s) => s.package === 'com.umer.rota' && s.internal_reference_only));
 
   // Benchmark the same retained captures through the real CLI/adapter: all current/candidates, positive and negative evidence.
-  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5');
+  await assert.rejects(run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5'), e => /BAD_JUDGE/.test(e.stdout));
+  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:codex', '--judge-model', 'gpt-6.1-sol');
   const input = join(project, 'screens.json'), sheet = join(project, 'benchmark.html');
   const entries = ['reference', 'counterexample', 'current', 'candidate', 'candidate', 'candidate', 'candidate'].map((role, i) => ({ role, name: `Umer ${role} ${i} <script>`, file: PICTURE, source: 'Local fixture; no remote source', permission: 'Project-owned fixture', captured_at: null, theme: 'light' }));
   entries[1].name = 'current app not captured - counterexamples from the captain';
@@ -160,6 +169,9 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   const bench = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--project', project)).stdout);
   const report = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')), html = readFileSync(sheet, 'utf8');
   assert.equal(bench.scores.length, 5, 'current and every candidate get their own comparison');
+  assert.deepEqual(bench.engine, {agent:'byokit:claude',model:'claude-opus-5-5'});
+  assert.ok(bench.scores.every(s => s.agent === 'byokit:codex' && s.model === 'gpt-6.1-sol'));
+  assert.match(bench.judge, /^independent: byokit:codex/);
   assert.equal(report.captures.length, 8, 'seven local captures and the permitted public capture');
   assert.ok(report.discovery.queries.every((q) => /AI chat app phone chat/.test(q.query)));
   assert.ok(report.discovery.sources.some((s) => /restricted/.test(s.name) && s.status === 'link-only'));
@@ -183,17 +195,38 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
     assert.equal(w.q.captures.filter((r) => r.role === 'counterexample').length, 1);
     assert.equal(w.images, 4, 'real raster inputs reach the native subscription boundary');
   }
+  const failedSheet = join(project, 'failed-benchmark.html');
+  const noResult = () => { assert.equal(existsSync(failedSheet), false); assert.equal(existsSync(`${failedSheet}.json`), false); };
+  // Normal CLI flags cannot bypass the policy, even when both engines are ready.
+  for (const flag of ['--no-discovery', '--no-judge']) await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', failedSheet, flag), e => /test-only.*FIRST_DRAFT_TEST_BENCHMARK=1/.test(e.stdout));
+  noResult();
+  base.FIRST_DRAFT_TEST_BENCHMARK = '1'; // Explicit private fixture plumbing only; never a user result.
+  const broken = (...extra) => run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', failedSheet, '--no-discovery', ...extra);
+  const configFile = join(base.FIRST_DRAFT_HOME, 'config.json'), config = readFileSync(configFile, 'utf8');
+  writeFileSync(configFile, JSON.stringify({...JSON.parse(config),judge:{agent:'byokit:claude',model:'claude-sonnet-5-5'}}));
+  await assert.rejects(broken(), e => /NO_ENGINE/.test(e.stdout) && /Invalid independent judge configuration.*codex login/.test(e.stdout)); noResult();
+  writeFileSync(configFile, config);
   base.FD_BAD_EVIDENCE = '1';
-  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery'), (e) => /Invalid reference evidence/.test(e.stdout));
+  await assert.rejects(broken(), e => /Invalid reference evidence/.test(e.stdout)); noResult();
   delete base.FD_BAD_EVIDENCE;
-  assert.equal(JSON.parse(readFileSync(`${sheet}.json`, 'utf8')).scores.length, 0, 'counterexample citations cannot earn a score');
-  const offline = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--no-discovery', '--no-judge')).stdout);
-  assert.equal(offline.judge, 'not requested');
+  base.FD_BENCH_FAIL_TARGET = 'capture-4'; // Current succeeds, then the first candidate fails: no partial sheet.
+  await assert.rejects(broken(), e => /BENCHMARK_FAILED/.test(e.stdout)); noResult();
+  delete base.FD_BENCH_FAIL_TARGET;
+  base.FD_JUDGE_FAILURE = 'credentials'; // Native launch loses its login after readiness; diagnostics must name one sign-in step.
+  await assert.rejects(broken(), e => { const r=JSON.parse(e.stdout); assert.equal(e.code,1); assert.equal(r.error.code,'NO_ENGINE'); assert.match(r.error.message,/Sign in to ChatGPT: codex login/); assert.equal((r.error.message.match(/Sign in to/g)??[]).length,1); return true; }); noResult();
+  delete base.FD_JUDGE_FAILURE; rmSync(join(base.FIRST_DRAFT_HOME, 'judge-signed-out'));
+  assert.equal(readFileSync(sheet, 'utf8'), html, 'failed comparisons cannot replace a previous complete result');
+  assert.equal(readFileSync(`${sheet}.json`, 'utf8'), JSON.stringify(report, null, 2));
+  const offline = JSON.parse((await broken('--no-judge')).stdout);
+  assert.equal(offline.judge, 'test-only unscored plumbing; not a user result');
+  rmSync(failedSheet); rmSync(`${failedSheet}.json`);
   writeFileSync(input, JSON.stringify(entries.map((e) => ({ ...e, theme: 'dark' }))));
-  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery', '--no-judge'), (e) => /matching theme/.test(e.stdout));
+  await assert.rejects(broken('--no-judge'), e => /matching theme/.test(e.stdout)); noResult();
   writeFileSync(input, JSON.stringify(entries.filter((e) => e.role !== 'reference')));
-  await assert.rejects(run('benchmark', '--product', 'chat', '--screen', 'chat', '--input', input, '--out', sheet, '--no-discovery'), (e) => /No real reference captures/.test(e.stdout));
-  assert.match(JSON.parse(readFileSync(`${sheet}.json`, 'utf8')).judge, /^failed:/);
+  await assert.rejects(broken(), e => /No real reference captures/.test(e.stdout)); noResult();
+  writeFileSync(input, JSON.stringify(entries.filter((e) => !['current','candidate'].includes(e.role))));
+  await assert.rejects(broken(), e => /at least one current or candidate/.test(e.stdout)); noResult();
+  delete base.FIRST_DRAFT_TEST_BENCHMARK;
   // The shared public capture refuses an access gate before terms review or screenshotting.
   await assert.rejects(run('references', '--like', `${origin}/paywall`, '--capture', '--project', project), (e) => /Paywall\/access gate refused/.test(e.stdout));
 
@@ -219,14 +252,16 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   // Part 3 refuses clearly when no emulator is there, and the run still produces the page and its sources.
   const noAdbBin = join(dir, 'no-adb'); mkdirSync(noAdbBin);
   writeFileSync(join(noAdbBin, 'claude'), readFileSync(join(bin, 'claude')), { mode: 0o700 }); // the model is there, the emulator is not
+  writeFileSync(join(noAdbBin, 'codex'), readFileSync(join(bin, 'codex')), { mode: 0o700 });
   const noAdb = { ...base, PATH: `${noAdbBin}:/usr/bin:/bin`, ANDROID_HOME: '', ANDROID_SDK_ROOT: '' };
-  const second = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--no-critic', '--inspiration', '--app', 'com.umer.rota', '--out', join(project, 'again.html')], { env: noAdb, cwd: project, timeout: 120_000, maxBuffer: 12_000_000 })).stdout);
+  const second = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--inspiration', '--app', 'com.umer.rota', '--out', join(project, 'again.html')], { env: noAdb, cwd: project, timeout: 120_000, maxBuffer: 12_000_000 })).stdout);
   const again = JSON.parse(readFileSync(join(project, 'again.html.sources.json'), 'utf8'));
   const refusedApp = again.sources.find((s) => s.package === 'com.umer.rota');
   assert.equal(refusedApp.status, 'link-only');
   assert.match(refusedApp.why, /needs adb on PATH/);
   assert.ok(existsSync(join(project, 'again.html')), 'the page is still written when the emulator step refuses');
   assert.ok(second.inspiration.captured >= 1);
+  assert.deepEqual(second.made.judge, {agent:'byokit:codex',model:'gpt-6.1-sol'});
 
   // --app without the search it belongs to is refused, with the reason.
   await assert.rejects(run('make', 'A rota app', '--options', '1', '--app', 'com.umer.rota', '--out', join(project, 'third.html')), (e) => /--app captures a mobile competitor.*--inspiration/.test(e.stdout));

@@ -123,6 +123,7 @@ function standIn(seen, world = WORLD1, trace = []) {
     req.on('end', async () => {
       seen.push(body);
       const user = userText(body);
+      if ((world.failSecond && body.includes('"propose_concepts"') && user.includes('critic_advice')) || (world.failBaseline && !body.includes('"propose_concepts"') && !body.includes('"critique_marks"') && !userMessages(body)[0]?.includes('Concept') && !userMessages(body)[0]?.includes('Revise this logo option'))) { res.writeHead(400); res.end('fixture refused logo round'); return; }
       let calls, delay = 0;
       if (body.includes('"propose_concepts"')) {
         // Each territory is its own call (they overlap: `trace.peak` counts the most open at once). The first answer of the symbol territory
@@ -202,6 +203,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   const reference = join(dir, 'reference.png');
   await promisify(execFile)('convert', ['-size', '3x2', 'xc:purple', reference]);
   const result = JSON.parse((await run(['logo', brief, '--out', out, '--options', '3', '--ref', reference])).stdout), { made } = result;
+  assert.equal(made.judge.agent, 'byokit:codex');
+  assert.notEqual(made.judge.model, made.model);
   assert.equal(made.files.length, 3);
   assert.notEqual(result.concepts[0].palette, result.concepts[1].palette, 'each concept has its own colours');
   assert.deepEqual([result.rounds, result.exploration, result.timing.concurrency, result.timing.concept_calls], [1, { off: 'CI never generates images' }, 3, 3]);
@@ -241,9 +244,9 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   // Falling drop, whose drop is option 3's base shape, but Hairline, drawn once (two engine runs an option): no attempt passed, so the
   // best-scored one is the option, flagged. Option 3, Last drop, passed at once. Every other attempt is kept for review.
   assert.deepEqual(made.files.map((f) => [f.concept.name, f.concept.kind, f.passed]), [['Level type', 'wordmark', true], ['Hairline', 'abstract', false], ['Last drop', 'symbol', true]]);
-  assert.ok(seen.some((b) => b.includes('Revise this logo option: Self-critique of this logo at 16 and 32 px') && b.includes('Beside the best marks of its class it scores 6 of 10, under the 9 it needs: Behind Stripe') && b.includes('Open the waterline so it reads at 16 px.')));
+  assert.ok(seen.some((b) => b.includes('Revise this logo option: Independent critique of this logo at 16 and 32 px') && b.includes('Beside the best marks of its class it scores 6 of 10, under the 9 it needs: Behind Stripe') && b.includes('Open the waterline so it reads at 16 px.')));
   assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict, d.critique.score, d.option]), [['Ripple', 'drop', 3, undefined], ['Hairline', 'redo', 5, 'kept as the best attempt, flagged as not passing']]);
-  assert.match(result.help[0], /1 option\(s\) did not pass the self-critique/);
+  assert.match(result.help[0], /1 option\(s\) did not pass the independent critique/);
   assert.equal(finalCritiques.length, 4 + 1, 'Level type twice, Ripple, Hairline and Last drop once each');
   assert.equal(new Set(trace).size, 6, 'five engine runs for three options (at most two an option) and the baseline');
   // The baseline, the plain output of the same model on the same brief, stands beside every finished mark the critic scores, and stays for review.
@@ -299,7 +302,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
     assert.deepEqual(logo.critique.map((c) => [c.round, c.verdict, c.score]), [[['first', 'redo', 6], ['redo', 'keep', 9]], [['first', 'redo', 5]], [['first', 'keep', 9]]][i]);
     assert.deepEqual(f.critique, logo.critique.at(-1));
     assert.equal(logo.passed, i !== 1);
-    assert.match(logo.critic, /same model/);
+    assert.equal(logo.critic, 'independent: byokit:codex / gpt-6.1-sol; not trademark clearance');
     assert.deepEqual({ reason: logo.palette.reason, light: logo.palette.light, dark: logo.palette.dark }, pal);
     assert.deepEqual(logo.concept.palette, pal, 'the palette was chosen with the concept');
     assert.ok(Object.entries(logo.palette.contrast.light).every(([role, v]) => role === 'ground' || v >= 3), JSON.stringify(logo.palette.contrast));
@@ -346,7 +349,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   const url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
   const sent = await fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify({ option: 2, change: 'a rounder leaf' }) });
   assert.equal(sent.status, 200, await sent.clone().text());
-  assert.deepEqual(await sent.json(), { option: { n: 4, label: 'tea-2-refined', file: 'tea-2-refined.html' } });
+  assert.deepEqual(await sent.json(), { option: { n: 4, label: 'tea-2-refined', file: 'tea-2-refined.html' }, engine: {agent:'byokit:opencode-go',model:'muse-spark-1.3-contributor'} });
   assert.notEqual(readFileSync(join(dir, 'tea-2-refined.logo', 'mark.svg'), 'utf8'), readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'));
   assert.ok(existsSync(join(dir, 'tea-2-refined.logo', 'favicon.ico')));
 });
@@ -410,4 +413,19 @@ test('logo: image-first exploration through the asset provider, and a second rou
     process.env.CI = 'true';
     assert.equal((await exploreImages({ spec: 'auto', count: 1, brief: 'x', dir })).off, 'CI never generates images');
   } finally { process.env.PATH = path; process.env.CI = ci; }
+});
+
+test('logo baseline and second-round provider failures refuse instead of returning earlier attempts', async t => {
+  for (const [flag, world, expected] of [['failBaseline', WORLD1, /Logo baseline failed/], ['failSecond', WORLD2, /Independent logo review failed/]]) await t.test(flag, async t => {
+    const dir = mkdtempSync(join(tmpdir(), 'fd-logo-refusal-'));
+    const server = await standIn([], { ...world, [flag]: true });
+    t.after(() => { server.close(); clear(dir); });
+    const env = { ...process.env, CI:'true', HOME:dir, XDG_CONFIG_HOME:dir, XDG_DATA_HOME:dir, TMPDIR:dir, FIRST_DRAFT_HOME:dir, OPENCODE_API_KEY:'synthetic', FIRST_DRAFT_TEST_BYOKIT_BASE:`http://127.0.0.1:${server.address().port}` };
+    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd:dir });
+    await run('init','--agent','byokit:opencode-go','--model','muse-spark-1.3-contributor');
+    const out = join(dir,'refused.html');
+    await assert.rejects(run('logo',"Umer's tea shop",'--out',out,'--options','1','--explore','none'), e => expected.test(e.stdout));
+    assert.equal(existsSync(out), false);
+    assert.equal(existsSync(join(dir,'refused.baseline','baseline.html')), false);
+  });
 });

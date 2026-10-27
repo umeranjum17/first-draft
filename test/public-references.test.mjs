@@ -52,7 +52,8 @@ else {
  appendFileSync(process.env.FIRST_DRAFT_HOME+'/native-inputs',JSON.stringify({messages,tools,system:args[args.indexOf('--system-prompt')+1],images:envelope.message.content.filter(c=>c.type==='image').length})+'\\n');
  const call=(name,a)=>({name,arguments:JSON.stringify(a)});
  let calls=[];
- if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
+ if(tools.some(t=>t.name==='write_page'))calls=[call('write_page',{html:"<!doctype html><html><body><h1>Umer notes</h1></body></html>"})];
+ else if(tools.some(t=>t.name==='identify_reference'))calls=[call('identify_reference',{name:'Vercel',url:process.env.FD_BRAND_ORIGIN+'/'} )];
  else if(tools.some(t=>t.name==='assess_reference_terms')){const q=JSON.parse(messages.at(-1).content),no=/prohibited/i.test(q.text);calls=[call('assess_reference_terms',{decision:process.env.FD_TERMS_DECISION||(no?'blocked':'allowed'),quote:no?'Automated screenshots are prohibited.':${JSON.stringify(PERMISSION)}})];}
  else if(tools.some(t=>t.name==='name_market_competitors')){const o=process.env.FD_BRAND_ORIGIN,all=[['Market A','market-a'],['Market B','market-b'],['Market C','market-c'],['Restricted Market','market-restricted'],['Robots Market','specific']];calls=[call('name_market_competitors',{products:(process.env.FD_COMPETITORS_FEW?all.slice(0,2):all).map(([name,path])=>({name,url:o+'/'+path}))})];}
  else if(tools.some(t=>t.name==='define_redesign_plan')){
@@ -102,6 +103,7 @@ else {
   const redesignOut=join(project,'redesigned');
   const redesigned=JSON.parse((await run('redesign',origin+'/product.html','Make the projects clearer','--no-references','--out',redesignOut,'--max-pages','2')).stdout);
   await promisify(execFile)(process.execPath,['--input-type=module','-e',`import assert from 'node:assert/strict';import {checkRedesign} from ${JSON.stringify(new URL('../src/redesign-check.mjs',import.meta.url).href)};await assert.rejects(checkRedesign({html:'<h1>Umer</h1>',agent:'byokit:claude',model:'claude-opus-5-5',timeoutMs:1}),/semantic review timed out after 1 ms/);`],{env,cwd:project,timeout:30000,maxBuffer:100000});
+  assert.equal(redesigned.made.judge.agent,'byokit:codex');assert.notEqual(redesigned.made.judge.model,redesigned.made.model);
   assert.equal(redesigned.made.files.length,1);
   assert.equal(redesigned.made.render_check,'checked');
   assert.equal(redesigned.made.files[0].self_check.reviews,5);

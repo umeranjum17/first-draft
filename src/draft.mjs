@@ -91,7 +91,7 @@ export async function draft({ prompt, brief: original, agent, model, timeoutMs, 
     try {
       const fixed = restored(await ask(`${brief}\n\nThe page below has defects the host measured. Fix exactly these and change nothing else:\n${found.map((f, i) => `${i + 1}. ${f}`).join('\n')}\nReply with the complete improved HTML document.\n\n${lighter(drawn.page)}`, references, 'repair'));
       return { ...(await timed('render', () => finish(fixed))), repaired: found };
-    } catch (e) { return { ...drawn, unrepaired: found, repair_failed: e.message }; }
+    } catch (e) { throw new Error(`The AI repair failed; no unrepaired page accepted: ${e.message}`); }
   };
   try {
     const source = restored(await ask(seed ? `${prompt}\n\nThe current page follows; change only what is asked and keep the rest.\nReply with the complete improved HTML document.\n\n${lighter(seed)}` : `${brief}\nReply with the complete HTML document.`, references));
