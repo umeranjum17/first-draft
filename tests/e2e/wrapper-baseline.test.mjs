@@ -85,6 +85,7 @@ const PAGE = (n) => `<!doctype html><html><head><meta charset="utf-8"><title>Not
 const GRID = PAGE('with a grid').replace('body{margin:0', 'body{background-image:linear-gradient(rgba(0,0,0,.6) 1px,transparent 1px);background-size:24px 24px;margin:0');
 const textOf = (j) => j.input.filter((m) => m.role === 'user').map((m) => typeof m.content === 'string' ? m.content : m.content.filter((p) => p.type === 'input_text').map((p) => p.text).join('\n')).join('\n');
 const kindOf = (j) => {
+  if (textOf(j).includes('Build one self-contained HTML page for this brief')) return 'critic-plain-page';
   const tool = j.tools?.[0]?.name;
   if (tool === 'plan_directions') return 'direction-plan';
   if (tool === 'write_page') return 'critic-plain-page';
@@ -104,10 +105,9 @@ async function standIn(seen, { score = 9, flowScore = score, grid = false, delay
       seen.push({ kind, j, peak });
       const needsFlow = j.tools?.[0]?.parameters?.required?.includes('flow');
       const call = { 'direction-plan': () => ['plan_directions', { directions: Array.from({ length: Number(textOf(j).match(/Plan (\d) directions/)[1]) }, (_, i) => ({ name: `Direction ${i + 1}`, learn_from: 'Notion', layout: `Layout ${i + 1}.`, type: 'Inter.', palette: '#fff and #111.', signature: `Detail ${i + 1}.` })) }],
-        'critic-plain-page': () => ['write_page', { html: PAGE('plain') }],
         'critic-review': () => [j.tools[0].name, { views: (j.tools.find((t) => ['review_designs', 'judge_designs'].includes(t.name)).parameters.properties.views.items.properties.view.enum).map((view) => ({ view, judged: 'what this view shows' })), design: { score, gaps: score < 10 ? ['the hero has no picture'] : [] }, plain: { score: 7, gaps: ['generic'] }, axes: Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'Fixture assessment'}])), ...(j.tools[0].parameters.properties.ai_side && {ai_side:{reads_as_ai:false,tells:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:true,reason:'Fixture hero'}))}), against: 'Notion', reads_as: 'a list of notes', fix: score < 10 ? 'Give the hero a picture.' : '', ...(needsFlow && { flow: { shell: { score: flowScore, reason: 'Every screen keeps the header, title, dots and next button' }, character: { score: flowScore, reason: 'The same character appears on every screen' } } }) }] }[kind]?.();
       const item = call ? { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: call[0], arguments: JSON.stringify(call[1]) }
-        : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'draw' && grid ? GRID : kind === 'draw' && /onboarding flow/.test(textOf(j)) ? PAGE(++pages).replace('<main>', Array.from({length:6}, (_, i) => `<section id="step-${i+1}" data-oc-screen="step-${i+1}"><h1>Step ${i+1}</h1></section>`).join('') + '<main>') : PAGE(++pages) }] };
+        : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'critic-plain-page' ? PAGE('plain') : kind === 'draw' && grid ? GRID : kind === 'draw' && /onboarding flow/.test(textOf(j)) ? PAGE(++pages).replace('<main>', Array.from({length:6}, (_, i) => `<section id="step-${i+1}" data-oc-screen="step-${i+1}"><h1>Step ${i+1}</h1></section>`).join('') + '<main>') : PAGE(++pages) }] };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(ev({ type: 'response.output_item.added', output_index: 0, item }) + ev({ type: 'response.output_item.done', output_index: 0, item })
         + ev({ type: 'response.completed', response: { id: `r${seen.length}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } } }));

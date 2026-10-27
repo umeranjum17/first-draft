@@ -499,6 +499,7 @@ else {
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-calls', args[args.indexOf('--model') + 1] + '\\n');
   let input = ''; for await (const c of process.stdin) input += c;
   if (input.includes('failure fixture')) process.exit(1);
+  if(input.includes('Build one self-contained HTML page for this brief')){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({html:'<!doctype html><html><body>Umer baseline</body></html>'})}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));process.exit(0);}
   const { messages, tools } = JSON.parse(input);
   if(tools[0]?.name==='write_page'){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'write_page',arguments:JSON.stringify({html:'<!doctype html><html><body>Umer baseline</body></html>'})}]})}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));process.exit(0);}
   const results = messages.filter((m) => m.role === 'toolResult');
