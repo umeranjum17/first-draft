@@ -1,0 +1,19 @@
+{
+  "label": "Demo fleet",
+  "owner": "Umer",
+  "projects": { "alpha": { "open": 4, "plan": 3 }, "beta-app": {} },
+  "lanes": [
+    { "title": "Build the main thing", "state": "building" },
+    { "title": "Get the layout pull request through CI", "state": "waiting" },
+    { "title": "Publish the release from the build server", "state": "blocked" },
+    { "title": "Choose phone layout", "state": "decision" }
+  ],
+  "queue": { "count": 3, "items": [
+    { "title": "Start the ready thing", "state": "ready" },
+    { "title": "After the ready thing", "state": "waiting" },
+    { "title": "Wait for the captain's call", "state": "held-for-captain" }
+  ] },
+  "landedToday": 2,
+  "waitingOnMe": 3,
+  "laneStates": ["building", "CI", "blocked", "decision"]
+}
