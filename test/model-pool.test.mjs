@@ -3,7 +3,7 @@
 // reaches output or a log. No model, key or network: every CLI is a local stand-in that records what it was handed.
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -18,7 +18,7 @@ const args = process.argv.slice(2), root = process.env.FIRST_DRAFT_HOME, quota =
 appendFileSync(root + '/claude.log', JSON.stringify({ account: process.env.CLAUDE_CONFIG_DIR ?? null, args }) + '\\n');
 const answer = (structured_output) => console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output, usage: { input_tokens: 5, output_tokens: 6 } }));
 if (args.includes('auth')) {
-  console.log(JSON.stringify({ loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty' }));
+  console.log(JSON.stringify({ loggedIn: !process.env.FD_AUTH_OUT || [root+'/a',root+'/b'].includes(process.env.CLAUDE_CONFIG_DIR), authMethod: 'claude.ai', apiProvider: 'firstParty' }));
 } else {
   for await (const line of process.stdin); // the prompt
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) throw Error('an API credential reached the child');
@@ -69,16 +69,22 @@ test('pooled model calls: a limit re-picks the account, a dry pool falls over, n
     FIRST_DRAFT_ACCOUNT_POOL: join(dir, 'account-pool'), FIRST_DRAFT_MODEL_POOL: 'fm-model-pool',
     ANTHROPIC_API_KEY: SECRET, ANTHROPIC_AUTH_TOKEN: SECRET };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, maxBuffer: 100_000_000 });
+  const pageRun = (file) => promisify(execFile)(process.execPath, ['--input-type=module', '-e', `
+    import { writePage } from ${JSON.stringify(new URL('../src/byokit.mjs', import.meta.url).href)};
+    import { writeFileSync } from 'node:fs';
+    const result = await writePage({ route:'claude', model:'claude-opus-5-5', system:'Notes', prompt:'Notes for Umer', timeoutMs:60000 });
+    writeFileSync(process.argv[1], result.html); console.log(JSON.stringify(result));`, file], { env });
   const text = (file) => readFileSync(join(dir, file), 'utf8');
   const log = (file) => text(file).trim().split('\n').map(JSON.parse);
   const seen = [];
   const note = (r) => { seen.push(r.stdout, r.stderr); return r; };
 
   note(await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5'));
+  writeFileSync(join(dir, 'pool.log'), ''); // Startup discovery is separate from the measured generation picks.
 
   // One page: the picked account is out of usage, so the helper rests it and the next account answers.
   const page = join(dir, 'pooled.html');
-  note(await run('make', 'Notes for Umer', '--out', page, '--options', '1', '--no-critic'));
+  note(await pageRun(page));
   assert.match(readFileSync(page, 'utf8'), /Notes from b/, 'the second account answered after the first hit its limit');
   assert.deepEqual(log('claude.log').filter((c) => c.args.includes('-p')).map((c) => c.account), [join(dir, 'a'), join(dir, 'b')]);
   const pool = log('pool.log');
@@ -98,23 +104,27 @@ test('pooled model calls: a limit re-picks the account, a dry pool falls over, n
   assert.match(engine.stdout, /"name":"done"/);
   assert.deepEqual(log('pool.log').map((p) => p.verb), ['pick', 'next', 'pick', 'next'], 'the engine call picked and re-picked too');
 
-  // Every Claude account under its floor: the helper offers a route this computer cannot run, then one it can.
+  // A cross-engine pool pick is refused before calling it: otherwise the generator could silently become its judge.
   env.FD_POOL_LOW = '1';
   const fallen = join(dir, 'fallen-over.html');
-  note(await run('make', 'Notes for Umer', '--out', fallen, '--options', '1', '--no-critic'));
-  assert.match(readFileSync(fallen, 'utf8'), /Notes from gpt-6\.1-sol/, 'the page came from the route the pool fell over to');
-  assert.ok(log('codex.log').some((args) => args.includes('--model') && args[args.indexOf('--model') + 1] === 'gpt-6.1-sol'));
-  assert.equal(log('pool.log').at(-1).request.cause, 'unavailable', 'a route this computer cannot run is skipped, not retried');
+  await assert.rejects(pageRun(fallen), e => /account pool changed the resolved engine/.test(e.stderr));
+  assert.equal(existsSync(fallen), false);
+  delete env.FD_POOL_LOW;
 
   // Without the helper: the plain BYOKit route answers, unchanged, and the pool is never consulted.
   delete env.FIRST_DRAFT_ACCOUNT_POOL;
   const before = log('pool.log').length;
   const plain = join(dir, 'plain.html');
-  note(await run('make', 'Notes for Umer', '--out', plain, '--options', '1', '--no-critic'));
+  note(await pageRun(plain));
   assert.match(readFileSync(plain, 'utf8'), /Notes from the installed account/);
   assert.equal(log('pool.log').length, before, 'no helper, no pool call');
 
+  // BYOKit also probes a pooled account when the CLI's default login is signed out.
+  env.FD_AUTH_OUT = '1'; env.FIRST_DRAFT_ACCOUNT_POOL = join(dir, 'account-pool');
+  const pooled = JSON.parse((await run('doctor')).stdout);
+  assert.equal(pooled.ready, true); assert.equal(pooled.engine.agent, 'byokit:claude');
+
   // No credential value reaches output, a log or a page.
-  for (const written of [...seen, readFileSync(page, 'utf8'), readFileSync(fallen, 'utf8'), readFileSync(plain, 'utf8'), text('claude.log'), text('codex.log'), text('pool.log')])
+  for (const written of [...seen, readFileSync(page, 'utf8'), readFileSync(plain, 'utf8'), text('claude.log'), text('pool.log')])
     assert.doesNotMatch(written, new RegExp(SECRET), 'a credential value reached output or a log');
 });

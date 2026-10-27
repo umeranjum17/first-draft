@@ -1,5 +1,5 @@
 // BYOKit owns every model call: plan keys, api keys or the user's installed subscription CLI.
-import { accessSync, constants, mkdirSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
 import { modelPool, poolNext, poolPick } from './model-pool.mjs';
@@ -32,8 +32,22 @@ function launch(route) {
 }
 export const installedCodex = () => launch('codex'); // Asset adapter reuses BYOKit's installed account by path.
 
+// Pool accounts may be signed in even when the default account is not; BYOKit probes both.
+async function pooledStatus(route, model) {
+  const pool = modelPool();
+  if (!pool) return;
+  const picked = await poolPick(pool, { model, deadline: Math.ceil(Date.now() / 1000) + 30, attempted: [] });
+  if (picked.provider !== route || picked.model !== model) return;
+  const folder = route === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+  if (Object.keys(picked.set).some(k => k !== folder)) throw new Error(`The ${route} pool account has unsupported environment settings`);
+  const { bin } = await installed(route), { cliAccounts } = await import('@byokit/accounts/cli');
+  const env = Object.fromEntries(Object.keys(process.env).filter(k => !/KEY|TOKEN|SECRET/i.test(k) && !picked.unset.includes(k)).map(k => [k, process.env[k]]));
+  const accounts = cliAccounts({ stateDir: join(process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft'), 'cli'), bins: { [route]: bin }, env: { ...env, ...picked.set }, installed: true });
+  return accounts.status(`installed-${route}`);
+}
+
 // The installed-CLI adapters a pooled answer can run, by the provider the pool names.
-const ADAPTERS = { claude: ['@byokit/decide/claude-code', 'claudeCode'], codex: ['@byokit/decide/codex', 'codex'], pi: ['@byokit/decide/pi', 'pi'] };
+const ADAPTERS = { claude: ['@byokit/decide/claude-code', 'claudeCode'], codex: ['@byokit/decide/codex', 'codex'] };
 const backendOn = async (route, { bin, account, model, timeoutMs }) => {
   const [path, name] = ADAPTERS[route];
   return (await import(path))[name]({ bin, ...(account && { account }), model: route === 'codex' ? model.replace(/^openai-codex\//, '') : model, timeoutMs });
@@ -41,7 +55,7 @@ const backendOn = async (route, { bin, account, model, timeoutMs }) => {
 
 // One answer from an installed CLI. With the optional account pool installed the helper names the account folder (a path, never a
 // credential) and first-draft moves on when that account runs out; without it, BYOKit's installed account answers, exactly as before.
-// A CLI that cannot answer counts as a limit on a pooled account: the helper rests it and the next account or route is asked.
+// A limit may select another account, but never a different engine/model: that would invalidate attribution and judge independence.
 async function cliAnswer(route, { model, images, timeoutMs, signal }, call) {
   const pool = modelPool();
   if (!pool) {
@@ -57,13 +71,11 @@ async function cliAnswer(route, { model, images, timeoutMs, signal }, call) {
       ? await poolPick(pool, { model, deadline, attempted })
       : await poolNext(pool, { selection, cause, model, deadline, attempted });
     attempted.push(answer.selection_id);
-    const on = ADAPTERS[answer.provider] ? answer.provider : undefined, bin = on && cliBin(on);
-    if (!on || !bin || (images.length && on === 'pi')) { // not installable here, or a CLI that takes no images: ask for the next one
-      selection = answer; cause = 'unavailable';
-      continue;
-    }
+    if (answer.provider !== route || answer.model.replace(/^openai-codex\//, '') !== model.replace(/^openai-codex\//, '')) throw new Error(`The account pool changed the resolved engine ${route} / ${model} to ${answer.provider} / ${answer.model}; no call made`);
+    const on = answer.provider, bin = cliBin(on);
+    if (!bin) throw engineRequired(on, 'The resolved engine is no longer installed');
     try {
-      return await call(await backendOn(on, { bin, ...(on === 'claude' && { account: { set: answer.set, unset: answer.unset } }), model: answer.model, timeoutMs: left }));
+      return await call(await backendOn(on, { bin, account: { set: answer.set, unset: answer.unset }, model: answer.model, timeoutMs: left }));
     } catch (e) {
       if (e.code === 'aborted' || signal?.aborted) throw e;
       // A model that answered off-schema is not an account limit: report it rather than spending the rest of the pool on it.
@@ -79,25 +91,62 @@ export const OUTPUT_CAP = 16_384;
 const KEY_VIA = ['plan_key', 'key'];
 
 // The route an agent names as byokit:<route>, or undefined.
-export const routeOf = (agent) => agent?.match(/^byokit:(.+)/)?.[1];
+export const routeOf = (agent) => typeof agent === 'string' ? agent.match(/^byokit:(.+)/)?.[1] : undefined;
 
 export async function readySubscriptions() {
   const rows = await Promise.all(CLI_ROUTES.map(async (route) => {
     if (!cliBin(route)) return [];
     try {
       const { accounts } = await installed(route);
-      const row = await accounts.status(`installed-${route}`);
+      let row = await accounts.status(`installed-${route}`);
+      if (row.state !== 'ready' || (route === 'claude' && row.method !== 'subscription')) row = await pooledStatus(route, DEFAULT_MODELS[route]) ?? row;
       if (row.state !== 'ready' || (route === 'claude' && row.method !== 'subscription')) return [];
       return [{ route: `byokit:${route}`, label: route === 'claude' ? 'Claude subscription' : 'ChatGPT subscription', init: `first-draft-axi init --agent byokit:${route} --model <model>` }];
-    } catch { return []; } // Discovery is optional; doctor on a configured route reports its exact failure.
+    } catch { return []; } // Unusable candidates are skipped; doctor on a configured route reports its exact failure.
   }));
   return rows.flat();
 }
 
 // Ready subscriptions first, then the other BYOKit routes.
 export async function readyRoutes() {
-  const keys = (await import('@byokit/accounts')).routes().filter((r) => KEY_VIA.includes(r.via) && r.readiness === 'ready').flatMap((r) => (r.aliases?.length ? r.aliases : [r.id]));
+  const keys = (await import('@byokit/accounts')).routes().filter((r) => KEY_VIA.includes(r.via) && r.readiness === 'ready' && Boolean(process.env[r.upstream.method])).flatMap((r) => (r.aliases?.length ? r.aliases : [r.id]));
   return [...new Set([...(await readySubscriptions()).map((r) => routeOf(r.route)), ...keys])];
+}
+
+// Subscription/API aliases of one producer are one engine, not independent judges.
+export async function engineOf(agent) {
+  const route = routeOf(agent), provider = CLI_ROUTES.includes(route) ? route : (await planKey(route))?.upstream.id;
+  return provider === 'openai' ? 'codex' : provider === 'anthropic' ? 'claude' : provider;
+}
+
+export const DEFAULT_MODELS = { claude: 'claude-sonnet-5-5', codex: 'gpt-6.1-sol' };
+export const engineInstruction = (route) => route === 'codex' ? 'Sign in to ChatGPT: codex login' : 'Sign in to Claude: claude auth login';
+export const engineRequired = (route, reason = 'No usable AI engine') => Object.assign(new Error(`${reason}. ${engineInstruction(route)}`), { code: 'NO_ENGINE' });
+
+// Only BYOKit's ready, authenticated sources are candidates. Never infer authentication from saved configuration.
+export async function resolveEngine(c = {}, { exclude, subscription = false, images = false } = {}) {
+  const excluded = exclude && await engineOf(exclude.agent);
+  const candidates = [...(c.agent ? [{ agent: c.agent, model: c.model }] : [])];
+  for (const route of await readyRoutes()) {
+    if (subscription && !CLI_ROUTES.includes(route)) continue;
+    let model = !c.agent && c.model ? c.model : DEFAULT_MODELS[route];
+    if (!model) {
+      const key = await planKey(route);
+      const { getBuiltinModels } = await import('@earendil-works/pi-ai/providers/all');
+      model = getBuiltinModels(key.upstream.id).find((m) => !images || m.input?.includes('image'))?.id;
+    }
+    if (model) candidates.push({ agent: `byokit:${route}`, model });
+  }
+  for (const candidate of candidates) {
+    const route = routeOf(candidate.agent);
+    if (!route || typeof candidate.model !== 'string' || !candidate.model.trim() || (subscription && !CLI_ROUTES.includes(route)) || (exclude && await engineOf(candidate.agent) === excluded)
+      || (exclude && candidate.model.replace(/^openai-codex\//, '') === exclude.model.replace(/^openai-codex\//, ''))) continue;
+    if ((await doctor(route, candidate.model)).status !== 'ok' || (images && !await imageSupport(route, candidate.model))) continue;
+    return { ...c, ...candidate, timeoutMs: c.timeoutMs ?? 600_000 };
+  }
+  const openCodeStore = join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'opencode');
+  const unsupported = !exclude && ['auth.json', 'opencode.db'].some((file) => existsSync(join(openCodeStore, file)));
+  throw engineRequired(exclude && routeOf(c.agent) === routeOf(exclude.agent) ? (routeOf(exclude.agent) === 'claude' ? 'codex' : 'claude') : routeOf(c.agent), exclude ? 'No independent AI judge is usable' : unsupported ? 'OpenCode login storage is present but is not usable by this build; no usable AI engine' : 'No usable AI engine');
 }
 
 export const modelRouteProblem = (route, model) => route !== 'claude' && (/anthropic|claude|opus|sonnet|haiku/i.test(model ?? '') || /anthropic/i.test(route ?? ''))
@@ -107,6 +156,7 @@ const planKey = async (route) => (await import('@byokit/accounts')).routes().fin
 const signIn = async (key) => `set ${key.upstream.method} to your ${key.name} key, then: first-draft-axi doctor`;
 
 async function check(route, model) {
+  if (typeof model !== 'string' || !model.trim()) return 'A real engine needs a model id';
   const refusal = modelRouteProblem(route, model);
   if (refusal) return refusal;
   const [major, minor] = process.versions.node.split('.').map(Number);
@@ -163,7 +213,6 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
   if (!secret) throw new Error(`${key.upstream.method} is not set: ${await signIn(key)}`);
   const [{ Accounts, memoryStore }, { overrideStore }, found] = await Promise.all([
     import('@byokit/accounts'), import('@byokit/secrets'), modelFor(key.upstream.id, model)]);
-  const base = process.env.FIRST_DRAFT_TEST_BYOKIT_BASE; // tests only: a stand-in for the provider
   const account = `${key.id}.${MEMBER}`, index = memoryStore();
   const accounts = new Accounts({ store: () => index, keyStore: () => overrideStore({ [`accounts.${account}`]: secret }) });
   try {
@@ -175,7 +224,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
         ...images.map((image) => ({ type: 'image', mimeType: image.mime, data: image.dataUrl.slice(image.dataUrl.indexOf(',') + 1) })),
       ] }) };
     }
-    return await accounts.respondKey(MEMBER, { account, model: { ...found, ...(base && { baseUrl: base }) },
+    return await accounts.respondKey(MEMBER, { account, model: found,
       context,
       options: { signal, ...(maxTokens && { maxTokens: Math.min(found.maxTokens ?? Infinity, maxTokens * 4) }) } }); // thinking models spend the cap before the page; the model's own limit bounds it
   } catch (e) {
@@ -215,7 +264,8 @@ export async function doctor(route, model) {
   if (CLI_ROUTES.includes(route)) {
     try {
       const { accounts } = await installed(route);
-      const row = await accounts.status(`installed-${route}`);
+      let row = await accounts.status(`installed-${route}`);
+      if (row.state !== 'ready' || (route === 'claude' && row.method !== 'subscription')) row = await pooledStatus(route, model) ?? row;
       if (row.state === 'ready' && route === 'claude' && row.method !== 'subscription') return { label, status: 'fail', detail: 'Claude must be signed in with a Claude subscription, not an API key or another billing route' };
       return { label, status: row.state === 'ready' ? 'ok' : 'fail', detail: row.state === 'ready' ? `installed CLI; model ${model} (availability not probed); adapter supports image input` : row.cause || row.state };
     } catch (e) { return { label, status: 'fail', detail: e.message }; }

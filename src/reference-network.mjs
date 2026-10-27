@@ -1,7 +1,6 @@
 // Anonymous, bounded public GETs. The browser never makes its own network requests.
 import { lookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
-import { request as httpRequest } from 'node:http';
 import { BlockList, isIP } from 'node:net';
 
 export const REFERENCE_UA = 'FirstDraftReference/1.0 (+https://github.com/umeranjum17/first-draft; anonymous design reference capture)';
@@ -9,17 +8,10 @@ const denied = new BlockList();
 for (const [ip, bits] of [['0.0.0.0',8],['10.0.0.0',8],['100.64.0.0',10],['127.0.0.0',8],['169.254.0.0',16],['172.16.0.0',12],['192.0.0.0',24],['192.0.2.0',24],['192.88.99.0',24],['192.168.0.0',16],['198.18.0.0',15],['198.51.100.0',24],['203.0.113.0',24],['224.0.0.0',4],['240.0.0.0',4]]) denied.addSubnet(ip, bits, 'ipv4');
 for (const [ip, bits] of [['2001::',23],['2001:db8::',32],['2002::',16],['3fff::',20]]) denied.addSubnet(ip, bits, 'ipv6');
 const publicIP = (ip) => isIP(ip) === 4 ? !denied.check(ip, 'ipv4') : isIP(ip) === 6 && /^[23][0-9a-f]{3}:/i.test(ip) && !denied.check(ip, 'ipv6');
-const fixtureOrigin = () => {
-  const value = process.env.FIRST_DRAFT_TEST_REF_ORIGIN;
-  if (!value) return null;
-  const u = new URL(value);
-  if (u.protocol !== 'http:' || u.hostname !== '127.0.0.1' || !u.port || u.pathname !== '/' || u.search || u.hash || u.username || u.password) throw new Error('FIRST_DRAFT_TEST_REF_ORIGIN must name one exact loopback HTTP fixture origin');
-  return u.origin;
-};
 // A query string is refused unless `queries` allows it (the library's same-origin images and styles, e.g. /_next/image?url=...).
 export function referenceUrl(value, queries = false) {
   const u = new URL(value);
-  if ((u.protocol !== 'https:' && u.origin !== fixtureOrigin()) || u.username || u.password || (u.search && !queries) || (u.port && u.port !== '443' && u.origin !== fixtureOrigin())) throw new Error('Reference candidates need a public HTTPS URL without credentials, query strings or a custom port');
+  if (u.protocol !== 'https:' || u.username || u.password || (u.search && !queries) || (u.port && u.port !== '443')) throw new Error('Reference candidates need a public HTTPS URL without credentials, query strings or a custom port');
   u.hash = '';
   return u;
 }
@@ -62,13 +54,13 @@ export class ReferenceNetwork {
   async raw(url, limit) {
     this.abort.signal.throwIfAborted();
     if (++this.count > this.cap.requests) throw new Error(`Reference request cap exceeded (${this.cap.requests})`);
-    const u = referenceUrl(url, this.queries), fixture = u.origin === fixtureOrigin();
-    const addresses = fixture ? [{ address: '127.0.0.1', family: 4 }] : isIP(u.hostname.replace(/^\[|\]$/g,'')) ? [{ address: u.hostname.replace(/^\[|\]$/g,''), family: isIP(u.hostname.replace(/^\[|\]$/g,'')) }] : await lookup(u.hostname, { all: true });
-    if (!addresses.length || (!fixture && addresses.some(a => !publicIP(a.address)))) throw new Error(`Reference host is not entirely public: ${u.hostname}`);
+    const u = referenceUrl(url, this.queries);
+    const addresses = isIP(u.hostname.replace(/^\[|\]$/g,'')) ? [{ address: u.hostname.replace(/^\[|\]$/g,''), family: isIP(u.hostname.replace(/^\[|\]$/g,'')) }] : await lookup(u.hostname, { all: true });
+    if (!addresses.length || addresses.some(a => !publicIP(a.address))) throw new Error(`Reference host is not entirely public: ${u.hostname}`);
     const signal = AbortSignal.any([this.abort.signal, AbortSignal.timeout(10_000)]);
     return await new Promise((ok, no) => {
       const pinned = addresses[0];
-      const req = (fixture ? httpRequest : httpsRequest)(u, { signal, method: 'GET', agent: false, // A top-level navigation, as a browser sends it: some sites answer a bare GET with a bot challenge (DuckDuckGo: HTTP 202).
+      const req = httpsRequest(u, { signal, method: 'GET', agent: false, // A top-level navigation, as a browser sends it: some sites answer a bare GET with a bot challenge (DuckDuckGo: HTTP 202).
         headers: { 'user-agent': REFERENCE_UA, accept: '*/*', 'accept-encoding': 'identity', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-user': '?1', 'upgrade-insecure-requests': '1' }, lookup: (_host, options, cb) => cb(null, options.all ? [pinned] : pinned.address, pinned.family) }, res => {
         let size = 0; const chunks = [];
         res.on('data', chunk => { size += chunk.length; this.bytes += chunk.length; if (size > limit || this.bytes > this.cap.bytes) res.destroy(new Error(`Reference byte cap exceeded (2 MB per resource, ${this.cap.bytes / 1e6} MB total)`)); else chunks.push(chunk); });

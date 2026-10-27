@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { theme } from './fixtures/plain-page.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
-const PAGE = '<!doctype html><html><body><h1>Umer’s notes</h1><a href="#detail">Open note</a><section id="detail" data-oc-screen="detail">A note</section></body></html>';
+const PAGE = theme('<!doctype html><html><body><h1>Umer’s notes</h1><a href="#detail">Open note</a><section id="detail" data-oc-screen="detail">A note</section></body></html>');
 
 test('installed Claude: no-paid doctor, account launch, engine make/refine and subscription refusals', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-claude-'));
@@ -24,11 +25,14 @@ if (args.includes('auth')) {
   let input = ''; for await (const c of process.stdin) input += c;
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) throw Error('API credential reached child');
   if (!args.includes('--safe-mode') || !args.includes('--strict-mcp-config')) throw Error('unsafe execution');
+  if (args[args.indexOf('--json-schema') + 1].includes('write_page')) {
+    console.log(JSON.stringify({ type:'result', subtype:'success', is_error:false, structured_output:{text:'',calls:[{name:'write_page',arguments:JSON.stringify({html:'<!doctype html><html><body><h1>Umer baseline</h1></body></html>'})}]}, usage:{input_tokens:0,output_tokens:0} })); process.exit(0);
+  }
   if (args[args.indexOf('--model') + 1] !== 'claude-opus-5-5') throw Error('model changed');
   if (args[args.indexOf('--json-schema') + 1].includes('"html"')) { // make's one-call page (draft.mjs): the page comes back as one string
     const content = JSON.parse(input).message.content;
     if (content.filter(c => c.type === 'image').length !== 3 || !args[args.indexOf('--system-prompt') + 1].includes('# Frontend Design')) throw Error('one-call page without its references or guidance');
-    console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { html: '<!doctype html><html><body><h1>Umer’s one-call notes</h1></body></html>' }, usage: { input_tokens: 3, output_tokens: 9 } }));
+    console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { html: '<!doctype html><html><head><style>:root{color-scheme:light dark}body{background:light-dark(#fff,#111);color:light-dark(#111,#eee)}</style></head><body><h1>Umer’s one-call notes</h1></body></html>' }, usage: { input_tokens: 3, output_tokens: 9 } }));
     process.exit(0);
   }
   if (process.env.FD_BAD_ONCE && !existsSync(root + '/bad-once')) { // the model breaks the JSON of a call's arguments once
@@ -53,15 +57,12 @@ if (args.includes('auth')) {
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: calls.length ? '' : 'Ready', calls }, usage: { input_tokens: 7, output_tokens: 8 } }));
 }
 `, { mode: 0o700 });
-  writeFileSync(join(dir, 'codex'), `#!${process.execPath}
-import { createInterface } from 'node:readline';
-createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(line); if(q.id) console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}})); });
-`, { mode: 0o700 });
-  const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, FIRST_DRAFT_CHROME: '/nonexistent', ANTHROPIC_API_KEY: 'synthetic-never-deliver', ANTHROPIC_AUTH_TOKEN: 'synthetic-never-deliver' };
+  writeFileSync(join(dir, 'codex'), `#!${process.execPath}\nimport ${JSON.stringify(new URL('./fixtures/judge-bridge.mjs', import.meta.url).href)};\n`, { mode: 0o700 });
+  const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, XDG_STATE_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, ANTHROPIC_API_KEY: 'synthetic-never-deliver', ANTHROPIC_AUTH_TOKEN: 'synthetic-never-deliver' };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args, ...(args[0] === 'make' ? ['--options', '1', '--engine'] : [])], { env });
   await promisify(execFile)(join(dir, 'claude'), ['auth', 'status'], { env });
   const expected = ['Claude subscription: first-draft-axi init --agent byokit:claude --model <model>', 'ChatGPT subscription: first-draft-axi init --agent byokit:codex --model <model>'];
-  await assert.rejects(run('make', 'Notes', '--out', join(dir, 'no-agent.html')), e => { assert.deepEqual(JSON.parse(e.stdout).help, expected); return true; });
+  assert.deepEqual(JSON.parse((await run('doctor')).stdout).engine, { agent:'byokit:claude', model:'claude-sonnet-5-5' });
   const init = JSON.parse((await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5')).stdout);
   assert.deepEqual(init.subscriptions.map(s => `${s.label}: ${s.init}`), expected);
   const doctor = JSON.parse((await run('doctor')).stdout);
@@ -80,8 +81,8 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   const made = JSON.parse((await run('make', 'Notes for Umer', '--out', out, ...refs)).stdout).made;
   assert.equal(made.model, 'claude-opus-5-5');
   assert.equal(made.files[0].turns, 5);
-  assert.equal(made.tokens_in, 35);
-  assert.equal(made.tokens_out, 40);
+  assert.equal(made.tokens_in, 36);
+  assert.equal(made.tokens_out, 41);
   assert.match(readFileSync(out, 'utf8'), /Content-Security-Policy/);
   assert.doesNotMatch(readFileSync(out, 'utf8'), /data:image/);
   await run('refine', out, 'warmer palette', '--out', join(dir, 'warm.html'), ...refs);
@@ -90,9 +91,9 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   const page = join(dir, 'page.html'); // the default make: one page from one call through the same subscription route
   const one = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'Notes for Umer', '--out', page, '--options', '1', ...refs], { env })).stdout).made;
   assert.equal(one.files[0].turns, 1);
-  assert.equal(one.tokens_out, 9);
+  assert.equal(one.tokens_out, 10);
   assert.match(readFileSync(page, 'utf8'), /Umer’s one-call notes/);
-  const generated = () => calls().filter(args => args.includes('-p')).length;
+  const generated = () => calls().filter(args => args.includes('-p') && !args[args.indexOf('--json-schema') + 1]?.includes('write_page')).length;
   assert.equal(generated(), 11);
   writeFileSync(join(dir, 'bad.png'), Buffer.from('89504e470d0a1a0a', 'hex'));
   writeFileSync(join(dir, 'not-image.jpg'), 'not an image');
@@ -108,13 +109,15 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   await assert.rejects(run('refine', out, 'warmer', '--out', join(dir, 'bad.html'), ...Array(7).fill(['--ref', refs[1]]).flat()), e => /at most 6/.test(e.stdout));
   for (const auth of ['out', 'api_key', 'bedrock', 'vertex', 'other']) {
     env.FD_AUTH = auth;
-    await assert.rejects(run('doctor'), e => /"ready":false/.test(e.stdout));
+    assert.equal(JSON.parse((await run('doctor')).stdout).engine.agent, 'byokit:codex');
     await assert.rejects(run('make', 'Notes', '--out', join(dir, 'refused.html')));
     assert.equal(generated(), 11, `${auth} never spends`);
   }
+  env.MINIMAX_API_KEY = 'synthetic';
   await run('init', '--agent', 'byokit:minimax:key', '--model', 'MiniMax-M3.1-Flash-Preview');
   await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /does not support reference images; none were sent/.test(e.stdout));
   assert.equal(generated(), 11);
+  delete env.MINIMAX_API_KEY;
   await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
   delete env.FD_AUTH;
   const config = join(dir, 'config.json'), original = readFileSync(config, 'utf8');
@@ -138,6 +141,6 @@ createInterface({input:process.stdin}).on('line', line => { const q=JSON.parse(l
   assert.equal(generated(), 17, 'an answer whose call arguments were not JSON was asked again once, and the five turns then ran');
   delete env.FD_BAD_ONCE;
   env.PATH = dir + '/missing';
-  await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /needs ImageMagick/.test(e.stdout));
-  await assert.rejects(run('doctor'), e => /claude is not installed/.test(e.stdout));
+  await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /claude auth login/.test(e.stdout));
+  await assert.rejects(run('doctor'), e => /claude auth login/.test(e.stdout));
 });

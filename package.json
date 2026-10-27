@@ -29,7 +29,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
-    "test": "npm run build && node --test test/*.test.mjs tests/e2e/*.test.mjs"
+    "test": "npm run build && node --import ./test/fixtures/provider-hooks.mjs --test --test-concurrency=1 test/*.test.mjs tests/e2e/*.test.mjs"
   },
   "dependencies": {
     "@byokit/accounts": "0.29.0",

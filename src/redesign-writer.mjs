@@ -10,7 +10,7 @@ import { directionText } from './styles.mjs';
 export const RESPONSE_DEADLINE_MS=420000;
 const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fields=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===keys.length&&keys.every(k=>Object.hasOwn(v,k));
-export async function makeRedesign({prompt,agent,model,timeoutMs=600000,redesignPages,references=[],referenceBrief,diagnostics,direction,screenAttemptsUsed=0,planAttemptsUsed=0}){
+export async function makeRedesign({prompt,agent,model,timeoutMs=600000,redesignPages,references=[],referenceBrief,diagnostics,direction,screenAttemptsUsed=0,planAttemptsUsed=0,review:judge}){
   if(!Number.isInteger(screenAttemptsUsed)||screenAttemptsUsed<0||screenAttemptsUsed>2||!Number.isInteger(planAttemptsUsed)||planAttemptsUsed<0||planAttemptsUsed>1)throw Error('Used attempts must be screen 0-2 and plan 0-1; budgets cannot be increased');
   if(!redesignPages?.length||new Set(redesignPages.map(p=>p.id)).size!==redesignPages.length)throw Error('Per-screen writer needs distinct discovered screen IDs');
   const used={tokens_in:0,tokens_out:0},tools={},attempts=[],semantic=[];let turns=0;
@@ -35,7 +35,7 @@ export async function makeRedesign({prompt,agent,model,timeoutMs=600000,redesign
     planFeedback=[problem];if(attempt===2)throw Error('Invalid shared redesign plan after 2 attempts: '+problem+'; no screens accepted');
   }
   const document=parts=>`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(plan.title)}</title><style>${plan.css}</style></head><body>${parts.join('\n')}</body></html>`;
-  const review=async(html,page)=>{const {screenshots,...sourceScreen}=page;const r=await checkRedesign({html,agent,model,timeoutMs,screen:sourceScreen,sharedStyle:plan.css,sourceIntent:prompt,references});semantic.push(r.checks);used.tokens_in+=r.tokens_in;used.tokens_out+=r.tokens_out;return r.checks;};
+  const review=async(html,page)=>{const {screenshots,...sourceScreen}=page;const r=await checkRedesign({html,agent,model,timeoutMs,review:judge,screen:sourceScreen,sharedStyle:plan.css,sourceIntent:prompt,references});semantic.push(r.checks);used.tokens_in+=r.tokens_in;used.tokens_out+=r.tokens_out;return r.checks;};
   const sections=[],screenReviews=[],links=p=>JSON.stringify(p.links.map(l=>[l.label,l.target,l.hash]));
   for(const page of redesignPages){
     // Pages with identical source title, text and links are one state reached twice: reuse the accepted markup so the aliases cannot drift.

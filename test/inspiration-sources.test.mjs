@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { installJudge } from '../journeys/fixtures/judge-cli.mjs';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const PERMISSION = 'Anonymous automated browsers may store screenshots of this entire website privately as visual design references. Do not copy our text or assets into generated designs.';
@@ -64,7 +65,8 @@ appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-inputs', JSON.stringify({
 const call = (name, a) => ({ name, arguments: JSON.stringify(a) });
 const has = (n) => tools.some((t) => t.name === n);
 let calls = [];
-if (has('plan_reference_searches')) calls = [call('plan_reference_searches', { product_type: 'mobile shift planning', queries: ['shift planning app', 'nurse rota ui'] })];
+if (has('write_page')) calls = [call('write_page', { html: process.env.FD_PAGE })];
+else if (has('plan_reference_searches')) calls = [call('plan_reference_searches', { product_type: 'mobile shift planning', queries: ['shift planning app', 'nurse rota ui'] })];
 else if (has('score_benchmark')) {
   const q = JSON.parse(messages.at(-1).content.split('\\n\\nYour last')[0]), refs = q.captures.filter((c) => c.role === 'reference');
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/benchmark-inputs', JSON.stringify({ q, system: args[args.indexOf('--system-prompt') + 1], images: envelope.message.content.filter((c) => c.type === 'image').length }) + '\\n');
@@ -78,6 +80,7 @@ else { const results = messages.filter((m) => m.role === 'toolResult');
     : results.length === 3 ? [call('done', { path: 'index.html' })] : []; }
 console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, structured_output: { text: '', calls }, usage: { input_tokens: 7, output_tokens: 8 } }));
 `, { mode: 0o700 });
+  installJudge(bin, { preserveClaude: true });
   // Stand-in adb: one attached emulator, a package with a launcher, and a real PNG from its screen.
   writeFileSync(join(bin, 'adb'), `#!${process.execPath}
 import { readFileSync } from 'node:fs';
@@ -100,7 +103,7 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
 
   const out = join(project, 'rota.html');
-  const made = JSON.parse((await run('make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--no-critic', '--inspiration', '--app', 'com.umer.rota', '--device', 'emulator-test', '--out', out)).stdout);
+  const made = JSON.parse((await run('make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--inspiration', '--app', 'com.umer.rota', '--device', 'emulator-test', '--out', out)).stdout);
 
   // 1. Search first: both queries over the open web and Hacker News, and the subreddits recorded as refused.
   const sources = JSON.parse(readFileSync(`${out}.sources.json`, 'utf8'));
@@ -220,7 +223,7 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   const noAdbBin = join(dir, 'no-adb'); mkdirSync(noAdbBin);
   writeFileSync(join(noAdbBin, 'claude'), readFileSync(join(bin, 'claude')), { mode: 0o700 }); // the model is there, the emulator is not
   const noAdb = { ...base, PATH: `${noAdbBin}:/usr/bin:/bin`, ANDROID_HOME: '', ANDROID_SDK_ROOT: '' };
-  const second = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--no-critic', '--inspiration', '--app', 'com.umer.rota', '--out', join(project, 'again.html')], { env: noAdb, cwd: project, timeout: 120_000, maxBuffer: 12_000_000 })).stdout);
+  const second = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--inspiration', '--app', 'com.umer.rota', '--out', join(project, 'again.html')], { env: noAdb, cwd: project, timeout: 120_000, maxBuffer: 12_000_000 })).stdout);
   const again = JSON.parse(readFileSync(join(project, 'again.html.sources.json'), 'utf8'));
   const refusedApp = again.sources.find((s) => s.package === 'com.umer.rota');
   assert.equal(refusedApp.status, 'link-only');

@@ -56,7 +56,7 @@ export function staticExport(html) {
 
 // logo: a logo option (logo.mjs): the engine writes logo/*.svg, logo/palette.json and a brand sheet; logo.idea is the concept's one line
 // and logo.kind its kind of mark, which the host writes into the sheet, and on refine or a redo logo.files are the option's files.
-export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets, references = [], referenceBrief, redesignPages, logo }) {
+export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets, references = [], referenceBrief, redesignPages, logo, review }) {
   if (screens?.length) prompt += `\nRequired screens/pages: ${screens.join(', ')}. Include every named screen, with distinct ids and links between them.`;
   const { generateViaAgent, composeSystemPrompt, collectResourceManifest, loadDesignSkills, loadFrameTemplates, makeDoneTool, buildStandaloneDocument } = await engine();
   const key = (path) => path.trim().replace(/\\/g, '/').split('/').filter((p) => p && p !== '.').join('/') || '.';
@@ -113,7 +113,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
       if (redesignPages && render.status === 'skipped') throw new Error('Redesign checks require a working browser; render verification was skipped');
       if (redesignPages && !errors.length) {
         if(semanticChecks.length>=3)throw Error('Redesign semantic review budget exhausted after 3 versions; no unchecked output accepted');
-        const review = await checkRedesign({ html: page, agent, model, timeoutMs, signal });
+        const review = await checkRedesign({ html: page, agent, model, timeoutMs, signal, review });
         semanticChecks.push(review.checks);
         used.inputTokens += review.tokens_in; used.outputTokens += review.tokens_out;
         const findings=review.checks.filter(c=>!c.passed).map(c=>({source:'redesign',message:`Redesign semantic ${c.name}: ${c.detail}. Fix the exported design and call done again.`}));
@@ -235,5 +235,5 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   const { html, videos } = assets && !logo ? await heroLoop(drawn, images, assets) : { html: drawn, videos: [] };
   if (unplaced(html).length) throw new Error(`The design did not place every generated image into its screens: ${unplaced(html).map((a) => a.path).join(', ')}`);
   if (Buffer.byteLength(html) > 5_000_000) throw new Error('the mock is over 5 MB; sign-off takes mocks of 5 MB or less');
-  return { html, ...(redesignPages && {redesign_check:{deterministic:'passed',semantic:semanticChecks.at(-1),reviews:semanticChecks.length,assessment:'Metrics and token consistency assessed by the configured model on exported HTML/CSS; not a visual-reference fidelity verdict.'}}), truncated: capped !== null, turns: Math.min(turns, TURN_CAP), tools, ...(assets && { images: images.map(({ provider, purpose, prompt, path, file, sheet, style_sheet }) => ({ provider, purpose, prompt, path, file, ...(sheet && { sheet }), ...(style_sheet && { style_sheet }) })), ...(refused.length && { images_refused: refused }), ...(videos.length && { videos }) }), source: main, remote: [...new Set([...html.matchAll(REMOTE)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').filter((v) => !v.trim().startsWith('data:')).flatMap((v) => [...v.matchAll(REMOTE_URL)].map((url) => url[0])))],    tokens_in: output.inputTokens, tokens_out: output.outputTokens, render_check: render.status, ...(drawnLogo && { logo: drawnLogo }) };
+  return { html, ...(redesignPages && {redesign_check:{deterministic:'passed',semantic:semanticChecks.at(-1),reviews:semanticChecks.length,assessment:'Metrics and token consistency assessed by an independent engine on exported HTML/CSS; not a visual-reference fidelity verdict.'}}), truncated: capped !== null, turns: Math.min(turns, TURN_CAP), tools, ...(assets && { images: images.map(({ provider, purpose, prompt, path, file, sheet, style_sheet }) => ({ provider, purpose, prompt, path, file, ...(sheet && { sheet }), ...(style_sheet && { style_sheet }) })), ...(refused.length && { images_refused: refused }), ...(videos.length && { videos }) }), source: main, remote: [...new Set([...html.matchAll(REMOTE)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4] ?? '').filter((v) => !v.trim().startsWith('data:')).flatMap((v) => [...v.matchAll(REMOTE_URL)].map((url) => url[0])))],    tokens_in: output.inputTokens, tokens_out: output.outputTokens, render_check: render.status, ...(drawnLogo && { logo: drawnLogo }) };
 }

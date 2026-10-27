@@ -19,8 +19,8 @@ export async function referenceStandIn(dir) {
   ] }));
   return { server, seen, origin, library };
 }
-export function installJudge(dir) {
-  writeFileSync(join(dir, 'claude'), `#!${process.execPath}\nconsole.log('{"loggedIn":false}');\n`, { mode: 0o700 });
+export function installJudge(dir, { preserveClaude = false } = {}) {
+  if (!preserveClaude) writeFileSync(join(dir, 'claude'), `#!${process.execPath}\nconsole.log('{"loggedIn":false}');\n`, { mode: 0o700 });
   writeFileSync(join(dir, 'codex'), `#!${process.execPath}
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -34,11 +34,12 @@ else {
   if (!args.includes('read-only') || !args.includes('forced_login_method="chatgpt"') || process.env.OPENAI_API_KEY) throw Error('unsafe judge route');
   const files=args.filter(a=>a.startsWith('--image=')).map(a=>a.slice(8));
   const ids=(input.match(/^Images, in attachment order: (.*)$/m)?.[1] ?? '').split(', ').filter(i=>/^(design|plain)-/.test(i)), design=ids.filter(i=>i.startsWith('design-'));
-  if (!design.length || files.length!==ids.length+2 || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing capture-set images (one per attachment id, then the two references)');
-  appendFileSync(home+'/judge-calls.jsonl',JSON.stringify({model:args[args.indexOf('--model')+1],images:files.length,input})+'\\n');
-  const score=process.env.FD_JUDGE_AI?9:6;
-  const value={views:design.map(view=>({view,judged:'The notes list and its theme at this width'})),design:{score,gaps:['No product screen']},plain:{score:7,gaps:['Generic layout']},against:'Captured Umer notes: real content',reads_as:'Notes for Umer',fix:'Show the product',axes:Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'The captured reference shows content, the option does not'}]))};
-  if(input.includes('"ai_side"')) Object.assign(value,{ai_side:{reads_as_ai:!!process.env.FD_JUDGE_AI,tells:process.env.FD_JUDGE_AI?['Repeated generic cards']:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:true,reason:'Shown in fixture'}))});
+  if (!design.length || ![ids.length,ids.length+2].includes(files.length) || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing capture-set images (one per attachment id, then the two references)');
+  appendFileSync(home+'/judge-calls.jsonl',JSON.stringify({model:args[args.indexOf('--model')+1],images:files.length,input,system:args.find(a=>a.startsWith('developer_instructions='))})+'\\n');
+  const scores=JSON.parse(process.env.FD_JUDGE_SCORES||'[]'),n=readFileSync(home+'/judge-calls.jsonl','utf8').trim().split('\\n').length-1;
+  const [score,plain]=process.env.FD_JUDGE_AI?[9,7]:(scores[n]||[6,7]);
+  const value={views:design.map(view=>({view,judged:'The notes list and its theme at this width'})),design:{score,gaps:['No product screen']},plain:{score:plain,gaps:['Generic layout']},against:'Captured Umer notes: real content',reads_as:'Notes for Umer',fix:'Show the product',axes:Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'The captured reference shows content, the option does not'}]))};
+  if(input.includes('"ai_side"')) Object.assign(value,{ai_side:{reads_as_ai:!!process.env.FD_JUDGE_AI||score<9,tells:process.env.FD_JUDGE_AI||score<9?['Repeated generic cards']:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:score>=9||i<5,reason:'Shown in fixture'}))});
   console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_designs',arguments:JSON.stringify(value)}]})}}));
   console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
 }

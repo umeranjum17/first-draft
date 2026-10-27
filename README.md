@@ -33,9 +33,9 @@ first-draft-axi make "A notes app" \
   first-draft-axi view notes.html
 ```
 
-Requires Node **22.18+**, Chrome/Chromium for render checks, and the installed, signed-in **Codex CLI** on your ChatGPT subscription. Open the URL `view` prints; Ctrl+C stops it. Generation uses your subscription quota; viewing makes no model calls.
+Requires Node **22.18+**, Chrome/Chromium, a usable AI generator and an independent signed-in subscription judge on a different engine (normally Claude plus Codex). Saved configuration is optional: first-draft resolves ready installed logins and supported BYOKit key routes, then names the chosen generator and judge in the run JSON. Without a usable engine it exits with one exact sign-in command, before generating pages. Open the URL `view` prints; Ctrl+C stops it. Generation uses your subscription quota; viewing makes no model calls.
 
-Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 with your signed-in Claude CLI. `first-draft-axi doctor` checks readiness without spending and prints the exact setup command for your available subscription. [Other routes](#models).
+Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 with your signed-in Claude CLI. `first-draft-axi doctor` checks readiness without a model call and names the resolved engine. [Other routes](#models).
 
 ## Why first-draft?
 
@@ -98,7 +98,7 @@ One run per cell, scored by the review worker, not customers and not an independ
 | A plan key, such as Z.ai | `byokit:zai:plan_key` |
 | An API key, such as MiniMax | `byokit:minimax:key` |
 
-Calls use [BYOKit](https://www.npmjs.com/package/@byokit/accounts) and your selected route/model. No silent account switching. Subscription routes use your normal CLI login, without copying credentials. [Configuration and provider details](docs/guide.md#models).
+Calls use [BYOKit](https://www.npmjs.com/package/@byokit/accounts). An authenticated saved preference is tried first, then other ready supported sources. Account pools may rotate accounts only on the resolved engine/model; a cross-engine pick is refused. Native OpenCode login storage is detected but cannot yet be executed by this build's BYOKit; supported OpenCode key accounts work. Subscription routes use your normal CLI login, without copying credentials. [Configuration and provider details](docs/guide.md#models).
 
 ## Known limits
 

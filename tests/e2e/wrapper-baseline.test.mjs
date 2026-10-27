@@ -88,7 +88,7 @@ const kindOf = (j) => {
   const tool = j.tools?.[0]?.name;
   if (tool === 'plan_directions') return 'direction-plan';
   if (tool === 'write_page') return 'critic-plain-page';
-  if (tool === 'review_designs') return 'critic-review';
+  if (tool === 'review_designs' || tool === 'judge_designs') return 'critic-review';
   const user = textOf(j);
   return user.includes('defects the host measured') ? 'host-repair' : user.includes('The critic scored this design') ? 'critic-revision' : 'draw';
 };
@@ -105,7 +105,7 @@ async function standIn(seen, { score = 9, flowScore = score, grid = false, delay
       const needsFlow = j.tools?.[0]?.parameters?.required?.includes('flow');
       const call = { 'direction-plan': () => ['plan_directions', { directions: Array.from({ length: Number(textOf(j).match(/Plan (\d) directions/)[1]) }, (_, i) => ({ name: `Direction ${i + 1}`, learn_from: 'Notion', layout: `Layout ${i + 1}.`, type: 'Inter.', palette: '#fff and #111.', signature: `Detail ${i + 1}.` })) }],
         'critic-plain-page': () => ['write_page', { html: PAGE('plain') }],
-        'critic-review': () => ['review_designs', { views: (j.tools.find((t) => t.name === 'review_designs').parameters.properties.views.items.properties.view.enum).map((view) => ({ view, judged: 'what this view shows' })), design: { score, gaps: score < 10 ? ['the hero has no picture'] : [] }, plain: { score: 7, gaps: ['generic'] }, against: 'Notion', reads_as: 'a list of notes', fix: score < 10 ? 'Give the hero a picture.' : '', ...(needsFlow && { flow: { shell: { score: flowScore, reason: 'Every screen keeps the header, title, dots and next button' }, character: { score: flowScore, reason: 'The same character appears on every screen' } } }) }] }[kind]?.();
+        'critic-review': () => [j.tools[0].name, { views: (j.tools.find((t) => ['review_designs', 'judge_designs'].includes(t.name)).parameters.properties.views.items.properties.view.enum).map((view) => ({ view, judged: 'what this view shows' })), design: { score, gaps: score < 10 ? ['the hero has no picture'] : [] }, plain: { score: 7, gaps: ['generic'] }, axes: Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'Fixture assessment'}])), ...(j.tools[0].parameters.properties.ai_side && {ai_side:{reads_as_ai:false,tells:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:true,reason:'Fixture hero'}))}), against: 'Notion', reads_as: 'a list of notes', fix: score < 10 ? 'Give the hero a picture.' : '', ...(needsFlow && { flow: { shell: { score: flowScore, reason: 'Every screen keeps the header, title, dots and next button' }, character: { score: flowScore, reason: 'The same character appears on every screen' } } }) }] }[kind]?.();
       const item = call ? { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: call[0], arguments: JSON.stringify(call[1]) }
         : { type: 'message', id: `m${seen.length}`, status: 'completed', content: [{ type: 'output_text', text: kind === 'draw' && grid ? GRID : kind === 'draw' && /onboarding flow/.test(textOf(j)) ? PAGE(++pages).replace('<main>', Array.from({length:6}, (_, i) => `<section id="step-${i+1}" data-oc-screen="step-${i+1}"><h1>Step ${i+1}</h1></section>`).join('') + '<main>') : PAGE(++pages) }] };
       res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -120,7 +120,7 @@ async function make(t, options, brief, ...more) {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-baseline-'));
   const seen = [], server = await standIn(seen, options);
   t.after(() => { server.close(); rmSync(dir, { recursive: true, force: true }); });
-  const env = { ...process.env, CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const env = { ...process.env, FIRST_DRAFT_TEST_JUDGE_DELEGATE: '1', CI: 'true', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (args) => promisify(execFile)(process.execPath, [join(ROOT, 'src/cli.mjs'), ...args], { env, cwd: dir });
   await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
   const { stdout } = await run(['make', brief, '--out', join(dir, 'notes.html'), ...more]);
@@ -158,7 +158,7 @@ test('the default make is a plain draw plus the calls the allow-list names', asy
   assert.ok(run.made.timing.options.draw_s >= 0 && run.made.timing.critic.review_s >= 0, 'the output says where the seconds went');
 
   // A company or landing brief also gets first-draft's own guidance and its brand-and-accent rule, and nothing else: the same plain draw.
-  const landing = await make(t, { score: 9 }, LANDING, '--options', '1', '--no-critic');
+  const landing = await make(t, { score: 9 }, LANDING, '--options', '1');
   assert.equal(landing.count('draw'), 1);
   assert.deepEqual(withinAllowList(landing, 1), [], 'a plain page fails the landing host checks, so the one repair call is the only other call');
   assert.equal(first(landing).input[0].content, systemPrompt(true, true));

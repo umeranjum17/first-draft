@@ -27,12 +27,11 @@ first-draft is a plain model call plus a few additions of ours: Anthropic's fron
 ```
 first-draft-axi init --agent byokit:claude --model claude-sonnet-5-5   # once; a subscription CLI, no key
 node scripts/compare.mjs "an analytics dashboard" --out /tmp/compare-dash
-node scripts/compare.mjs "an analytics dashboard" --out /tmp/compare-dash-nocritic --no-critic
 ```
 
 This asks the model for one plain page of the brief, runs this checkout's default make for one option, renders both at 1280 and 390 and writes `compare.html` beside them (`plain-1280.png`, `make-390.png` and so on). To compare two pages you already have (a branch against main, or one rule on against off), skip the model: `node scripts/compare.mjs "<brief>" --out <folder> --pages main=main.html branch=branch.html`. Open `compare.html`, score the columns, and repeat on a second brief.
 
-Scores you give are yours; the critic's are the same model scoring itself and are marked so in the list.
+Scores you give are yours. New critic results require an independent authenticated engine and model; historical generator self-scores remain labelled in the evidence list.
 
 ### Make timing
 

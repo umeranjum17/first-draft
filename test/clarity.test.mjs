@@ -99,12 +99,15 @@ test('which briefs are held to clarity, and which ask for flash', () => {
   assert.equal(of('Make the headline shorter', { seed: '<section data-section="hero"></section>' })?.flash, false);
 });
 
+import { plainPage } from './fixtures/plain-page.mjs';
+
 // A stand-in model: plans, writes DESIGN.md and the first page, checks it, reads the failure and writes the second page.
 function standIn(seen, [first, second]) {
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (plainPage(res, body)) return;
       seen.push(body);
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const n = seen.length - 1, ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;

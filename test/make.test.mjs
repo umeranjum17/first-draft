@@ -9,11 +9,11 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { findBrowser } from '../src/render-check.mjs';
+import { flowPage, landingPage, plainPage, theme } from './fixtures/plain-page.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
-// These journeys test the engine loop with bare pages; the render check has its own test (render-check.test.mjs).
-process.env.FIRST_DRAFT_CHROME = '/nonexistent';
-const PAGE = '<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>';
+// These generator journeys now also run the required native independent critic.
+const PAGE = theme('<!doctype html><html><body><h1>Sign in to your notes</h1><img alt="Notes" src=https://example.com/image.png><img alt="Notes" srcset="//cdn.example.com/a.png 1x, https://cdn.example.com/b.png 2x"><form action="https://example.com/submit"><input placeholder="Email"></form></body></html>').replace('<body>', '<body>\n');
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 // The engine's own first steps on a fresh workspace: a plan (set_todos), then the DESIGN.md its done requires, here the engine's own starter one.
@@ -37,6 +37,7 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (plainPage(res, body)) return;
       if (body.includes('"plan_directions"')) return directions(res, body);
       if (fresh(body)) return plan(res);
       seen.push({ url: req.url, auth: req.headers.authorization, session: req.headers['x-opencode-session'], body: JSON.parse(body) });
@@ -49,8 +50,10 @@ function standIn(seen, edit, doneFirst = true, donePath = 'index.html', page = P
       }
       const step = body.includes('as you left them') ? 2 : (seen.length - 1) % 3;
       if (step < 2) {
-        const html = typeof page === 'function' ? page() : page;
-        const content = body.includes('script fixture') ? html.replace('</body>', '<script>alert(1)</script></body>') : html;
+        const html = theme(typeof page === 'function' ? page() : page === PAGE && body.includes('Landing page brief') ? landingPage() : page);
+        const user = JSON.parse(body).input.find(m => m.role === 'user')?.content;
+      const text = typeof user === 'string' ? user : user?.filter(p => p.type === 'input_text').map(p => p.text).join('\n');
+      const content = body.includes('no change') ? text.split('Current index.html:\n')[1] : body.includes('script fixture') ? html.replace('</body>', '<script>alert(1)</script></body>') : html;
         const item = { type: 'function_call', id: `fc${seen.length}`, call_id: `c${seen.length}`, name: step === 0 ? 'str_replace_based_edit_tool' : 'done',
           arguments: JSON.stringify(step === 0 ? { command: body.includes('view fixture') ? 'view' : 'create', path: 'index.html', file_text: content } : { path: donePath }) };
         const mutation = { type: 'function_call', id: 'fc-edit', call_id: 'c-edit', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ path: 'index.html', ...edit }) };
@@ -154,7 +157,7 @@ test('make requires verification after every batched mutation', async (t) => {
   for (const edit of [
     { command: 'create', file_text: PAGE.replace('Sign in', 'revised') },
     { command: 'str_replace', old_str: 'Sign in', new_str: 'revised' },
-    { command: 'insert', insert_line: 0, new_str: '<!-- revised -->' },
+    { command: 'insert', insert_line: 1, new_str: '<p>revised</p>' },
   ]) for (const doneFirst of [true, false]) await t.test(`${edit.command}, done ${doneFirst ? 'before' : 'after'} edit`, async (t) => {
     const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -183,7 +186,7 @@ test('make accepts a headless HTML5 document and injects the policy', async (t) 
   const out = join(dir, 'headless.html');
   await run('make', 'a notes page', '--out', out);
   const html = readFileSync(out, 'utf8');
-  assert.match(html, /^<!doctype html><head><meta http-equiv="Content-Security-Policy"/i);
+  assert.match(html, /^<!doctype html>\s*<html><head>\s*<meta http-equiv="Content-Security-Policy"/i);
   assert.match(html, /Sign in to your notes/);
 });
 
@@ -257,6 +260,7 @@ function guesser(seen, patching = false, page = PAGE) {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (plainPage(res, body)) return;
       if (body.includes('"plan_directions"')) return directions(res, body);
       if (fresh(body)) return plan(res);
       seen.push(JSON.parse(body));
@@ -288,7 +292,7 @@ test('the editor escalates to create after three failed exact edits', async (t) 
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' ? [...args, ...(args.includes('--count') ? [] : ['--options', '1']), '--engine'] : args)], { env });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const out = join(dir, 'guess.html');
-  await assert.rejects(run('make', 'a notes page', '--out', out), (e) => /engine did not verify index.html with done/.test(e.stdout));
+  await assert.rejects(run('make', 'a notes page', '--out', out), (e) => /engine did not verify (?:index.html|App.jsx) with done/.test(e.stdout));
   assert.equal(existsSync(out), false);
   assert.match(JSON.stringify(seen[4].input), /Too many failed exact edits/);
 });
@@ -310,20 +314,22 @@ test('make runs on a BYOKit api-key route as well as a plan-key route', async (t
   assert.equal(seen[0].auth, 'Bearer test-key');
   assert.match(readFileSync(join(dir, 'k.html'), 'utf8'), /Sign in to your notes/);
   await run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini');
-  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'doctor'], { env: { ...env, OPENAI_API_KEY: '' } }), (e) => /OPENAI_API_KEY is not set/.test(e.stdout) && !/test-key/.test(e.stdout + e.stderr));
+  const discovered = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'doctor'], { env: { ...env, OPENAI_API_KEY: '' } })).stdout);
+  assert.notEqual(discovered.engine.agent, 'byokit:openai:key', 'an unauthenticated preference is not used');
   await run('init', '--agent', 'byokit:no-such:key', '--model', 'x').catch(() => {});
-  await assert.rejects(run('doctor'), (e) => /plan or api key route/.test(e.stdout));
+  assert.notEqual(JSON.parse((await run('doctor')).stdout).engine.agent, 'byokit:no-such:key');
 });
 
 // The default make: one page from one call with the frontend-design guidance, the facts rule and the page contract (draft.mjs).
 test('make writes each option as one page from one call, with the frontend-design guidance and the facts rule', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const seen = [], page = (title) => `<!doctype html><html><head><title>${title}</title></head><body><h1>${title}</h1><p>Flat 4B lease, due 30 Nov</p></body></html>`;
+  const seen = [], page = (title) => theme(`<!doctype html><html><head><title>${title}</title></head><body><h1>${title}</h1><p>Flat 4B lease, due 30 Nov</p></body></html>`);
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (plainPage(res, body)) return;
       if (body.includes('"plan_directions"')) return directions(res, body);
       seen.push(JSON.parse(body));
       const text = `Here it is.\n${page(`Option ${seen.length}`)}`;
@@ -340,7 +346,7 @@ test('make writes each option as one page from one call, with the frontend-desig
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const one = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1')).stdout).made;
-  assert.equal(seen.length, 1, 'one call makes the page (no browser here, so no critic)');
+  assert.equal(seen.length, 1, 'one generator call makes the page; baseline and independent judge are separate fixtures');
   const sent = JSON.stringify(seen[0]);
   assert.match(sent, /# Frontend Design.*Ground your designs in the subject matter/); // Anthropic's frontend-design guidance is the system prompt
   assert.match(sent, /Facts: .*no invented customer logos, testimonials, quotes/); // the one wrapper rule on content
@@ -348,7 +354,7 @@ test('make writes each option as one page from one call, with the frontend-desig
   assert.match(sent, /one accent colour, used on one thing per screen/); // restraint: one accent, faint grids, no controls without a job
   assert.match(sent, /barely visible/);
   assert.match(sent, /no close \(x\)/);
-  assert.match(sent, /Write no script/); // no browser to draw the page once, so the page must be static
+  assert.match(sent, /Script may run once.*without the script/); // native rendering keeps the first painted static page
   assert.match(sent, /Brief: A notes app for Umer/);
   assert.equal(seen[0].tools, undefined, 'the page comes back as text, not inside a tool call');
   const html = readFileSync(join(dir, 'notes.html'), 'utf8');
@@ -356,7 +362,7 @@ test('make writes each option as one page from one call, with the frontend-desig
   assert.match(html, /<h1>Option 1<\/h1>/);
   assert.doesNotMatch(html, /Here it is/);
   assert.equal(one.files[0].turns, 1);
-  assert.equal(one.tokens_out, 40);
+  assert.equal(one.tokens_out, 41);
   seen.length = 0;
   const two = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'two.html'), '--options', '2')).stdout).made;
   assert.deepEqual(two.files.map((f) => f.direction), ['Direction 1', 'Direction 2']);
@@ -368,13 +374,16 @@ test('make sends a page with a strong grid, four hues, a stray close, unreadable
   const dir = mkdtempSync(join(tmpdir(), 'first-draft-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const seen = [];
-  const bad = '<!doctype html><html><head><title>First</title><style>body{margin:0;background:#faf7f0;background-image:linear-gradient(rgba(0,0,0,.2) 1px,transparent 1px);background-size:100% 24px}a{color:#e11d48}b{color:#16a34a}i{color:#2563eb}u{color:#eab308}.close{display:block}</style></head><body><h1>First</h1><a class="on" style="background:#14212b;color:#14212b">Overview</a><button class="close" aria-label="Close menu">×</button><p style="margin-top:760px">Flat 4B lease, due 30 Nov</p><div style="position:fixed;bottom:0;left:0;right:0;height:80px;background:#ddd">Home Notes Settings</div></body></html>';
+  let refuseRepair = false;
+  const bad = '<!doctype html><html><head><title>First</title><style>body{margin:0;background:#faf7f0;background-image:linear-gradient(rgba(0,0,0,.2) 1px,transparent 1px);background-size:100% 24px}a{color:#e11d48}b{color:#16a34a}i{color:#2563eb}u{color:#eab308}.close{display:block}</style></head><body><h1>First</h1><a class="on" style="background:#14212b;color:#14212b">Overview</a><button class="close" aria-label="Close menu">×</button><p style="margin-top:660px">Flat 4B lease, due 30 Nov</p><div style="position:fixed;bottom:0;left:0;right:0;height:80px;background:#ddd">Home Notes Settings</div></body></html>';
   const good = '<!doctype html><html><head><title>Second</title><style>body{margin:0;background:#faf7f0}</style></head><body><h1>Second</h1><p>Flat 4B lease, due 30 Nov</p></body></html>';
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (plainPage(res, body)) return;
       seen.push(JSON.parse(body));
+      if (refuseRepair && seen.length > 1) { res.writeHead(400); res.end('fixture repair refused'); return; }
       const text = seen.length === 1 ? bad : good;
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       res.end(ev({ type: 'response.created', response: { id: 'r1' } }) + ev({ type: 'response.output_item.added', output_index: 0, item: { type: 'message', id: 'm1' } })
@@ -388,7 +397,7 @@ test('make sends a page with a strong grid, four hues, a stray close, unreadable
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd: dir });
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
-  const { files } = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1', '--no-critic')).stdout).made;
+  const { files } = JSON.parse((await run('make', 'A notes app for Umer', '--out', join(dir, 'notes.html'), '--options', '1')).stdout).made;
   assert.equal(seen.length, 2, 'one call for the page, one to fix what the host measured');
   const asked = JSON.stringify(seen[1]);
   assert.match(asked, /background grid or line pattern is too strong/);
@@ -402,6 +411,10 @@ test('make sends a page with a strong grid, four hues, a stray close, unreadable
     assert.match(asked, /close control is on screen with nothing open/);
     assert.match(asked, /text that cannot be read.*"Overview"/);
   }
+  refuseRepair = true; seen.length = 0;
+  const refused = join(dir, 'refused-repair.html');
+  await assert.rejects(run('make', 'A notes app for Umer', '--out', refused, '--options', '1'), e => /AI repair failed; no unrepaired page accepted/.test(e.stdout));
+  assert.equal(existsSync(refused), false);
 });
 
 test('make writes self-contained mocks through the BYOKit Go route', async (t) => {
@@ -413,7 +426,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...(args[0] === 'make' ? [...args, ...(args.includes('--count') ? [] : ['--options', '1']), '--engine'] : args)], { env });
 
-  await assert.rejects(run('make', 'a sign-in page', '--out', join(dir, 'x.html')), (e) => /NO_AGENT/.test(e.stdout));
+  assert.ok(JSON.parse((await run('doctor')).stdout).engine.agent, 'ready credentials are resolved without saved configuration');
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
   const health = JSON.parse((await run('doctor')).stdout);
   assert.equal(health.ready, true);
@@ -421,7 +434,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.equal(seen.length, 0, 'doctor makes no paid call');
 
   const { stdout } = await run('make', 'a sign-in page for a notes app', '--out', join(dir, 'sign-in.html'), '--count', '2');
-  assert.match(stdout, /"tokens_out":138/); // two options of 66 and the planned directions
+  assert.match(stdout, /"tokens_out":140/); // two options of 66 and the planned directions
   const blocked = JSON.parse(stdout).blocked_remote;
   assert.ok(blocked.includes('https://example.com/submit'));
   assert.ok(blocked.includes('https://example.com/image.png'));
@@ -463,7 +476,7 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.equal(readFileSync(option, 'utf8'), original, 'the refined option is untouched');
   await assert.rejects(run('refine', option, 'no change', '--out', option), (e) => /USAGE/.test(e.stdout));
   await assert.rejects(run('refine', option, 'no change', '--out', join(dir, 'same.html')), (e) => /left the option unchanged/.test(e.stdout));
-  await assert.rejects(run('make', 'script fixture', '--out', join(dir, 'script.html')), (e) => /only script-free HTML/.test(e.stdout));
+  await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'refine', option, 'script fixture', '--out', join(dir, 'script.html')], { env: { ...env, FIRST_DRAFT_CHROME: '/nonexistent' } }), e => /only script-free HTML/.test(e.stdout));
   await run('init', '--agent', 'byokit:opencode-go', '--model', 'not-a-real-model');
   assert.doesNotMatch(await run('doctor').then((r) => r.stdout, (e) => e.stdout), /lists no model/); // the model id passes straight through to the provider
 
@@ -480,7 +493,9 @@ else {
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/native-calls', args[args.indexOf('--model') + 1] + '\\n');
   let input = ''; for await (const c of process.stdin) input += c;
   if (input.includes('failure fixture')) process.exit(1);
-  const { messages } = JSON.parse(input), results = messages.filter((m) => m.role === 'toolResult');
+  const { messages, tools } = JSON.parse(input);
+  if(tools[0]?.name==='write_page'){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'write_page',arguments:JSON.stringify({html:'<!doctype html><html><body>Umer baseline</body></html>'})}]})}}));console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:0,output_tokens:0}}));process.exit(0);}
+  const results = messages.filter((m) => m.role === 'toolResult');
   const calls = results.length === 0 ? [${JSON.stringify({ name: PLAN.name, arguments: PLAN.arguments })}] : results.length === 1 ? [${JSON.stringify(START.map(({ name, arguments: a }) => ({ name, arguments: a })))}, { name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'index.html', file_text: ${JSON.stringify(PAGE)} }) }].flat() : results.length === 3 ? [{ name: 'done', arguments: JSON.stringify({ path: 'index.html' }) }] : [];
   console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ text: calls.length ? '' : 'Ready', calls }) } }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 7, output_tokens: 8 } }));
@@ -494,10 +509,10 @@ else {
   const before = probes();
   await run('make', 'a sign-in page for Umer', '--out', join(dir, 'native.html'));
   assert.match(readFileSync(join(dir, 'native.html'), 'utf8'), /Content-Security-Policy/);
-  assert.equal(probes() - before, 1, 'one CLI status probe per engine run, not per turn');
-  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(4).fill('gpt-6-luna'));
+  assert.ok(probes() - before >= 2, 'startup resolves authentication and the native launch rechecks it');
+  assert.deepEqual(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n'), Array(5).fill('gpt-6-luna'));
   await assert.rejects(run('make', 'failure fixture', '--out', join(dir, 'fail.html')), (e) => /model could not answer/.test(e.stdout));
-  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 5, 'failed boundary call is not retried');
+  assert.equal(readFileSync(join(dir, 'native-calls'), 'utf8').trim().split('\n').length, 6, 'failed boundary call is not retried');
 });
 
 test('the engine prompt carries the export contract and the brand rule', async (t) => {
@@ -515,7 +530,7 @@ test('the engine prompt carries the export contract and the brand rule', async (
   assert.match(sent, /in-page hash links/);
   assert.match(sent, /ONE file.*390x844.*1280x800/);
   assert.match(sent, /columns INSIDE each screen.*all other screens are hidden/);
-  assert.match(sent, /refused if any tag is a <script> element.*on\* event-handler attribute.*javascript: URL/); // with no browser to draw JSX, the guard's exact refusals are stated
+  assert.match(sent, /first render.*without its scripts and handlers/); // with no browser to draw JSX, the guard's exact refusals are stated
   assert.match(sent, /frontend-design-anti-slop/); // the engine's index of its method skills, design starters and scaffolds rides along
   assert.match(sent, /interaction-motion: Press, hover, focus and entrance motion/); // first-draft's own motion and press-state skill sits in that index
   assert.match(sent, /motion-sites: A page whose motion is part of the message/); // and its motion-site taste skill, for briefs that ask for motion
@@ -589,7 +604,7 @@ test('a landing page is told about the project\'s screenshot and gets it embedde
   writeFileSync(join(dir, 'docs', 'media', 'canvas.png'), png);
   writeFileSync(join(dir, 'docs', 'logo.png'), png); // a logo is a mark of the project, not a view of it
   writeFileSync(join(dir, 'README.md'), '# first-draft\n\nTurns a prompt into design mocks.\n'); // the project in this folder
-  const page = '<!doctype html><html><head><title>T</title></head><body><h1>First draft</h1><img alt="The canvas" src="docs/media/canvas.png"><img alt="Nope" src="docs/missing.png"></body></html>';
+  const page = landingPage('<figure><img alt="The canvas" src="docs/media/canvas.png"><img alt="Nope" src="docs/missing.png"></figure>');
   const seen = [], server = await standIn(seen, null, true, 'index.html', page);
   t.after(() => server.close());
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
@@ -688,7 +703,7 @@ test('a call that times out, one whose connection closes and one whose stream is
   const out = join(dir, 'retried.html');
   await run('make', 'a notes page', '--out', out);
   assert.match(readFileSync(out, 'utf8'), /Sign in to your notes/);
-  assert.equal(calls, 7); // 3 failed + 4 turns (the plan, the page, done, the summary)
+  assert.equal(calls, 8); // 3 failed + 4 engine turns + the critic's generated plain page
 });
 
 test('the view sends the Next brief to the person\'s agent and the refined option joins the design', async (t) => {
@@ -699,18 +714,19 @@ test('the view sends the Next brief to the person\'s agent and the refined optio
   const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
   const option = join(dir, 'a-1.html');
   writeFileSync(option, '<!doctype html><html><head><title>Notes</title></head><body><h1>Sign in to your notes</h1></body></html>');
-  const view = spawn(process.execPath, [CLI, 'view', option, '--host', '127.0.0.1', '--port', '0'], { env });
+  let view = spawn(process.execPath, [CLI, 'view', option, '--host', '127.0.0.1', '--port', '0'], { env: { ...env, OPENCODE_API_KEY: '', NODE_OPTIONS: '', PATH: '/usr/bin:/bin' } });
   t.after(() => view.kill());
-  const url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
+  let url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
   const send = (body, headers = {}) => fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin, ...headers }, body: JSON.stringify(body) });
   const options = async () => JSON.parse((await (await fetch(url)).text()).match(/id="design">(.*?)<\/script>/)[1]).options.map((o) => o.file);
 
   const none = await send({ option: 1, change: 'warmer palette' });
   assert.equal(none.status, 500);
-  const { error, help } = await none.json();
-  assert.equal(error, 'No model source is set.');
-  assert.match(help[0], /^Choose which BYOKit route and model.*first-draft-axi init --agent byokit:/); // the set-up hint, and no model is called
+  assert.match((await none.json()).error, /No usable AI engine.*claude auth login/);
   assert.equal(seen.length, 0);
+  await new Promise(ok => { view.once('exit', ok); view.kill(); });
+  view = spawn(process.execPath, [CLI, 'view', option, '--host', '127.0.0.1', '--port', '0'], { env });
+  url = JSON.parse(await new Promise(ok => view.stdout.once('data', ok))).viewing.url;
 
   await promisify(execFile)(process.execPath, [CLI, 'init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor'], { env });
   assert.equal((await send({ option: 1, change: 'warmer palette' }, { origin: 'http://evil.example' })).status, 403);
@@ -720,7 +736,7 @@ test('the view sends the Next brief to the person\'s agent and the refined optio
 
   const sent = await send({ option: 1, change: 'warmer palette, add an empty state' });
   assert.equal(sent.status, 200);
-  assert.deepEqual(await sent.json(), { option: { n: 2, label: 'a-1-refined', file: 'a-1-refined.html' } });
+  assert.deepEqual(await sent.json(), { option: { n: 2, label: 'a-1-refined', file: 'a-1-refined.html' }, engine: { agent: 'byokit:opencode-go', model: 'muse-spark-1.3-contributor' } });
   assert.match(JSON.stringify(seen[0].body), /Revise this index\.html: warmer palette, add an empty state/);
   assert.match(readFileSync(join(dir, 'a-1-refined.html'), 'utf8'), /Welcome back, warm and cosy/);
   assert.match(readFileSync(option, 'utf8'), /Sign in to your notes/, 'the option it came from is untouched');
@@ -740,7 +756,7 @@ test('asset CLI previews without spending, then the design agent generates image
     const args=process.argv.slice(2), name=basename(process.argv[1]);
     appendFileSync(${JSON.stringify(log)},JSON.stringify([name,...args])+'\\n');
     if(name==='magick'){if(args[0]!=='-version')writeFileSync(args.at(-1),Buffer.concat([Buffer.from('${webp}','base64'),Buffer.from(args.at(-1))]));}
-    else if(name==='codex'){if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){if(args.includes('-i')&&!args.includes('--')){console.error('Reading prompt from stdin... No prompt provided via stdin.');process.exit(1);}await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});const thread='01a16724-50d5-76f1-af27-1ad159aec924',folder=join(process.env.HOME,'.codex/generated_images',thread);mkdirSync(folder,{recursive:true});for(const n of [0,1])writeFileSync(join(folder,'exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b040'+n+'.png'),Buffer.concat([Buffer.from('${webp}','base64'),Buffer.from([n])]));console.log(JSON.stringify({type:'thread.started',thread_id:thread}));}else console.log('codex-cli 0.159.2');}    else if(args[0]==='account')console.log('{"credits":10}');
+    else if(name==='codex'){if(args.includes('--output-schema')){await import(${JSON.stringify(new URL('./fixtures/judge-bridge.mjs',import.meta.url).href)});process.exit(0);}if(args[0]==='app-server'){const {createInterface}=await import('node:readline');createInterface({input:process.stdin}).on('line',line=>{const q=JSON.parse(line);if(q.id)console.log(JSON.stringify({id:q.id,result:q.method==='account/read'?{account:{type:'chatgpt',email:'umer@example.invalid',planType:'plus'}}:{}}));});}else if(args[0]==='login')console.error('Logged in using ChatGPT');else if(args[0]==='exec'){if(args.includes('-i')&&!args.includes('--')){console.error('Reading prompt from stdin... No prompt provided via stdin.');process.exit(1);}await new Promise((ok,fail)=>{const timer=setTimeout(()=>fail(Error('stdin did not reach EOF')),200);process.stdin.resume();process.stdin.on('end',()=>{clearTimeout(timer);ok();});});const thread='01a16724-50d5-76f1-af27-1ad159aec924',folder=join(process.env.HOME,'.codex/generated_images',thread);mkdirSync(folder,{recursive:true});for(const n of [0,1])writeFileSync(join(folder,'exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b040'+n+'.png'),Buffer.concat([Buffer.from('${webp}','base64'),Buffer.from([n])]));console.log(JSON.stringify({type:'thread.started',thread_id:thread}));}else console.log('codex-cli 0.159.2');}    else if(args[0]==='account')console.log('{"credits":10}');
     else if(args[1]==='cost')console.log(args.includes('seedance_2_0_mini')?'{"credits":5}':'{"credits":0.15}');
     else if(args.includes('seedance_2_0_mini'))console.log('[{"status":"completed","job_type":"seedance_2_0_mini","result_url":"https://fixture.invalid/asset.mp4"}]');
     else console.log('[{"status":"completed","job_type":"z_image","result_url":"https://fixture.invalid/asset.png"}]');`;
@@ -797,7 +813,7 @@ test('asset CLI previews without spending, then the design agent generates image
   assert.equal(readdirSync(dir).filter((p) => p.startsWith('shop.assets-')).length, 2);
   assert.ok(existsSync(join(dir, '.codex/generated_images/01a16724-50d5-76f1-af27-1ad159aec924/exec-c1b7f477-aeb6-4f2a-8bcc-7e81473b0401.png')), 'import never deletes the native CLI image');
   const calls = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(calls.filter(([name, action]) => name === 'codex' && action === 'exec').length, 1);
+  assert.equal(calls.filter(([name, action, ...args]) => name === 'codex' && action === 'exec' && !args.includes('--output-schema')).length, 1);
   assert.equal(calls.filter(([name, action, verb]) => name === 'higgsfield' && action === 'generate' && verb === 'create').length, 2, 'one image and one hero video, never a second video');
   const video = calls.find((call) => call[0] === 'higgsfield' && call[2] === 'create' && call.includes('seedance_2_0_mini'));
   assert.deepEqual([video[video.indexOf('--duration') + 1], video[video.indexOf('--resolution') + 1], video[video.indexOf('--aspect_ratio') + 1]], ['5', '720p', '16:9']);
@@ -807,7 +823,9 @@ test('asset CLI previews without spending, then the design agent generates image
   assert.ok(calls.some(([name]) => name === 'ffmpeg'), 'the loop is encoded to a page-sized mp4');
   assert.doesNotMatch(readFileSync(log, 'utf8'), /asset\.mp4/, 'the downloaded video is not kept');
   await run('make', 'Shop without generation', '--out', join(dir, 'disabled.html'), '--no-assets');
-  assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, calls.length);
+  const afterDisabled = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(afterDisabled.filter(([name, action, ...args]) => name === 'codex' && action === 'exec' && !args.includes('--output-schema')).length, 1, '--no-assets does not generate another image');
+  assert.equal(afterDisabled.filter(([name, action, verb]) => name === 'higgsfield' && action === 'generate' && verb === 'create').length, 2, '--no-assets does not generate paid media');
   const auto = JSON.parse((await run('make', 'Shop', '--out', join(dir, 'auto.html'), '--assets', 'auto')).stdout).asset_preview;
   assert.deepEqual(auto.providers.map((p) => p.provider), ['higgsfield', 'codex'], 'auto offers every ready provider');
   const codexOnly = JSON.parse((await run('make', 'Shop', '--out', join(dir, 'codex-only.html'), '--assets', 'codex')).stdout).asset_preview;
@@ -821,10 +839,10 @@ test('asset CLI previews without spending, then the design agent generates image
   await assert.rejects(run('redesign', 'https://example.com', 'Shop', '--out', join(dir, 'redesign'), '--assets', 'codex'), (e) => /redesign does not generate images/.test(e.stdout));
   await assert.rejects(run('make', 'Shop', '--out', join(dir, 'bad.html'), '--no-assets', '--assets', 'codex'), (e) => /conflicts/.test(e.stdout));
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'make', 'Shop', '--out', join(dir, 'ci.html'), '--assets', 'higgsfield', '--allow-asset-spend'], { env: { ...env, CI: 'true' } }), (e) => /disabled in CI/.test(e.stdout));
-  const flowServer = await standIn([], null, true, 'index.html', '<!doctype html><html><body><h1>Mellow</h1>' + ['welcome', 'mood', 'ready'].map((id, i) => `<section data-oc-screen="${id}"><img alt="${id}" src="assets/${id}-${i + 2}.webp"></section>`).join('') + '</body></html>', null,
+  const flowServer = await standIn([], null, true, 'index.html', flowPage(), null,
     [generate('codex', 'sheet', 'illustration'), ...['welcome', 'mood', 'ready'].map((id) => generate('codex', id, 'illustration'))]);
   t.after(() => flowServer.close());
-  const flow = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'mobile onboarding flow, 3 screens, for mellow', '--out', join(dir, 'flow.html'), '--assets', 'codex', '--allow-asset-spend', '--options', '1', '--no-critic'],
+  const flow = JSON.parse((await promisify(execFile)(process.execPath, [CLI, 'make', 'mobile onboarding flow, 3 screens, for mellow', '--out', join(dir, 'flow.html'), '--assets', 'codex', '--allow-asset-spend', '--options', '1'],
     { env: { ...env, FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${flowServer.address().port}` } })).stdout).made.files[0];
   assert.equal(flow.images.length, 4, 'the sheet and every referenced scene reached the native CLI');
   assert.equal(flow.images[0].sheet, true);
