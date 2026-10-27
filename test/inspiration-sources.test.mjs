@@ -68,7 +68,7 @@ if (has('plan_reference_searches')) calls = [call('plan_reference_searches', { p
 else if (has('score_benchmark')) {
   const q = JSON.parse(messages.at(-1).content.split('\\n\\nYour last')[0]), refs = q.captures.filter((c) => c.role === 'reference');
   appendFileSync(process.env.FIRST_DRAFT_HOME + '/benchmark-inputs', JSON.stringify({ q, system: args[args.indexOf('--system-prompt') + 1], images: envelope.message.content.filter((c) => c.type === 'image').length }) + '\\n');
-  calls = [call('score_benchmark', { axes: q.axes.map((axis) => ({ axis, score: axis === 'imagery' ? null : 7, references: axis === 'imagery' ? [] : [process.env.FD_BAD_EVIDENCE ? q.captures.find((c) => c.role === 'counterexample').id : refs[0].id], observed: 'Reference shows a clear reading order.', comparison: 'Target is denser; fixture assessment only.' })) })];
+  calls = [call('score_benchmark', { axes: q.axes.map((axis) => ({ axis, score: axis === 'imagery' ? null : 7, references: axis === 'imagery' ? [] : [process.env.FD_BAD_EVIDENCE ? q.captures.find((c) => c.role === 'counterexample').id : refs[0].id], observed: axis === 'imagery' ? 'No applicable reference imagery.' : refs[0].id + ' shows a clear reading order.', comparison: 'Target is denser; fixture assessment only.' })) })];
 }
 else if (has('assess_reference_terms')) { const q = JSON.parse(messages.at(-1).content), no = /prohibited/i.test(q.text);
   calls = [call('assess_reference_terms', { decision: no ? 'blocked' : 'allowed', quote: no ? ${JSON.stringify(RESTRICTED)} : process.env.FD_PERMISSION })]; }
@@ -166,6 +166,8 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   assert.ok(report.discovery.sources.some((s) => /Generator/.test(s.name) && /Synthetic screenshot generator/.test(s.why)));
   assert.ok(report.discovery.searches.some((s) => s.status === 'refused' && /robots/.test(s.why)));
   assert.ok(html.includes('reference-based scores') && html.includes('not comparable'));
+  assert.ok(html.includes('Image 1 shows a clear reading order.') && !html.includes('capture-'), 'sheet uses readable image labels, not raw model IDs');
+  assert.ok(html.includes('proof clarity') && !html.includes('proof_clarity'));
   assert.ok(html.includes('&lt;script&gt;') && !html.includes('<script>'));
   assert.equal((html.match(/<img width="390"/g) ?? []).length, 8);
   assert.ok(html.includes('unknown (owner supplied)'));
