@@ -7,6 +7,11 @@ import { Renderer, findBrowser } from './render-check.mjs';
 import { references } from './references.mjs';
 const hash = (b) => createHash('sha256').update(b).digest('hex');
 const VIEWS = [{ name: 'phone', width: 390, height: 844 }, { name: 'desktop', width: 1280, height: 800 }];
+const publicPageOnly = (page) => {
+  const html = page.data.toString('utf8');
+  if (/<input\b[^>]*type\s*=\s*["']?password\b|\bcaptcha\b/i.test(html) || /\/(?:login|signin|sign-in|auth)(?:\/|$)/i.test(new URL(page.url).pathname)) throw new Error('Login/challenge page refused; references never sign in');
+  if (/["']isAccessibleForFree["']\s*:\s*(?:false|["']false["'])|(?:subscribe|sign in|log in) to (?:continue|read|view)|class=["'][^"']*\bpaywall\b/i.test(html)) throw new Error('Paywall/access gate refused; references never bypass access restrictions');
+};
 export const validPng = (data, width, height) => data.length >= 24 && data.subarray(0,8).equals(Buffer.from('89504e470d0a1a0a','hex')) && data.readUInt32BE(16) === width && data.readUInt32BE(20) === height;
 
 // Computed visual language only. Never send page copy, logos, source HTML or instructions into generation.
@@ -42,7 +47,7 @@ export const writeOptionReferences = (file, r) => {
 // shot is a PNG of that viewport.
 export async function shootPublic({ page, network, renderer, views, loadMs = 25_000, assets = [], from }) {
   const url=page.url;
-  if (/<input\b[^>]*type\s*=\s*["']?password\b|\bcaptcha\b/i.test(page.data.toString('utf8')) || /\/(?:login|signin|sign-in|auth)(?:\/|$)/i.test(new URL(url).pathname)) throw new Error('Login/challenge page refused; references never sign in');
+  publicPageOnly(page);
   await renderer.start();
   network.abort.signal.throwIfAborted();
   const c=renderer.client, blocked=new Set();
@@ -110,8 +115,7 @@ export async function captureReference({ candidate, project = process.cwd(), age
     const page = await network.get(url);
     if (!/^text\/html\b/i.test(page.type)) throw new Error('Reference source must be a public HTML page');
     if (page.url !== url) throw new Error(`Reference redirected to ${page.url}; pass that explicit URL after review`);
-    const html = page.data.toString('utf8');
-    if (/<input\b[^>]*type\s*=\s*["']?password\b|\bcaptcha\b/i.test(html) || /\/(?:login|signin|sign-in|auth)(?:\/|$)/i.test(new URL(url).pathname)) throw new Error('Login/challenge page refused; references never sign in');
+    publicPageOnly(page);
     const terms = await referenceTerms({ network,page,agent,model,timeoutMs,signal:network.abort.signal });
     network.abort.signal.throwIfAborted();
     const {title,shots,languages,blocked}=await shootPublic({page,network,renderer,views:VIEWS});
