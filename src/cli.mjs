@@ -185,7 +185,8 @@ commands[13]:
     --model <id>       override the configured model for this run only (same BYOKit route)
     --out <file.html>  output file; multiple options add -1, -2, etc.; {i} is replaced by the option number
     --out-dir <folder> alternative to --out; writes option-1.html, option-2.html, etc.
-    --no-critic        skip the single critic pass (1-10 beside a plain page at 1280/390); refs pull enables an independent subscription judge, otherwise labelled self-assessment; low scores stay flagged, not revised
+    --no-critic        skip the single critic pass (1-10 beside a plain page); by default it sees the whole page in light and dark at 1280 and 390, tiled when tall; refs pull enables an independent subscription judge, otherwise labelled self-assessment; low scores stay flagged, not revised
+    --first-view       the critic sees only the top 800px in light at 1280 and 390 (the cheap look); default is the whole page, light and dark, both widths
     --competitors      find 3-5 real competitors of this brief from the prompt alone and capture their public pages through the same robots/terms review; the view shows them beside the options with their sources, and every refusal with its reason
     --inspiration      search the free open web, Hacker News and the designer subreddits (r/UI_Design, r/UXDesign, r/web_design) for references of this brief's product type, capture only the pages whose own terms permit it, and keep every refusal as a link with a written description; the view shows the sources list beside the options
     --app <apk|package> (repeatable, with --inspiration) install that app on an attached Android emulator and capture its own screens for internal mobile reference; --device <serial> picks the emulator; without one the step refuses with its reason and the run continues
@@ -199,7 +200,7 @@ commands[13]:
   init --agent byokit:<route> --model <model> [--judge byokit:codex|byokit:claude --judge-model <model>]   save generator and optional independent subscription judge (default byokit:codex / gpt-6.1-sol)
   refs pull [--kind ${KINDS.join('|')}] [--library <file.json>]   capture only explicitly licensed public references into the local cache, never the package; unpermitted products remain notes and links
   refs list [--library <file.json>]   show source links and capture status
-  judge <option.html> "<brief>" --plain <baseline.html>   score retained output without generating or changing either page
+  judge <option.html> "<brief>" --plain <baseline.html> [--first-view]   score retained output without generating or changing either page; judges the whole page in light and dark at 1280 and 390 (tiled when tall, capture set recorded in critique.capture), or only the top 800px in light with --first-view
 The agent is the person's own choice: first-draft never picks one. Use a BYOKit plan key or api key route, or byokit:codex / byokit:claude for the installed subscription CLI (Claude example: init --agent byokit:claude --model claude-opus-5-5).
 Journeys, tests and demos post with --evidence --media <shot>... (an Evidence card: options and Play links, no pick asked), never --recommend: that files a Decide card for the owner.
 Agent quick start (the first-draft-axi skill has the same): \`init\` once per repo (installs the skill for claude, codex and pi); redesign a live page: \`redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5\`; from a screenshot only: \`make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html --model claude-sonnet-5-5\`; then \`view\` and \`post\`. --model names the model for one run on the configured BYOKit route (the fleet uses byokit:claude, the signed-in claude CLI: no key or token is ever needed or printed).
@@ -234,10 +235,10 @@ if (command === 'refs') {
     }
   } catch (e) { fail('REFS_FAILED', e.message, ['Run `first-draft-axi refs list`']); }
 } else if (command === 'judge') {
-  const { values, positionals } = flags(rest, { plain: { type: 'string' } });
+  const { values, positionals } = flags(rest, { plain: { type: 'string' }, 'first-view': { type: 'boolean' } });
   const file = positionals.shift(), brief = positionals.join(' ').trim();
-  if (!file || !brief || !values.plain) fail('USAGE', 'judge <option.html> "<brief>" --plain <baseline.html>');
-  const c = await agentOrAsk(), critic = await openCritic({ c, brief, home: HOME(), judgeSet: c.judge, plainSource: values.plain });
+  if (!file || !brief || !values.plain) fail('USAGE', 'judge <option.html> "<brief>" --plain <baseline.html> [--first-view]');
+  const c = await agentOrAsk(), critic = await openCritic({ c, brief, home: HOME(), judgeSet: c.judge, plainSource: values.plain, firstView: values['first-view'] });
   try {
     if (critic.off) throw new Error(critic.off);
     const { critique } = await critic.judge({ html: readFileSync(file, 'utf8') });
@@ -262,7 +263,7 @@ if (command === 'refs') {
 } else if (command === 'make' || command === 'redesign' || command === 'logo') {
   const redesign = command === 'redesign', logo = command === 'logo';
   const { values, positionals } = flags(rest, logo ? { ref: referenceFlags.ref, ...Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model', 'explore'].map((name) => [name, { type: 'string' }])) }
-    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' }, inspiration: { type: 'boolean' }, app: { type: 'string', multiple: true }, device: { type: 'string' } }), ...(!redesign && { engine: { type: 'boolean' }, 'no-critic': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
+    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' }, inspiration: { type: 'boolean' }, app: { type: 'string', multiple: true }, device: { type: 'string' } }), ...(!redesign && { engine: { type: 'boolean' }, 'no-critic': { type: 'boolean' }, 'first-view': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !positionals.join(' ').trim() || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file',
     ['Run `first-draft-axi redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5`', 'Only have a screenshot? Run `first-draft-axi make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html`']);
@@ -349,7 +350,7 @@ if (command === 'refs') {
   // make's critic: every option scored against real products and a plain page of the same brief (kept in <out>.critic/, outside the
   // options the view lists), once; low scores stay flagged (critic.mjs).
   const critic = logo || redesign ? null : values['no-critic'] ? { off: '--no-critic: no option was scored' }
-    : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.judge, plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
+    : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.judge, firstView: values['first-view'], plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
   // The default one-call options are independent, so they are drawn and judged OPTIONS_AT_ONCE at a time, and the critic's plain page is written
   // beside them. A logo's options were drawn already; redesign pages, the engine loop (--engine) and generated assets (paid, one budget) keep their order.
   const slots = [], stages = {}; // stages: the seconds each kind of work took, summed over the options (the critic reports its own)

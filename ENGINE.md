@@ -96,7 +96,7 @@ motion; that is a model instruction, not a host check.
 
 After the engine runs, make's critic (`src/critic.mjs`) makes bounded calls of its own on the same route and model, as the
 logo critic does: one plain page for the brief in one prompt (kept as `<out>.critic/plain.html`), then for each option one
-review that sees the option and the plain page drawn at 1280 and 390 (`render-check.mjs` `shoot`) and scores both 1 to 10
+review that sees the option and the plain page whole, at 1280 and 390 in light and dark (`render-check.mjs` `views`: a tall page is cut into at most three tiles per view, each at most 1500 px so it stays legible, and a page past about 7500 px is scaled down, then cut, with the prompt saying so; `--first-view` keeps the old top-800px light look; a flow still shows its first screens in light) and scores both 1 to 10
 against the best real products of the kind (Linear, Stripe, Vercel, Notion, Raycast class, as the model knows them, and the
 person's reference images). An option under 9, or under the plain page, is revised by the engine (the refine path) with the
 critic's gaps and fixes, twice at most, and the best-scored version is written; every option's score is in the output. It is

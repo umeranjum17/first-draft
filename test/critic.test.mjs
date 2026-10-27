@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { findBrowser } from '../src/render-check.mjs';
+import { MAX_TILES, TILE, findBrowser, renderCheck, tilesOf } from '../src/render-check.mjs';
 import { PLAIN, images, standIn } from '../journeys/fixtures/critic-model.mjs';
 import { installJudge, referenceStandIn } from '../journeys/fixtures/judge-cli.mjs';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
@@ -30,7 +30,7 @@ async function lab(t, scores) {
 
 test('make scores once, keeps a low option flagged without revising, and --no-critic scores nothing', async (t) => {
   if (!findBrowser()) return t.skip('no Chrome or Chromium');
-  const { dir, seen, run } = await lab(t, [[6, 7], [9, 7]]);
+  const { dir, seen, run } = await lab(t, [[6, 7], [9, 7], [9, 7]]);
   for (const engine of [true, false]) {
     const out = join(dir, engine ? 'engine.html' : 'page.html');
     const { made, help } = await run('make', 'A notes app for Umer', '--out', out, '--options', '1', ...(engine ? ['--engine'] : []));
@@ -41,10 +41,25 @@ test('make scores once, keeps a low option flagged without revising, and --no-cr
     assert.match(help.join('\n'), /self-assessment/);
     assert.equal(help.some(h => h.includes('below the bar')), engine);
     assert.equal(readFileSync(made.critic.plain, 'utf8'), PLAIN);
+    // the capture set is on the judge's JSON, and the review names what it judged in every design view
+    assert.equal(c.capture.mode, 'full-page-both-themes');
+    assert.equal(c.capture.images, 16);
+    assert.deepEqual([...new Set(c.capture.set.map(i => `${i.side}-${i.width}-${i.theme}`))].sort(), ['design-1280-dark', 'design-1280-light', 'design-390-dark', 'design-390-light', 'plain-1280-dark', 'plain-1280-light', 'plain-390-dark', 'plain-390-light']);
+    assert.ok(c.capture.set.every(i => i.tiles === 2 && i.page_height === 2500 && i.covered === 2500));
+    assert.deepEqual(c.views.map(v => v.view).sort(), c.capture.set.filter(i => i.side === 'design').map(i => i.id).sort());
   }
   const asked = seen.filter(b => b.includes('"review_designs"'));
   assert.equal(asked.length, 2);
-  assert.ok(asked.every(b => images(b) === 4));
+  // the fixture page is 2500px tall: two tiles in each of light/dark at 1280/390, for the design and for the plain page
+  assert.ok(asked.every(b => images(b) === 16));
+  assert.match(asked[0], /capture_notes.*tile 2 of 2 = rows 1250-2500/s);
+  assert.match(asked[0], /Judge every view, the lower page and the dark theme/);
+  // --first-view is the cheap look: light only, the top of the page at 1280 and 390, four images in all
+  const first = await run('make', 'A notes app for Umer', '--out', join(dir, 'first.html'), '--options', '1', '--first-view');
+  const fc = first.made.files[0].critique;
+  assert.deepEqual([fc.capture.mode, fc.capture.images, fc.capture.set.map(i => `${i.side}-${i.width}-${i.theme}`)], ['first-viewport', 4, ['design-1280-light', 'design-390-light', 'plain-1280-light', 'plain-390-light']]);
+  assert.equal(images(seen.filter(b => b.includes('"review_designs"')).at(-1)), 4);
+  assert.match(seen.filter(b => b.includes('"review_designs"')).at(-1), /first-viewport assessment/);
   const out = join(dir, 'off.html'), before = seen.length;
   const off = await run('make', 'A notes app for Umer', '--out', out, '--options', '1', '--no-critic');
   assert.equal(off.made.files[0].critique, undefined);
@@ -76,7 +91,8 @@ test('refs pull -> independent subscription judge -> explicit fallbacks, through
   assert.ok(!seen.some(b => b.includes('"review_designs"')), 'generator never judges when the independent route works');
   const native = JSON.parse(readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim());
   assert.equal(native.model, 'gpt-6.1-sol');
-  assert.equal(native.images, 6);
+  assert.equal(native.images, 18, 'sixteen capture-set views (two tiles each) and the two references');
+  assert.equal(made.files[0].critique.capture.mode, 'full-page-both-themes');
   assert.match(native.input, /Umer notes, desktop 1280, light.*Umer notes, phone 390, light/s);
   const baseline = made.critic.plain, original = readFileSync(out, 'utf8'), before = seen.length;
   const judged = await run('judge', out, 'A notes app for Umer', '--plain', baseline);
@@ -127,4 +143,29 @@ test('landing AI-side and nine-point hero checks survive in both critics, withou
   assert.equal(judged.judge.model, 'gpt-6.1-sol');
   assert.deepEqual([judged.critique.score, judged.critique.passed, judged.critique.ai_side.reads_as_ai, judged.critique.hero.points.length], [9, false, true, 9]);
   assert.equal(Object.keys(judged.critique.axes).length, 7);
+});
+
+test('the judge captures the whole page in both themes at both widths, tiled and capped by height, and short pages are not tiled', async (t) => {
+  assert.deepEqual(tilesOf(900).tiles, [{ y: 0, height: 900, scale: 1 }]);
+  for (const height of [TILE, 4000, 7000, 20000]) {
+    const { tiles, covered } = tilesOf(height);
+    assert.ok(tiles.length <= MAX_TILES, `${height}px page: ${tiles.length} tiles`);
+    assert.ok(tiles.every(x => x.height * x.scale <= TILE), 'each tile image stays under the long edge a model reads without shrinking');
+    assert.equal(tiles.reduce((n, x) => n + x.height, 0), covered, 'tiles are contiguous and cover the page');
+  }
+  assert.equal(tilesOf(7000).covered, 7000);
+  assert.ok(tilesOf(20000).covered < 20000, 'a page past the cap is cut, and says so');
+  if (!findBrowser()) return t.skip('no Chrome or Chromium');
+  const page = (h) => `<!doctype html><html><head><style>:root{--bg:#fff}@media(prefers-color-scheme:dark){:root{--bg:#000}}body{margin:0;height:${h}px;background:var(--bg)}</style></head><body>x</body></html>`;
+  const render = renderCheck();
+  t.after(() => render.close());
+  const tall = await render.views(page(7000)), short = await render.views(page(900));
+  assert.deepEqual([...new Set(tall.map(s => `${s.width}-${s.theme}`))], ['1280-light', '1280-dark', '390-light', '390-dark']);
+  assert.equal(tall.length, 4 * 3, 'a 7000px page is three tiles in each of the four views');
+  assert.ok(tall.every(s => s.page_height === 7000 && s.mime === 'image/jpeg'));
+  assert.equal(short.length, 4, 'a short page is one image per view, not tiled');
+  assert.ok(short.every(s => s.tiles === 1 && !/tile/.test(s.id)));
+  const dark = (s) => Buffer.from(s.dataUrl.split(',')[1], 'base64'), a = tall.find(s => s.id === 'desktop-1280-light-tile-1'), b = tall.find(s => s.id === 'desktop-1280-dark-tile-1');
+  assert.notDeepEqual(dark(a), dark(b), 'the dark theme is a different picture');
+  assert.equal((await render.views(page(7000), ['light'])).length, 6, 'one theme is half the views');
 });
