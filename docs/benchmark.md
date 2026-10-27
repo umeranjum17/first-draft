@@ -35,4 +35,24 @@ Use the configured independent subscription judge (same default/configuration as
 
 ## Proof and next slice
 
-Offline integration exercises the real CLI, local search/robots/terms fixtures, native image decoding, sheet assembly and the actual subscription adapter with a deterministic CLI stand-in (no external network or model calls). Real proof uses the five read-only supplied captures plus task-owned current/candidate Crewhouse captures at 390. Missing current captures or original source metadata remain visible limitations. App-store/press screenshot extraction and desktop proof are subsequent slices, not silently represented by marketing homepages.
+Offline integration exercises the real CLI, local search/robots/terms fixtures, native image decoding, sheet assembly and the actual subscription adapter with a deterministic CLI stand-in (no external network or model calls). The first-page proof uses the five read-only supplied captures plus one task-owned first-draft AI-chat candidate at 390/dark, explicitly not the live Crewhouse app. By firstmate's approved proof substitution, both `bad-*` images stay negative and are named exactly `current app not captured - counterexamples from the captain`. The live-current gap is not erased by scoring the prototype. Original source URLs/capture times remain unknown where not supplied. App-store/press screenshot extraction and desktop product proof are subsequent slices, not silently represented by marketing homepages.
+
+### Fill the live-current gap (Crewhouse-owning lane)
+
+Capture **your own task-owned Crewhouse instance** at 390/dark with its existing verify recipe, not the person's installed app. Add a row to the same manifest (keep the references, candidate and negative rows):
+
+```
+{"role":"current","name":"Crewhouse current chat","file":"current-chat-390-dark.png",
+ "source":"Task-owned Crewhouse chat capture; name the tested commit",
+ "permission":"Project-owned task capture","captured_at":null,"theme":"dark"}
+```
+
+Replace null with the actual capture time when known. Then run exactly:
+
+```
+first-draft-axi benchmark --product "AI chat app" --screen "phone chat" \
+  --input crewhouse-chat-captures.json --width 390 --theme dark \
+  --no-discovery --out crewhouse-chat-benchmark.html
+```
+
+This scores the newly added current row and every retained candidate against the same positive captures, without regenerating the design or making another public-discovery pass. The capture itself remains the owning lane's responsibility; this command does not access a running app.

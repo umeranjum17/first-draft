@@ -31,6 +31,8 @@ try {
   if (report.scores.length) {
     await browser('eval', '() => { document.querySelector("section").scrollIntoView(); return document.querySelectorAll("tbody tr").length; }');
     await browser('screenshot', join(out, `scores-${report.theme}.png`));
+    await browser('eval', '() => { document.querySelector("tbody tr:last-child").scrollIntoView({block:"end"}); return true; }');
+    await browser('screenshot', join(out, `scores-tail-${report.theme}.png`));
   }
   writeFileSync(join(out, `benchmark-capture-${report.theme}.json`), JSON.stringify({ product: report.product, screen: report.screen, width: report.width, theme: report.theme, captures: report.captures.length, scored: report.scores.length, judge: report.judge, note: 'Capture only of retained benchmark output; model scores are not independently re-certified.' }, null, 2));
 } finally {

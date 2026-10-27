@@ -155,6 +155,7 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5');
   const input = join(project, 'screens.json'), sheet = join(project, 'benchmark.html');
   const entries = ['reference', 'counterexample', 'current', 'candidate', 'candidate', 'candidate', 'candidate'].map((role, i) => ({ role, name: `Umer ${role} ${i} <script>`, file: PICTURE, source: 'Local fixture; no remote source', permission: 'Project-owned fixture', captured_at: null, theme: 'light' }));
+  entries[1].name = 'current app not captured - counterexamples from the captain';
   writeFileSync(input, JSON.stringify(entries));
   const bench = JSON.parse((await run('benchmark', '--product', 'AI chat app', '--screen', 'phone chat', '--input', input, '--out', sheet, '--project', project)).stdout);
   const report = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')), html = readFileSync(sheet, 'utf8');
@@ -168,12 +169,14 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   assert.ok(html.includes('&lt;script&gt;') && !html.includes('<script>'));
   assert.equal((html.match(/<img width="390"/g) ?? []).length, 8);
   assert.ok(html.includes('unknown (owner supplied)'));
+  assert.ok(html.includes('current app not captured - counterexamples from the captain'));
   const wire = readFileSync(join(base.FIRST_DRAFT_HOME, 'benchmark-inputs'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(wire.length, 5);
   for (const w of wire) {
     assert.match(w.system, /Never credit a feature/);
     assert.match(w.system, /Counterexamples are negative evidence/);
     assert.match(w.system, /marketing homepage is not a chat screen/);
+    assert.match(w.system, /within five seconds \(not verification of claimed backend outcomes\)/);
     assert.equal(w.q.captures.filter((r) => r.role === 'reference').length, 2);
     assert.equal(w.q.captures.filter((r) => r.role === 'counterexample').length, 1);
     assert.equal(w.images, 4, 'real raster inputs reach the native subscription boundary');
