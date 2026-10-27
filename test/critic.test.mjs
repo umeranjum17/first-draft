@@ -168,3 +168,28 @@ test('the judge captures the whole page in both themes at both widths, tiled and
   assert.notDeepEqual(dark(a), dark(b), 'the dark theme is a different picture');
   assert.equal((await render.views(page(7000), ['light'])).length, 6, 'one theme is half the views');
 });
+
+test('a judge that breaks its JSON is asked again up to three times, records each retry, and otherwise refuses without a score', async (t) => {
+  if (!findBrowser()) return t.skip('no Chrome or Chromium');
+  const { dir, env, run } = await lab(t, []);
+  env.FD_JUDGE_BAD = '2'; // the first two answers are cut off mid-JSON, the third is whole
+  const out = join(dir, 'retry.html');
+  const { made } = await run('make', 'A notes app for Umer', '--out', out, '--options', '1');
+  const c = made.files[0].critique;
+  assert.equal(c.score, 6);
+  assert.deepEqual(c.judge_retries.map(r => r.attempt), [1, 2]);
+  assert.ok(c.judge_retries.every(r => /^invalid JSON: /.test(r.error)));
+  assert.equal(readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim().split('\n').length, 3);
+
+  env.FD_JUDGE_BAD = '6'; // the three calls so far are counted: the next three answers are broken: JUDGE_FAILED, nothing written
+  const judged = join(dir, 'refused.html');
+  await assert.rejects(run('make', 'A notes app for Umer', '--out', judged, '--options', '1'), e => {
+    const { error } = JSON.parse(e.stdout);
+    assert.equal(error.code, 'JUDGE_FAILED');
+    assert.match(error.message, /byokit:codex \(gpt-6\.1-sol\) gave no usable judge_designs answer in 3 attempts, so nothing was scored: 1: invalid JSON.*\| 2: .*\| 3: .*cut off.*Re-run the command.*codex login/s);
+    return true;
+  });
+  assert.equal(existsSync(judged), false);
+  assert.equal(existsSync(join(dir, 'refused-1.html')), false);
+  assert.equal(existsSync(join(dir, 'refused.critic')), false);
+});

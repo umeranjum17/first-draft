@@ -51,7 +51,8 @@ else {
   const [score,plain]=process.env.FD_JUDGE_AI?[9,7]:(scores[n]||[6,7]);
   const value={views:design.map(view=>({view,judged:'The notes list and its theme at this width'})),design:{score,gaps:['No product screen']},plain:{score:plain,gaps:['Generic layout']},against:'Captured Umer notes: real content',reads_as:'Notes for Umer',fix:'Show the product',axes:Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'The captured reference shows content, the option does not'}]))};
   if(input.includes('"ai_side"')) Object.assign(value,{ai_side:{reads_as_ai:!!process.env.FD_JUDGE_AI||score<9,tells:process.env.FD_JUDGE_AI||score<9?['Repeated generic cards']:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:score>=9||i<5,reason:'Shown in fixture'}))});
-  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_designs',arguments:JSON.stringify(value)}]})}}));
+  const cut=n<Number(process.env.FD_JUDGE_BAD||0)?(x=>x.slice(0,x.length>>1)):(x=>x); // the model breaks the JSON of its first FD_JUDGE_BAD answers
+  console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_designs',arguments:cut(JSON.stringify(value))}]})}}));
   console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
 }
 `, { mode: 0o700 });

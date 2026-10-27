@@ -182,7 +182,7 @@ export async function imageSupport(route, model) {
 }
 
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
-export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false }) {
+export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false, asOnce = false }) {
   const problem = await check(route, model);
   if (problem) throw new Error(problem);
   if (images.length && !await imageSupport(route, model)) throw new Error(`byokit:${route} / ${model} does not support reference images; none were sent`);
@@ -199,6 +199,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
         const { text, calls } = answer.data;
         let args;
         try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
+          if (asOnce) throw Object.assign(new Error(`not valid JSON: ${e.message}`), { code: 'bad_json', detail: e.message }); // the caller counts and records the attempts
           if (attempt >= 2) throw new Error(`the model's tool call was not valid JSON three times: ${e.message}`);
           continue;
         }

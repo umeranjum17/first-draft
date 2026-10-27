@@ -9,7 +9,7 @@
 // fetched or captured, the reference policy is unchanged. It requires an independent engine, but is not
 // trademark clearance. Each concept carries its own palette, chosen with the idea. The options are drawn in parallel (LIMIT at a time);
 // when the critic drops every drawn mark, one second round explores new concepts seeded by the critic's own reasons and advice.
-import { imageSupport, respond, routeOf } from './byokit.mjs';
+import { engineInstruction, imageSupport, respond, routeOf } from './byokit.mjs';
 import { resolveJudge } from './judge.mjs';
 import { findBrowser, renderCheck } from './render-check.mjs';
 import { audit, board, detail, detailLost, flagSheet, logoSeed, readPalette, stack } from './logo.mjs';
@@ -72,19 +72,32 @@ const CRITIQUE = { name: 'critique_marks', description: 'The critique of every m
     verdict: { type: 'string', enum: ['keep', 'redo', 'drop'] },
     fix: { type: 'string', maxLength: 800, description: 'redo: exactly what to change in the drawing; drop: why the idea cannot work; keep: empty or a note' } } } } } } };
 
-// One structured call on the person's own route and model; an answer that does not fit is sent back once with what is wrong.
+// One structured call on the person's own route and model. An answer that cannot be parsed or does not fit is asked for again with the same
+// pages, images and rubric (a field problem is also said back), up to three attempts in all; each failed attempt is returned as `retries`.
+// When all three fail the call refuses, naming the engine, the attempts and what to do; nothing is made up.
 export async function ask(c, { system, user, tool, images = [] }, problemsOf) {
+  const ATTEMPTS = 3, retries = [];
   let tokens_in = 0, tokens_out = 0, problems = [];
-  for (let round = 0; round < 2; round++) {
-    const answer = await respond({ route: routeOf(c.agent), model: c.model, timeoutMs: c.timeoutMs, maxTokens: 16000, singleCall: true, images, signal: AbortSignal.timeout(c.timeoutMs ?? 600_000),
-      context: { systemPrompt: system, tools: [tool], messages: [{ role: 'user', timestamp: Date.now(), content: round ? `${user}\n\nYour last ${tool.name} call was not usable: ${problems.join('; ')}. Call ${tool.name} again with every field as its schema says.` : user }] } });
+  for (let round = 0; round < ATTEMPTS; round++) {
+    let answer;
+    try {
+      answer = await respond({ route: routeOf(c.agent), model: c.model, timeoutMs: c.timeoutMs, maxTokens: 16000, singleCall: true, images, asOnce: true, signal: AbortSignal.timeout(c.timeoutMs ?? 600_000),
+        context: { systemPrompt: system, tools: [tool], messages: [{ role: 'user', timestamp: Date.now(), content: problems.length ? `${user}\n\nYour last ${tool.name} call was not usable: ${problems.join('; ')}. Call ${tool.name} again with every field as its schema says.` : user }] } });
+    } catch (e) {
+      if (e.code !== 'bad_json') throw e;
+      problems = [];
+      retries.push({ attempt: round + 1, error: `invalid JSON: ${e.detail}`, truncated: /unterminated|unexpected end/i.test(e.detail) });
+      continue;
+    }
     tokens_in += answer.usage?.input ?? 0; tokens_out += answer.usage?.output ?? 0;
     if (answer.stopReason === 'error' || answer.stopReason === 'aborted') throw new Error(answer.errorMessage || answer.stopReason);
     const calls = answer.content.filter((x) => x.type === 'toolCall');
     problems = calls.length === 1 && calls[0].name === tool.name ? problemsOf(calls[0].arguments) : [`answer with exactly one ${tool.name} call`];
-    if (!problems.length) return { value: calls[0].arguments, tokens_in, tokens_out };
+    if (!problems.length) return { value: calls[0].arguments, tokens_in, tokens_out, ...(retries.length && { retries }) };
+    retries.push({ attempt: round + 1, error: `well-formed JSON with wrong fields: ${problems.slice(0, 3).join('; ')}` });
   }
-  throw new Error(`the model's ${tool.name} answer was not usable twice: ${problems.slice(0, 5).join('; ')}`);
+  const route = routeOf(c.agent), cut = retries.some((r) => r.truncated);
+  throw Object.assign(new Error(`${c.agent} (${c.model}) gave no usable ${tool.name} answer in ${ATTEMPTS} attempts, so nothing was scored: ${retries.map((r) => `${r.attempt}: ${r.error}`).join(' | ')}${cut ? ' (the output was cut off)' : ''}. Re-run the command; if it keeps failing, check the sign-in: ${engineInstruction(route)}`), { retries });
 }
 
 // What is wrong with one text field, said so that the model can fix it: missing, not text, empty or too long.
