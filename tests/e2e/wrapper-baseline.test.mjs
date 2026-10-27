@@ -205,6 +205,10 @@ test('scripts/compare.mjs renders pages side by side at 390 and 1280 without a m
   const page = readFileSync(result.side_by_side, 'utf8');
   assert.match(page, /plain-1280\.png/);
   assert.match(page, /make-390\.png/);
+  // With the saved route signed out it refuses with the one sign-in line, before any call, and writes nothing.
+  writeFileSync(join(dir, 'config.json'), JSON.stringify({ agent: 'byokit:codex', agent_config: { 'byokit:codex': { model: 'gpt-6.1-sol' } } }));
+  await assert.rejects(promisify(execFile)(process.execPath, [join(ROOT, 'scripts/compare.mjs'), 'A notes app', '--out', join(dir, 'refused')], { env: { PATH: '', HOME: dir, FIRST_DRAFT_HOME: dir } }),
+    (e) => JSON.parse(e.stdout).error.message === 'No usable AI engine. Sign in to ChatGPT: codex login' && !existsSync(join(dir, 'refused')));
 });
 
 // A flow brief is drawn with the one-shell contract and scored for its shell and its character in the same single review.

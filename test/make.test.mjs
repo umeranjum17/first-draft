@@ -474,6 +474,12 @@ test('make writes self-contained mocks through the BYOKit Go route', async (t) =
   assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /Welcome back, warm and cosy/);
   assert.match(readFileSync(join(dir, 'warm.html'), 'utf8'), /default-src 'none'/);
   assert.equal(readFileSync(option, 'utf8'), original, 'the refined option is untouched');
+  // An option's embedded fonts are one long line each, which the engine's editor cannot show: it sees a short token, never the payload.
+  const fonted = join(dir, 'fonted.html'), seenBefore = warm.length;
+  writeFileSync(fonted, original.replace('</head>', `<style>@font-face{font-family:T;src:url(data:font/woff2;base64,${'QUJD'.repeat(5000)})}</style></head>`));
+  await warmRun('refine', fonted, 'warmer palette', '--out', join(dir, 'fonted-warm.html'));
+  assert.match(JSON.stringify(warm[seenBefore].body), /data:font\/woff2;base64,FONT1/);
+  assert.doesNotMatch(JSON.stringify(warm.slice(seenBefore).map((w) => w.body)), /QUJDQUJD/);
   await assert.rejects(run('refine', option, 'no change', '--out', option), (e) => /USAGE/.test(e.stdout));
   await assert.rejects(run('refine', option, 'no change', '--out', join(dir, 'same.html')), (e) => /left the option unchanged/.test(e.stdout));
   await assert.rejects(promisify(execFile)(process.execPath, [CLI, 'refine', option, 'script fixture', '--out', join(dir, 'script.html')], { env: { ...env, FIRST_DRAFT_CHROME: '/nonexistent' } }), e => /only script-free HTML/.test(e.stdout));

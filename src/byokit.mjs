@@ -191,7 +191,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
       text: { type: 'string' }, calls: { type: 'array', ...(singleCall && { minItems: 1, maxItems: 1 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
     return cliAnswer(route, { model, images, timeoutMs, signal }, async (backend) => {
-      // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes): asked again once.
+      // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes; Sonnet 5.5 did in a judge call, which lost a finished make): asked again twice.
       for (let attempt = 0; ; attempt++) {
         const answer = await backend.generate({
           system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
@@ -199,7 +199,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
         const { text, calls } = answer.data;
         let args;
         try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
-          if (attempt) throw new Error(`the model's tool call was not valid JSON twice: ${e.message}`);
+          if (attempt >= 2) throw new Error(`the model's tool call was not valid JSON three times: ${e.message}`);
           continue;
         }
         return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),

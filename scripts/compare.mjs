@@ -12,14 +12,13 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { promisify } from 'node:util';
-import { writePage } from '../src/byokit.mjs';
+import { doctor, engineRequired, writePage } from '../src/byokit.mjs';
 import { renderCheck } from '../src/render-check.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, model: { type: 'string' }, pages: { type: 'boolean' } } });
 const fail = (message) => { console.log(JSON.stringify({ error: { code: 'USAGE', message } })); process.exit(1); };
 if (!values.out || !positionals.length) fail('usage: compare.mjs "<brief>" --out <folder> [--model <id>] | --pages name=file.html name=file.html');
 const out = resolve(values.out), [brief, ...rest] = positionals;
-mkdirSync(out, { recursive: true });
 
 const variants = [];
 if (values.pages) {
@@ -31,6 +30,8 @@ if (values.pages) {
   try { config = JSON.parse(readFileSync(join(home, 'config.json'), 'utf8')); } catch { fail(`no ${join(home, 'config.json')}: run first-draft-axi init --agent byokit:<route> --model <model> first`); }
   const route = config.agent?.match(/^byokit:(.+)/)?.[1], model = values.model ?? config.agent_config?.[config.agent]?.model;
   if (!route || !model) fail('compare needs a byokit route and a model: run first-draft-axi init, or pass --model');
+  if ((await doctor(route, model)).status !== 'ok') fail(engineRequired(route).message); // the same one sign-in line as make; nothing is written
+  mkdirSync(out, { recursive: true });
   const timeoutMs = 10 * 60_000;
   // The plain side: the brief and nothing else, the model's own defaults.
   let since = Date.now();
@@ -43,6 +44,7 @@ if (values.pages) {
   variants.push({ name: 'make', html: readFileSync(file, 'utf8'), seconds: Math.round((Date.now() - since) / 1000), tokens_out: made.tokens_out, critic_score: made.files[0].critique?.score, timing: made.timing });
 }
 
+mkdirSync(out, { recursive: true });
 const render = renderCheck();
 try {
   for (const v of variants) {
