@@ -17,11 +17,11 @@ export FIRST_DRAFT_HOME=$(mktemp -d)                            # throwaway conf
 mkdir ~/fd-test && cd ~/fd-test
 
 first-draft-axi init --agent byokit:codex --model gpt-6.1-sol    # ~1 s
-first-draft-axi doctor                                           # ~4 s, no model call, "ready": true
-first-draft-axi make "A notes app" --out notes.html              # ~10 min, three options
+first-draft-axi doctor                                           # 4–20 s, no model call, "ready": true
+first-draft-axi make "A notes app" --out notes.html              # 9–10 min, three options
 first-draft-axi view notes.html --host 127.0.0.1                 # prints a URL within ~15 s; open it; Ctrl+C stops it
-first-draft-axi judge notes-1.html "A notes app" --plain notes.critic/plain.html   # ~45 s
-first-draft-axi refine notes-2.html "Warmer palette" --out notes-warm.html         # ~2.5 min
+first-draft-axi judge notes-1.html "A notes app" --plain notes.critic/plain.html   # 25–45 s
+first-draft-axi refine notes-2.html "Warmer palette" --out notes-warm.html         # 2–6 min
 echo '{"notes":{"total":2}}' > data.json
 first-draft-axi check notes-1.html --data data.json              # <1 s, {"note":"checked","mismatches":[]}
 ```
@@ -43,13 +43,13 @@ EOF
 first-draft-axi benchmark --product "notes app" --screen "phone note list" --input screens.json --width 390 --theme light --out benchmark.html
 ```
 
-Posting needs a sign-off board. Use a throwaway one so your real board is never touched: `mkdir -p ~/fd-board/home && cd ~/fd-board && export SIGN_OFF_HOME=$PWD/home && sign-off-axi init`, then from that folder `first-draft-axi post ~/fd-test/notes.html --title "Which notes app?" --recommend a --host 127.0.0.1` (~2 s, one card with a link per option). If no `view` was already running for that design, `post` starts one and leaves it serving; close it when you are done. `unset SIGN_OFF_HOME` afterwards.
+Posting needs a sign-off board. Use a throwaway one so your real board is never touched: `mkdir -p ~/fd-board/home && cd ~/fd-board && export SIGN_OFF_HOME=$PWD/home && sign-off-axi init`, then from that folder `first-draft-axi post ~/fd-test/notes.html --title "Which notes app?" --recommend a --host 127.0.0.1` (~2 s, one card with a link per option). If no `view` was already running for that design, `post` starts one, prints its `pid` and leaves it serving; `kill` that pid when you are done. `unset SIGN_OFF_HOME` afterwards.
 
 ## What a good run looks like
 
 | Step | Files / lines you should see |
 | --- | --- |
-| `make` | `notes-1.html`, `notes-2.html`, `notes-3.html` (60–120 KB each) and `notes.critic/plain.html`; JSON with `"render_check":"checked"`, `critic.judge.agent` = the *other* engine (`byokit:claude` when you made with codex), a `critique.score` and `plain_score` per option. Last run: scores 7, 7, 7 against plain 4, 3, 3 and `"passed":false`, because the bar is 9. A low score is reported, not hidden. |
+| `make` | `notes-1.html`, `notes-2.html`, `notes-3.html` (70–180 KB each) and `notes.critic/plain.html`; JSON with `"render_check":"checked"`, `critic.judge.agent` = the *other* engine (`byokit:claude` when you made with codex), a `critique.score` and `plain_score` per option. Last run: scores 7, 7, 7 against plain 4, 3, 3 and `"passed":false`, because the bar is 9. A low score is reported, not hidden. |
 | `judge` | `critique.score`, four `views` (1280 and 390, light and dark), `capture.images: 8` |
 | `refine` | `{"refined":{...}}` and a new `notes-warm.html`; `notes-2.html` is byte-for-byte unchanged |
 | `benchmark` | `benchmark.html` plus `benchmark.html.json`; `judge` reads `independent: byokit:claude / claude-sonnet-5-5`; one score row per `current`/`candidate`; some `refused` entries (Reddit's robots.txt, for one) are normal |
