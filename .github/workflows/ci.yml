@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('ref-{0}', github.ref) }}
@@ -38,8 +39,13 @@ jobs:
             case "$f" in
               LICENSE|NOTICE) ;;
               docs/wrapper-allowlist.json|docs/logo-512.png) code=true ;;
-              docs/*) ;;
-              *.md) case "$f" in */*) code=true ;; esac ;;
+              docs/*|evidence/*|screenshots/*|**/evidence/*|**/screenshots/*) ;;
+              *.md)
+                case "$f" in
+                  .github/workflows/*|*/manifest.md|manifest.md) code=true ;;
+                  *) ;;
+                esac
+                ;;
               *) code=true ;;
             esac
           done <<< "$(git diff --name-only "$base" "$HEAD_SHA" --)"
@@ -47,6 +53,7 @@ jobs:
           echo "code=$code"
 
   test:
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     needs: changes
     runs-on: ubuntu-latest
     steps:
@@ -60,5 +67,37 @@ jobs:
       - run: node scripts/check-samples.mjs
       - if: needs.changes.outputs.code == 'true'
         run: npm ci
-      - if: needs.changes.outputs.code == 'true'
+      - if: needs.changes.outputs.code == 'true' && github.event_name == 'pull_request'
         run: npm test
+
+  main-package-smoke:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm pack --pack-destination "$RUNNER_TEMP"
+      - name: Install and smoke-test packed CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/prefix" "$RUNNER_TEMP/home" "$RUNNER_TEMP/xdg-config" "$RUNNER_TEMP/xdg-data" "$RUNNER_TEMP/xdg-state" "$RUNNER_TEMP/tmp" "$RUNNER_TEMP/fd-home"
+          npm install --prefix "$RUNNER_TEMP/prefix" "$RUNNER_TEMP"/first-draft-axi-*.tgz
+          cli="$RUNNER_TEMP/prefix/node_modules/first-draft-axi/src/cli.mjs"
+          node_bin="$(command -v node)"
+          clean=(env -i HOME="$RUNNER_TEMP/home" PATH=/usr/bin:/bin XDG_CONFIG_HOME="$RUNNER_TEMP/xdg-config" XDG_DATA_HOME="$RUNNER_TEMP/xdg-data" XDG_STATE_HOME="$RUNNER_TEMP/xdg-state" TMPDIR="$RUNNER_TEMP/tmp" FIRST_DRAFT_HOME="$RUNNER_TEMP/fd-home" npm_config_userconfig=/dev/null)
+          if "${clean[@]}" "$node_bin" "$cli" doctor >"$RUNNER_TEMP/doctor.log" 2>&1; then
+            echo 'doctor unexpectedly found an engine in the isolated environment' >&2
+            exit 1
+          fi
+          grep -Eqi 'sign.?in|engine|configured' "$RUNNER_TEMP/doctor.log"
+          if "${clean[@]}" "$node_bin" "$cli" make 'CI refusal smoke' --out "$RUNNER_TEMP/refused.html" >"$RUNNER_TEMP/refusal.log" 2>&1; then
+            echo 'make unexpectedly succeeded without an engine' >&2
+            exit 1
+          fi
+          grep -Eqi 'sign.?in|engine|configured' "$RUNNER_TEMP/refusal.log"
+          printf '<!doctype html><p>CI fixture</p>\n' > "$RUNNER_TEMP/fixture.html"
+          printf '{"figures":[],"states":[]}\n' > "$RUNNER_TEMP/fixture.json"
+          "${clean[@]}" "$node_bin" "$cli" check "$RUNNER_TEMP/fixture.html" --data "$RUNNER_TEMP/fixture.json"
