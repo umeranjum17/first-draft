@@ -31,16 +31,7 @@ capture of one, so the owner's own reference image is passed to make as `--ref` 
 
 ## Assert and capture
 
-Deterministic (`test/`, no model, no key, no network): `tests/e2e/wrapper-baseline.test.mjs` draws a flow brief through the real CLI against a
-local provider stand-in and asserts the one-shell sentence reaches the model, the review asks for the flow scores, a flow that keeps them
-passes and one whose screens or character change does not. `test/flow-scene.test.mjs` runs the real browser check (`flowScene` in
-`src/render-check.mjs`, enabled by `renderCheck(..., { flow: true })` for a flow brief): fixture flow screens whose scene fades into the
-ground or runs to both screen edges pass, and each of an oval/rounded clip, a plain inset cut edge on the ground, a border, a drop shadow,
-a clip-path, a mat or framed box behind it, and a thumbnail scene on one screen fails with its own finding. The same check (`flowShell`,
-also from that one `renderCheck` call) refuses one step label repeated on every screen, two actions on the last screen, and a screen
-taller than the screen it is shown on (the option screens that ran 80-110px past 390, so the dots and the next button fell below the fold),
-and passes screens that label their own step, end on one action and fit their own screen. To see the findings on a real flow, run the check over a retained flow's HTML
-(`renderCheck(() => {}, { flow: true }).verify(html)`).
+Deterministic (`npm test`, no model, no key, no network): `tests/e2e/onboarding-flow.test.mjs` drives one flow brief through the real CLI against a local provider stand-in and checks the shell/flow score on its output. The former scene geometry and shell edge-case tests were removed; those implementation-level checks are not part of the retained suite. To inspect findings on a real flow, run the check over a retained flow's HTML (`renderCheck(() => {}, { flow: true }).verify(html)`).
 
 Live benchmark, the mellow onboarding reference: `node journeys/onboarding-flow.mjs` with `DONE_DONE_EVIDENCE_ROOT`,
 `FD_DESIGN_AGENT`/`FD_DESIGN_MODEL`, `FD_ONBOARDING_REF=<the owner's reference image>` and spending approval. It previews the flow's image

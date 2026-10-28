@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { installJudge } from '../journeys/fixtures/judge-cli.mjs';
+import { installJudge } from './fixtures/judge-cli.mjs';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const PERMISSION = 'Anonymous automated browsers may store screenshots of this entire website privately as visual design references. Do not copy our text or assets into generated designs.';

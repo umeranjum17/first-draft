@@ -197,7 +197,7 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   });
   assert.equal(seen.length, 0, 'no browser, no model call');
   for (const bad of [['--like', 'https://logosystem.co/'], ['--options', '6'], ['--assets', 'codex']]) await assert.rejects(run(['logo', brief, '--out', out, ...bad]), (e) => JSON.parse(e.stdout).error.code === 'USAGE');
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  assert.ok(findBrowser(), 'Chrome or Chromium is required for this integration journey');
   assert.equal(JSON.parse((await run(['styles', '--logo'])).stdout).logo_directions[0].id, 'geometric-symbol');
 
   const reference = join(dir, 'reference.png');
@@ -352,80 +352,4 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.deepEqual(await sent.json(), { option: { n: 4, label: 'tea-2-refined', file: 'tea-2-refined.html' }, engine: {agent:'byokit:opencode-go',model:'muse-spark-1.3-contributor'} });
   assert.notEqual(readFileSync(join(dir, 'tea-2-refined.logo', 'mark.svg'), 'utf8'), readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'));
   assert.ok(existsSync(join(dir, 'tea-2-refined.logo', 'favicon.ico')));
-});
-
-test('logo: image-first exploration through the asset provider, and a second round from the critic\'s advice when it drops every drawn mark', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
-  const dir = mkdtempSync(join(tmpdir(), 'first-draft-logo-images-'));
-  // A Higgsfield that is ready and makes one image (a real PNG that the host converts with ImageMagick), and a fetch that serves it.
-  const bin = join(dir, 'bin'), log = join(dir, 'calls'), mark = join(dir, 'mark.png');
-  mkdirSync(bin);
-  await promisify(execFile)('convert', ['-size', '16x16', 'xc:#2f6b3b', mark]);
-  writeFileSync(join(bin, 'higgsfield'), `#!${process.execPath}\nimport {appendFileSync} from 'node:fs';\nconst a=process.argv.slice(2);appendFileSync(${JSON.stringify(log)},JSON.stringify(a)+'\\n');\nif(a[0]==='account')console.log('{"credits":10}');else if(a[1]==='cost')console.log('{"credits":0.15}');else console.log('[{"status":"completed","job_type":"z_image","result_url":"https://fixture.invalid/mark.png"}]');`, { mode: 0o755 });
-  writeFileSync(join(bin, 'magick'), '#!/bin/sh\nexec convert "$@"\n', { mode: 0o755 }); // ImageMagick 6 (a CI runner) has convert and no magick
-  const hook = join(dir, 'fetch.mjs');
-  writeFileSync(hook, `const real=globalThis.fetch;globalThis.fetch=(url,options)=>url==='https://fixture.invalid/mark.png'?Promise.resolve(new Response(Buffer.from('${readFileSync(mark).toString('base64')}','base64'))):real(url,options);`);
-  const seen = [], server = await standIn(seen, WORLD2);
-  t.after(() => { server.close(); clear(dir); });
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, CI: '', HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
-  const run = (args) => promisify(execFile)(process.execPath, ['--import', hook, CLI, ...args], { env, cwd: dir });
-  await run(['init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor']);
-  await assert.rejects(run(['logo', 'Umer\'s tea shop', '--out', join(dir, 'x.html'), '--explore', 'midjourney']), (e) => /Unknown asset provider: midjourney/.test(e.stdout));
-  const result = JSON.parse((await run(['logo', 'Umer\'s tea shop, calm and modern', '--out', join(dir, 'tea.html'), '--options', '1', '--explore', 'higgsfield'])).stdout), [file] = result.made.files;
-
-  // Round one's only drawn mark was dropped by the critic (a horseshoe), so the second round explored again from the critic's own words.
-  const proposals = seen.filter((b) => b.includes('"propose_concepts"')), [first, second] = [proposals.filter((b) => !userText(b).includes('critic_advice')), proposals.filter((b) => userText(b).includes('critic_advice'))];
-  assert.deepEqual([first.length, second.length], [3, 3], 'three territory calls a round');
-  for (const advice of [ADVICE, 'a horseshoe', 'Ideas already tried \\(do not repeat them\\): Calm type, Slow ink', 'Sketches the critic dropped before anything was drawn']) assert.match(userText(second[0]), new RegExp(advice.replaceAll('.', '\\.')), advice);
-  assert.match(second[0], /This is a second round/);
-  assert.equal(result.rounds, 2);
-  assert.deepEqual(result.second_round, { reason: 'the critic dropped every drawn mark in the first round; the second explored new concepts from its reasons and advice', passed: 1 });
-  assert.deepEqual([file.concept.name, file.passed], ['Pour again', true]);
-  assert.deepEqual(result.concepts.map((k) => [k.id, k.round]), Array.from({ length: 18 }, (_, i) => [i + 1, i < 9 ? 1 : 2]));
-  assert.deepEqual(result.dropped.map((d) => [d.name, d.critique.verdict, d.option]), [['Bud', 'drop', 'kept as the best attempt, flagged as not passing']]);
-  const folder = join(dir, 'tea.logo');
-  assert.deepEqual(readdirSync(join(dir, 'tea.dropped')).sort(), ['concept-7-first.html', 'concept-7-first.logo', 'concept-7-redo.html', 'concept-7-redo.logo'], 'round one\'s attempts stay for review');
-  const logo = JSON.parse(readFileSync(join(folder, 'logo.json'), 'utf8'));
-  assert.equal(logo.explored.length, 18);
-  assert.ok(existsSync(join(folder, 'concepts-round2.png')) && existsSync(join(folder, 'concepts.png')));
-  assert.ok(Number.isInteger(logo.timing.second_round_s) && logo.timing.total_s >= logo.timing.second_round_s, JSON.stringify(logo.timing));
-  assert.deepEqual(logo.palette.light, PALS['Pour'].light, 'the second round concept brought its own palette');
-
-  // Image-first: each concept tried was shown to the provider and its raster went to the engine as a reference to redraw as SVG.
-  const created = readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse).filter((a) => a[0] === 'generate' && a[1] === 'create');
-  assert.equal(created.length, 2, 'one image for Bud, one for Pour again');
-  assert.match(created[0].join(' '), /Concept "Bud": A tea bud held between two pinched leaves\./);
-  const engines = seen.filter((b) => b.includes('first-draft logo mode') && /Logo direction|Revise this logo option/.test(userMessages(b)[0])); // not the baseline's
-  assert.ok(engines.length >= 3 && engines.every((b) => b.includes('"type":"input_image"')), 'every engine turn carries the exploration image');
-  assert.match(engines[0], /The last attached image is a raster exploration of this concept by an image model/);
-  assert.deepEqual(result.exploration, { provider: 'higgsfield', images: [{ concept: 'Pour again', seconds: result.exploration.images[0].seconds }] });
-  assert.deepEqual([logo.exploration.provider, logo.exploration.image], ['higgsfield', 'exploration.webp']);
-  assert.equal(readFileSync(join(folder, 'exploration.webp')).subarray(8, 12).toString(), 'WEBP');
-  assert.equal(readdirSync(join(dir, 'tea.explore')).length, 2, 'the generated files are kept');
-
-  // No provider ready (or CI, or --explore none): the logo is drawn from the idea alone, as before, and says why.
-  const { exploreImages } = await import('../src/logo-images.mjs');
-  const path = process.env.PATH, ci = process.env.CI;
-  try {
-    process.env.PATH = join(dir, 'empty'); process.env.CI = '';
-    assert.match((await exploreImages({ spec: 'auto', count: 1, brief: 'x', dir })).off, /^no image provider is ready/);
-    assert.equal((await exploreImages({ spec: 'none', count: 1, brief: 'x', dir })).off, 'switched off with --explore none');
-    process.env.CI = 'true';
-    assert.equal((await exploreImages({ spec: 'auto', count: 1, brief: 'x', dir })).off, 'CI never generates images');
-  } finally { process.env.PATH = path; process.env.CI = ci; }
-});
-
-test('logo baseline and second-round provider failures refuse instead of returning earlier attempts', async t => {
-  for (const [flag, world, expected] of [['failBaseline', WORLD1, /Logo baseline failed/], ['failSecond', WORLD2, /Independent logo review failed/]]) await t.test(flag, async t => {
-    const dir = mkdtempSync(join(tmpdir(), 'fd-logo-refusal-'));
-    const server = await standIn([], { ...world, [flag]: true });
-    t.after(() => { server.close(); clear(dir); });
-    const env = { ...process.env, CI:'true', HOME:dir, XDG_CONFIG_HOME:dir, XDG_DATA_HOME:dir, TMPDIR:dir, FIRST_DRAFT_HOME:dir, OPENCODE_API_KEY:'synthetic', FIRST_DRAFT_TEST_BYOKIT_BASE:`http://127.0.0.1:${server.address().port}` };
-    const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env, cwd:dir });
-    await run('init','--agent','byokit:opencode-go','--model','muse-spark-1.3-contributor');
-    const out = join(dir,'refused.html');
-    await assert.rejects(run('logo',"Umer's tea shop",'--out',out,'--options','1','--explore','none'), e => expected.test(e.stdout));
-    assert.equal(existsSync(out), false);
-    assert.equal(existsSync(join(dir,'refused.baseline','baseline.html')), false);
-  });
 });

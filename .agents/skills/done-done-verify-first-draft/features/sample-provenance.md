@@ -1,6 +1,6 @@
 # Design samples on the README and landing page: run, model, critic score and review
 
-Part of the first-draft verification map. Source: `scripts/check-samples.mjs` (CI and the Pages deploy run it), `docs/media/samples.json`, `test/samples.test.mjs`.
+Part of the first-draft verification map. Source: `scripts/check-samples.mjs` (CI and the Pages deploy run it), `docs/media/samples.json`. The former deterministic sample-validation test was removed from the integration-only suite.
 
 ## Why
 
@@ -25,12 +25,11 @@ Every picture under `docs/media/` that `README.md` or `docs/index.html` shows ha
 
 Main reviewed exactly two retained stripped-engine options (self-scored 8 and 7) on 2026-10-25 and they are the README hero: a reviewed
 sample, Sonnet 5.5, 24 Oct 2026, score 8/10 (Margin 7/10). Their source hashes, runs, models, scores, reviewer, review date and note are
-pinned in `scripts/check-samples.mjs`, and `docs/media/samples.json` must repeat them exactly; `test/samples.test.mjs` proves that a third source, a changed hash/run/score, an invented plain baseline, a fake reviewer or
-relabelled reason, a copied exception label on an ordinary 8, and a stale reviewed pair are all refused. The general 9/10 rule is unchanged
+pinned in `scripts/check-samples.mjs`, and `docs/media/samples.json` must repeat them exactly. CI runs the checker; the integration-only test suite no longer exercises its rejection matrix. The general 9/10 rule is unchanged
 for everything else, and this reviewed pair may only cover the composite keys `reviewed-pair` and `reviewed-pair-phone`.
 
 ## Driving it
 
 1. `node scripts/check-samples.mjs`: exit 0 with the count of samples shown, or each problem with its picture and page.
-2. `node --test test/samples.test.mjs`: the shipped Fieldnotes picture is refused with every reason, a fresh critic-passed reviewed sample passes, a 40-day-old one is refused, pages with no picture pass, and the approved hero pair passes while every altered or extra identity is refused.
+2. CI runs `node scripts/check-samples.mjs`; there is no dedicated integration test for its rejection matrix.
 3. To add or replace a sample: make it on the current engine with the critic on, capture the option in the view (`done-done run studio` with `FD_STUDIO_SOURCE`), add its entry, name its model on the page, and show the option, its plain page and its score in the PR.

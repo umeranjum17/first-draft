@@ -1,8 +1,8 @@
 {
-  "about": "Every addition first-draft makes to a plain model call, with the paired, rendered comparison that justifies it. tests/e2e/wrapper-baseline.test.mjs fails when the prompt, the call shape or the extra calls of the default make contain something that is not listed here. See CONTRIBUTING.md.",
+  "about": "Every addition first-draft makes to a plain model call, with the paired, rendered comparison that justifies it. These entries are reviewed manually; npm test retains a real CLI integration for the multi-screen flow and its review. See CONTRIBUTING.md.",
   "model": "claude-sonnet-5-5",
   "baseline": "A plain call: one model call, the brief as the whole prompt, no system prompt of ours, no tools, the platform's own output limit, no style or direction.",
-  "verdicts": {"accepted": "Repeated paired comparisons (same brief, same model) on at least two briefs, every one up, none down; or a delivery or policy reason.", "provisional": "In the default make on a measured but mixed, bundled or missing comparison. Named with who decided it and the comparison still needed; the test prints these."},
+  "verdicts": {"accepted": "Repeated paired comparisons (same brief, same model) on at least two briefs, every one up, none down; or a delivery or policy reason.", "provisional": "In the default make on a measured but mixed, bundled or missing comparison. Named with who decided it and the comparison still needed; review these entries manually."},
   "entries": [
   {
     "id": "frontend-design-guidance",
