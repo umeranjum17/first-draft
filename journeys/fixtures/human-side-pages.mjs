@@ -1,4 +1,4 @@
-// Fixture pages for the human-side checks (test/human-side.test.mjs, journeys/human-side.mjs).
+// Fixture pages for the human-side recapture journey (journeys/human-side.mjs).
 // A dark hero with a pill, a centred six-word title, one filled button and one outline, and the product as data; then a light statement,
 // a green colour block and a dark row. Two hues (a green brand and a lilac accent). Each option breaks one thing.
 const card = (t) => `<article><h3>${t}</h3><p>Closed in two days, down from six.</p></article>`;

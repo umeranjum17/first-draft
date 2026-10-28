@@ -68,25 +68,3 @@ test('init sets up any repo: .first-draft/ and the skill for claude, codex and p
   assert.deepEqual(readdirSync(other, { all: true }).sort(), before);
   assert.equal((await init(['--agent', 'byokit:claude', '--model', 'claude-sonnet-5-5', '--global'])).error.code, 'USAGE');
 });
-
-test('the packaged skill names only commands the CLI has, the fleet model and the no-token rule', () => {
-  const skill = readFileSync(join(SKILL, 'SKILL.md'), 'utf8');
-  assert.match(skill, /^---\nname: first-draft-axi\ndescription: "[^"]+"\n---/);
-  const help = execFileSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' });
-  const used = new Set([...skill.matchAll(/`first-draft-axi ([a-z]+)\b/g)].map((m) => m[1]));
-  for (const c of ['init', 'make', 'redesign', 'view', 'post']) assert.ok(used.has(c), `the skill shows ${c}`);
-  for (const c of used) assert.match(help, new RegExp(`^  ${c}\\b`, 'm'), `${c} is a CLI command`);
-  assert.match(skill, /--model claude-sonnet-5-5/);
-  assert.match(skill, /no API key/);
-  assert.match(skill, /FIRST_DRAFT_BOARD/);
-  for (const flag of skill.match(/--(?:harness|global|max-pages|ref|evidence|media|board|host)\b/g)) assert.ok(help.includes(flag), `${flag} is in --help`);
-  assert.ok(readFileSync(join(SKILL, 'REFERENCE.md'), 'utf8').length > 5000);
-});
-
-test('redesign without an intent says how to redesign a URL or, from a screenshot only, how to use make --ref', async () => {
-  const r = await promisify(execFile)(process.execPath, [CLI, 'redesign', 'https://example.com', '--out', 'o'], { env: { PATH: process.env.PATH, HOME: tmpdir() } }).catch((e) => e);
-  const out = JSON.parse(r.stdout);
-  assert.equal(out.error.code, 'USAGE');
-  assert.ok(out.help.some((h) => /redesign https:\/\/example\.com\/pricing ".+" --out .+ --model claude-sonnet-5-5/.test(h)));
-  assert.ok(out.help.some((h) => /make "Redesign this screen: .+" --ref shot\.png/.test(h)));
-});

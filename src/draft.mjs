@@ -23,7 +23,7 @@ const LANDING = /\blanding[\s-]?pages?\b/i;
 const ONE_ACCENT = 'one accent colour, used on one thing per screen (the primary action or the selected item, never also headers, highlights, badges and rows); everything else is neutral';
 const BRAND = 'a landing, home or company page has one bold brand colour and one accent, the brand colour in big full-width bands and the accent on the primary action, and everything else neutral, as the human-side guidance says';
 // The page contract, one named rule at a time. Each rule is a wrapper addition to the plain call: it stays only with a paired, rendered
-// comparison in docs/wrapper-allowlist.json (CONTRIBUTING.md), which tests/e2e/wrapper-baseline.test.mjs enforces rule by rule.
+// comparison in docs/wrapper-allowlist.json (CONTRIBUTING.md), reviewed manually.
 export const contractRules = (drawing, human, flow) => [
   { id: 'reply-format', text: 'Page contract: reply with one complete, self-contained HTML document (<!doctype html> to </html>), with its CSS inside.' },
   ...(flow ? [{ id: 'flow-shell', text: `Restraint of a flow: ${flowRule()}` }] : []),

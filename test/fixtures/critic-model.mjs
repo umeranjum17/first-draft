@@ -1,4 +1,4 @@
-// A stand-in model for make's critic (test/critic.test.mjs, journeys/critic.mjs): a local provider that answers the plain page and
+// A stand-in model for make's critic (test/critic.test.mjs): a local provider that answers the plain page and
 // the reviews by their tool, with the scores in turn, and runs each engine conversation as plan, DESIGN.md and version N, done.
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';

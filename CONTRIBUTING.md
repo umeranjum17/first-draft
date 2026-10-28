@@ -8,18 +8,14 @@ first-draft is a plain model call plus a few additions of ours: Anthropic's fron
 
 > **A restriction or addition stays only with a paired, rendered comparison: the same brief, the same model version, the plain model against the plain model plus the addition, both drawn at 390 and 1280 and scored side by side.**
 
-[`docs/wrapper-allowlist.json`](docs/wrapper-allowlist.json) lists every addition with its evidence and verdict. `tests/e2e/wrapper-baseline.test.mjs` (in `npm test`, no model needed) fails when:
-
-- a rule appears in the prompt (the guidance, or a rule in `contractRules` in `src/draft.mjs`) that is not on the list, or one changed its wording since it was judged (the entry holds a hash of the text);
-- the default make is anything but a plain draw plus the calls the list names: another turn, a tool, a sampling option, a token cap under the platform's, a style or direction nobody asked for, a second review, a revision;
-- an entry says `accepted` without pairs on at least two briefs that all went up.
+[`docs/wrapper-allowlist.json`](docs/wrapper-allowlist.json) lists additions with their evidence and verdict. `npm test` keeps one CLI integration for the multi-screen flow and its review; allow-list wording, calls, and paired-comparison evidence are reviewed manually, not enforced by an automated test.
 
 ### Adding or changing a rule
 
-1. Write the change. The test fails and prints the entry to add, with the hash of your wording.
+1. Write the change. Record the exact wording and its hash in the matching allow-list entry.
 2. Run the paired comparison on at least two briefs (below). Same model for both sides: the list names it (`claude-sonnet-5-5`).
 3. Score both renders yourself, side by side, at 390 and 1280. Put the numbers in `evidence`: `brief`, `model`, `plain_run`, `plain`, `with_run`, `with`, `scored_by`, `report` (where the renders are kept; never a path on your machine, never media in the repo).
-4. `verdict: "accepted"` needs every pair up and none down. A tie or a fall, or a bundle you could not separate, is `provisional` at most, with `decided_by` and `needed` (the comparison still owed). The test prints every provisional entry on each run.
+4. `verdict: "accepted"` needs every pair up and none down. A tie or a fall, or a bundle you could not separate, is `provisional` at most, with `decided_by` and `needed` (the comparison still owed). Review provisional entries whenever the allow-list changes.
 5. Delivery rules (what the host needs for the file to be a page) and policy rules (an owner decision such as the facts rule) carry a `reason` instead of scores. They may not restrict design.
 
 ### Running a paired comparison

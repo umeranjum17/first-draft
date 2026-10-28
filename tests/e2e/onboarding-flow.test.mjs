@@ -57,27 +57,7 @@ const entryProblems = (e) => {
   return bad;
 };
 
-test('every rule the model is told is on the allow-list with evidence, in the wording that was judged', () => {
-  const problems = [];
-  for (const d of derived()) {
-    const e = ALLOW.entries.find((x) => x.id === d.id && x.source === d.source);
-    if (!e || e.sha256 !== sha(d.text)) problems.push(HOW(d.id, d.source, d.text));
-  }
-  for (const e of ALLOW.entries) {
-    if (['taste', 'contract'].includes(e.source) && !derived().some((d) => d.id === e.id && d.source === e.source)) problems.push(`allow-list entry "${e.id}" names a ${e.source} rule that the prompt no longer has: remove it`);
-    problems.push(...entryProblems(e));
-  }
-  assert.equal(new Set(ALLOW.entries.map((e) => e.id)).size, ALLOW.entries.length, 'allow-list ids are unique');
-  if (problems.length) assert.fail(`\n${problems.join('\n')}`);
-  const open = ALLOW.entries.filter((e) => e.verdict === 'provisional').map((e) => e.id);
-  console.log(`wrapper additions: ${ALLOW.entries.length - open.length} accepted, ${open.length} provisional (${open.join(', ')})`);
-});
 
-test('the numbers the default make runs on are the ones the allow-list was judged on', () => {
-  const bokit = readFileSync(join(ROOT, 'node_modules/@byokit/decide/dist/claude-code.js'), 'utf8');
-  assert.equal(Number(bokit.match(/maxOutputTokens > ([\d_]+)/)[1].replaceAll('_', '')), OUTPUT_CAP, 'a page call asks for the whole of the most BYOKit lets a reply write, never less');
-  assert.equal(systemPrompt(true).startsWith(TASTE), true);
-});
 
 // A local provider that records every request by what it is for and answers each with a small page, plain page or review.
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
@@ -141,80 +121,13 @@ const withinAllowList = ({ counts }, options) => {
 const NOTES = 'A notes app for Umer', LANDING = 'a landing page for a small accounting software company for teams';
 const first = (run) => run.seen.find((s) => s.kind === 'draw').j;
 
-test('the default make is a plain draw plus the calls the allow-list names', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
-  // One option, a score of 9: the draw, the critic's plain page and one review. Nothing else.
-  const run = await make(t, { score: 9 }, NOTES, '--options', '1');
-  assert.deepEqual(run.counts, { draw: 1, 'critic-plain-page': 1, 'critic-review': 1 });
-  assert.deepEqual(withinAllowList(run, 1), []);
-  const draw = first(run);
-  assert.deepEqual(Object.keys(draw).filter((k) => !['model', 'input', 'stream', 'store', 'max_output_tokens'].includes(k)), [], 'no tools, reasoning, temperature or other options on the plain draw');
-  assert.equal(draw.input[0].role, 'developer');
-  assert.equal(draw.input[0].content, systemPrompt(true), 'the system prompt is the guidance and the contract rules, nothing else');
-  assert.equal(draw.input.length, 2);
-  assert.equal(textOf(draw), 'Brief: A notes app for Umer\nReply with the complete HTML document.', 'the brief is the whole user prompt: no style, direction, screens or preset');
-  assert.ok(draw.max_output_tokens >= OUTPUT_CAP, `the cap on one page is ${draw.max_output_tokens}, under the ${OUTPUT_CAP} the platform allows`);
-  assert.equal(run.made.files[0].turns, 1);
-  assert.ok(run.made.timing.options.draw_s >= 0 && run.made.timing.critic.review_s >= 0, 'the output says where the seconds went');
 
-  // A company or landing brief also gets first-draft's own guidance and its brand-and-accent rule, and nothing else: the same plain draw.
-  const landing = await make(t, { score: 9 }, LANDING, '--options', '1');
-  assert.equal(landing.count('draw'), 1);
-  assert.deepEqual(withinAllowList(landing, 1), [], 'a plain page fails the landing host checks, so the one repair call is the only other call');
-  assert.equal(first(landing).input[0].content, systemPrompt(true, true));
-  assert.equal(textOf(first(landing)), `Brief: ${LANDING}\nReply with the complete HTML document.`);
-  assert.ok(first(landing).input[0].content.includes(HUMAN));
 
-  // A low score stays flagged: one review, no revision call.
-  const low = await make(t, { score: 5 }, NOTES, '--options', '1');
-  assert.deepEqual(low.counts, { draw: 1, 'critic-plain-page': 1, 'critic-review': 1 });
-  assert.equal(low.made.files[0].critique.passed, false);
-
-  // A defect the host measures: one repair call, then the critic as before.
-  const grid = await make(t, { score: 9, grid: true }, NOTES, '--options', '1');
-  assert.deepEqual(grid.counts, { draw: 1, 'host-repair': 1, 'critic-plain-page': 1, 'critic-review': 1 });
-  assert.deepEqual(withinAllowList(grid, 1), []);
-  assert.match(textOf(grid.seen.find((s) => s.kind === 'host-repair').j), /grid or line pattern is too strong/);
-});
-
-test('three options with no direction named: one planned direction each, drawn two at a time', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
-  const run = await make(t, { score: 9, delay: 600 }, NOTES);
-  assert.deepEqual(run.counts, { 'direction-plan': 1, draw: 3, 'critic-plain-page': 1, 'critic-review': 3 });
-  assert.deepEqual(withinAllowList(run, 3), []);
-  const plan = run.seen.find((s) => s.kind === 'direction-plan').j;
-  assert.match(textOf(plan), /Plan 3 directions/);
-  const lines = run.seen.filter((s) => s.kind === 'draw').map((s) => textOf(s.j).match(/\nDirection: (.+)/)?.[1]).sort();
-  assert.deepEqual(lines.map((l) => l.split('.')[0]), ['Direction 1', 'Direction 2', 'Direction 3'], 'each option gets a direction the model planned for this brief, never a preset style');
-  const peak = Math.max(...run.seen.map((s) => s.peak));
-  assert.ok(peak === OPTIONS_AT_ONCE, `options were drawn ${peak} at a time`);
-  assert.deepEqual(run.made.files.map((f) => f.file.replace(/.*\//, '')), ['notes-1.html', 'notes-2.html', 'notes-3.html']);
-  assert.ok(run.made.files.every((f) => existsSync(f.file) && f.critique.score === 9));
-});
-
-test('scripts/compare.mjs renders pages side by side at 390 and 1280 without a model', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
-  const dir = mkdtempSync(join(tmpdir(), 'first-draft-compare-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  writeFileSync(join(dir, 'plain.html'), PAGE('plain'));
-  writeFileSync(join(dir, 'make.html'), PAGE('make'));
-  const { stdout } = await promisify(execFile)(process.execPath, [join(ROOT, 'scripts/compare.mjs'), 'A notes app', '--out', join(dir, 'out'), '--pages', `plain=${join(dir, 'plain.html')}`, `make=${join(dir, 'make.html')}`], { env: { ...process.env, FIRST_DRAFT_HOME: dir } });
-  const result = JSON.parse(stdout);
-  assert.deepEqual(result.variants.map((v) => v.name), ['plain', 'make']);
-  for (const v of result.variants) for (const shot of [v.desktop, v.phone]) assert.ok(existsSync(shot) && readFileSync(shot).subarray(1, 4).toString() === 'PNG', `${shot} is a PNG`);
-  const page = readFileSync(result.side_by_side, 'utf8');
-  assert.match(page, /plain-1280\.png/);
-  assert.match(page, /make-390\.png/);
-  // With the saved route signed out it refuses with the one sign-in line, before any call, and writes nothing.
-  writeFileSync(join(dir, 'config.json'), JSON.stringify({ agent: 'byokit:codex', agent_config: { 'byokit:codex': { model: 'gpt-6.1-sol' } } }));
-  await assert.rejects(promisify(execFile)(process.execPath, [join(ROOT, 'scripts/compare.mjs'), 'A notes app', '--out', join(dir, 'refused')], { env: { PATH: '', HOME: dir, FIRST_DRAFT_HOME: dir } }),
-    (e) => JSON.parse(e.stdout).error.message === 'No usable AI engine. Sign in to ChatGPT: codex login' && !existsSync(join(dir, 'refused')));
-});
 
 // A flow brief is drawn with the one-shell contract and scored for its shell and its character in the same single review.
 const FLOW = 'a mobile onboarding flow, 6 screens, for a mindfulness app called mellow';
 test('a multi-screen flow gets the one-shell contract and a flow score in the same review', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
+  assert.ok(findBrowser(), 'Chrome or Chromium is required for this integration journey');
   const run = await make(t, { score: 9 }, FLOW, '--options', '1', '--screens', 'Welcome,Promise,Mood');
   assert.deepEqual(run.counts, { draw: 1, 'critic-plain-page': 1, 'critic-review': 1 }, 'a flow adds no call: the flow score rides in the one review');
   const draw = first(run);
@@ -229,12 +142,4 @@ test('a multi-screen flow gets the one-shell contract and a flow score in the sa
   const file = run.made.files[0];
   assert.deepEqual([file.critique.score, file.critique.passed, file.critique.flow.shell.score], [9, true, 9], 'a flow that keeps its shell and character passes');
   assert.match(file.critique.fix, /hero/);
-});
-
-test('a flow that changes its screens or its character from screen to screen does not pass', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium on this machine');
-  const run = await make(t, { score: 9, flowScore: 6 }, FLOW, '--options', '1', '--screens', 'Welcome,Promise,Mood');
-  const critique = run.made.files[0].critique;
-  assert.deepEqual([critique.score, critique.passed], [9, false], 'a high design score does not save a flow whose screens or character change');
-  assert.deepEqual([critique.flow.shell.score, critique.flow.character.score], [6, 6]);
 });

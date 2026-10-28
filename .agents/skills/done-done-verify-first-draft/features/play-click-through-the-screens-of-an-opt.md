@@ -12,7 +12,7 @@ Harness: A shell runs the CLI and curl for the url. A browser tool opens the url
 
 1. Launch the app as SKILL.md says and wait until it is ready.
 2. Browser: open `<url>?screen=<id>#/o/1/play/phone`, then the same URL ending `/desktop`: the chosen screen must be active on both devices. For manual use, the screens (a segmented control in the one Play bar, beside Back) and Back update the selected screen; its query is kept when switching device. The frame receives `?play&screen=<id>` and the host seeds the existing overlay's active-screen attribute. No new sandbox permission.
-   Deterministic coverage: `node --test test/view.test.mjs` drives the actual view in Chrome, including both device routes and escaped/invalid screen query handling. `node --test test/post.test.mjs` drives the real post/view bridge with a private board and native sign-off edge fixture: both Desktop/Phone URLs must appear in returned options and fallback text, including Evidence cards; no owner board touched.
+   The retained suite checks that option pages render from the sandboxed second origin (`test/view.test.mjs`) and that `post` returns Play links (`test/post.test.mjs`). Detailed device-route, query-escaping, and Evidence-card checks are not in the retained suite; use the live Studio journey for those.
 3. Capture: screenshot the resulting page to $DONE_DONE_EVIDENCE_ROOT/play-click-through-the-screens-of-an-opt.png, as SKILL.md's Evidence section says.
 4. Stop what you started.
 

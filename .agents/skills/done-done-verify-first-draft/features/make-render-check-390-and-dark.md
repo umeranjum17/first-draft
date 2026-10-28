@@ -1,10 +1,10 @@
 # Every screen at phone and desktop sizes, light and dark
 
-Source: `src/render-check.mjs`, `src/make.mjs`; integration journey: `test/render-check.test.mjs`.
+Source: `src/render-check.mjs`, `src/make.mjs`. No dedicated render-check integration test is retained.
 
 ## Drive
 
-1. Run `node --test test/render-check.test.mjs` with Chrome/Chromium installed. The actual CLI, engine, local model-edge stand-in and native browser prove rejection/repair of phone overflow, desktop-dark-only overflow, a screen hidden on desktop, a single screen without both themes, and a fixed phone-width desktop screen. The repaired file keeps both screens. No model call in tests.
+1. Use the live CLI render/repair journey with Chrome/Chromium installed to verify this behavior; the former deterministic edge-case test was removed from the retained suite.
 2. For an authorized real make/refine, use `--options 1` on make to bound proof spending (the normal default is three options), and use the owner's selected BYOKit route with task-private FIRST_DRAFT_HOME; Claude models use only byokit:claude. Never read/copy credentials. The prompt contract requires one responsive file, full-width sibling screen sections and desktop columns inside each screen.
 3. `done` renders the complete exported file and each data-oc-screen section independently at 390x844 and 1280x800, in light and dark. Every state must fit; each selected screen must have visible layout; desktop screen containers must exceed phone width. This last structural check is not a visual-quality guarantee. Errors name screen, viewport and theme and return to the model for repair.
 4. `render_check: "checked"` means the native browser check ran. No browser remains an explicit `skipped` result and warning, never a claimed pass. A named dark-first style remains dark in both themes; otherwise each screen needs genuinely different light/dark rendering, excluding hidden screens from the paint signature.

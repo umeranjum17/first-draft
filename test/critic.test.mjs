@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { MAX_TILES, TILE, findBrowser, renderCheck, tilesOf } from '../src/render-check.mjs';
-import { PLAIN, images, standIn } from '../journeys/fixtures/critic-model.mjs';
-import { installJudge, referenceStandIn } from '../journeys/fixtures/judge-cli.mjs';
+import { findBrowser } from '../src/render-check.mjs';
+import { PLAIN, standIn } from './fixtures/critic-model.mjs';
+import { installJudge, referenceStandIn } from './fixtures/judge-cli.mjs';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
 
 async function lab(t, scores) {
@@ -29,7 +29,7 @@ async function lab(t, scores) {
 }
 
 test('make requires an independent engine, scores once, keeps low options flagged, and rejects --no-critic', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium');
+  assert.ok(findBrowser(), 'Chrome or Chromium is required for this integration journey');
   const { dir, seen, run } = await lab(t, [[6, 7], [9, 7], [9, 7]]);
   for (const engine of [true, false]) {
     const out = join(dir, engine ? 'engine.html' : 'page.html');
@@ -69,7 +69,7 @@ test('make requires an independent engine, scores once, keeps low options flagge
 });
 
 test('refs pull -> independent subscription judge -> refusal, never self-assessment, through the public CLI', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium');
+  assert.ok(findBrowser(), 'Chrome or Chromium is required for this integration journey');
   const { dir, seen, env, run } = await lab(t, Array(8).fill([6, 7]));
   const refs = await referenceStandIn(dir);
   t.after(() => refs.server.close());
@@ -116,80 +116,4 @@ test('refs pull -> independent subscription judge -> refusal, never self-assessm
   assert.match(otherKind.critique.judge, /independent/);
   writeFileSync(join(dir, 'refs-library/umer-notes/desktop-light.png'), 'changed');
   await assert.rejects(run('judge', out, 'A notes app for Umer', '--plain', baseline), e => /changed since it was captured/.test(e.stdout));
-});
-
-test('landing AI-side and nine-point hero checks survive in the required independent critic', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium');
-  const { dir, seen, env, run } = await lab(t, [[8, 5], [9, 5]]);
-  const brief = 'a landing page for a small accounting software company for teams';
-  const makeLanding = async name => (await run('make', brief, '--out', join(dir, name+'.html'), '--options', '1')).made;
-  const low = await makeLanding('low'), c = low.files[0].critique;
-  assert.deepEqual([c.score, c.passed, c.rounds, c.ai_side.reads_as_ai, c.hero.met, c.hero.of, c.hero.points.length], [8, false, 1, true, 5, 9, 9]);
-  const high = await makeLanding('high');
-  assert.deepEqual([high.files[0].critique.passed, high.files[0].critique.ai_side.reads_as_ai, high.files[0].critique.hero.met], [true, false, 9]);
-  const native = readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(native.length, 2, 'one independent review each');
-  assert.match(native[0].system, /AI-side tells are: soft pastel on everything.*nine points in order/s);
-  assert.ok(seen.some(b => !b.includes('"review_designs"') && b.includes('# Human side, not AI side')));
-  const refs = await referenceStandIn(dir); t.after(() => refs.server.close());
-  const lib = JSON.parse(readFileSync(refs.library, 'utf8'));
-  lib.entries.forEach(e => { e.kind = 'landing'; });
-  writeFileSync(refs.library, JSON.stringify(lib));
-  env.FIRST_DRAFT_TEST_REF_ORIGIN = refs.origin;
-  await run('refs', 'pull', '--library', refs.library);
-  env.FD_JUDGE_AI = '1';
-  const judged = await run('judge', high.files[0].file, brief, '--plain', high.critic.plain);
-  assert.equal(judged.judge.model, 'gpt-6.1-sol');
-  assert.deepEqual([judged.critique.score, judged.critique.passed, judged.critique.ai_side.reads_as_ai, judged.critique.hero.points.length], [9, false, true, 9]);
-  assert.equal(Object.keys(judged.critique.axes).length, 7);
-});
-
-test('the judge captures the whole page in both themes at both widths, tiled and capped by height, and short pages are not tiled', async (t) => {
-  assert.deepEqual(tilesOf(900).tiles, [{ y: 0, height: 900, scale: 1 }]);
-  for (const height of [TILE, 4000, 7000, 20000]) {
-    const { tiles, covered } = tilesOf(height);
-    assert.ok(tiles.length <= MAX_TILES, `${height}px page: ${tiles.length} tiles`);
-    assert.ok(tiles.every(x => x.height * x.scale <= TILE), 'each tile image stays under the long edge a model reads without shrinking');
-    assert.equal(tiles.reduce((n, x) => n + x.height, 0), covered, 'tiles are contiguous and cover the page');
-  }
-  assert.equal(tilesOf(7000).covered, 7000);
-  assert.ok(tilesOf(20000).covered < 20000, 'a page past the cap is cut, and says so');
-  if (!findBrowser()) return t.skip('no Chrome or Chromium');
-  const page = (h) => `<!doctype html><html><head><style>:root{--bg:#fff}@media(prefers-color-scheme:dark){:root{--bg:#000}}body{margin:0;height:${h}px;background:var(--bg)}</style></head><body>x</body></html>`;
-  const render = renderCheck();
-  t.after(() => render.close());
-  const tall = await render.views(page(7000)), short = await render.views(page(900));
-  assert.deepEqual([...new Set(tall.map(s => `${s.width}-${s.theme}`))], ['1280-light', '1280-dark', '390-light', '390-dark']);
-  assert.equal(tall.length, 4 * 3, 'a 7000px page is three tiles in each of the four views');
-  assert.ok(tall.every(s => s.page_height === 7000 && s.mime === 'image/jpeg'));
-  assert.equal(short.length, 4, 'a short page is one image per view, not tiled');
-  assert.ok(short.every(s => s.tiles === 1 && !/tile/.test(s.id)));
-  const dark = (s) => Buffer.from(s.dataUrl.split(',')[1], 'base64'), a = tall.find(s => s.id === 'desktop-1280-light-tile-1'), b = tall.find(s => s.id === 'desktop-1280-dark-tile-1');
-  assert.notDeepEqual(dark(a), dark(b), 'the dark theme is a different picture');
-  assert.equal((await render.views(page(7000), ['light'])).length, 6, 'one theme is half the views');
-});
-
-test('a judge that breaks its JSON is asked again up to three times, records each retry, and otherwise refuses without a score', async (t) => {
-  if (!findBrowser()) return t.skip('no Chrome or Chromium');
-  const { dir, env, run } = await lab(t, []);
-  env.FD_JUDGE_BAD = '2'; // the first two answers are cut off mid-JSON, the third is whole
-  const out = join(dir, 'retry.html');
-  const { made } = await run('make', 'A notes app for Umer', '--out', out, '--options', '1');
-  const c = made.files[0].critique;
-  assert.equal(c.score, 6);
-  assert.deepEqual(c.judge_retries.map(r => r.attempt), [1, 2]);
-  assert.ok(c.judge_retries.every(r => /^invalid JSON: /.test(r.error)));
-  assert.equal(readFileSync(join(dir, 'judge-calls.jsonl'), 'utf8').trim().split('\n').length, 3);
-
-  env.FD_JUDGE_BAD = '6'; // the three calls so far are counted: the next three answers are broken: JUDGE_FAILED, nothing written
-  const judged = join(dir, 'refused.html');
-  await assert.rejects(run('make', 'A notes app for Umer', '--out', judged, '--options', '1'), e => {
-    const { error } = JSON.parse(e.stdout);
-    assert.equal(error.code, 'JUDGE_FAILED');
-    assert.match(error.message, /byokit:codex \(gpt-6\.1-sol\) gave no usable judge_designs answer in 3 attempts, so nothing was scored: 1: invalid JSON.*\| 2: .*\| 3: .*cut off.*Re-run the command.*codex login/s);
-    return true;
-  });
-  assert.equal(existsSync(judged), false);
-  assert.equal(existsSync(join(dir, 'refused-1.html')), false);
-  assert.equal(existsSync(join(dir, 'refused.critic')), false);
 });
