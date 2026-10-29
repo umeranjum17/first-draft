@@ -176,13 +176,17 @@ const staticPage = () => {
 };
 
 // Text the eye cannot read because a fixed or sticky bar is painted over it in the first viewport.
+// A screen that is an open modal (a source dialog or sheet over a dimmed page) declares the page behind it inert: only that
+// inert text may sit under its scrim. Without a visible, live role=dialog aria-modal=true (or open <dialog>), inert excuses nothing.
 const coveredText = () => {
   const bars=[...document.querySelectorAll('*')].filter(e=>/^(fixed|sticky)$/.test(getComputedStyle(e).position)&&e.getClientRects().length),covered=[];
   if(!bars.length)return covered;
+  const modal=[...document.querySelectorAll('[role=dialog][aria-modal=true],dialog[open]')].find(d=>d.getClientRects().length&&getComputedStyle(d).visibility!=='hidden'&&!d.closest('[inert]'));
   const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
   while(walker.nextNode() && covered.length<3) {
     const node=walker.currentNode,e=node.parentElement;
     if(!node.textContent.trim() || !(e instanceof HTMLElement) || getComputedStyle(e).visibility==='hidden')continue;
+    if(modal && !modal.contains(e) && e.closest('[inert]'))continue;
     const range=document.createRange();range.selectNodeContents(node);
     for(const r of range.getClientRects()) {
       const x=r.left+r.width/2,y=r.top+r.height/2;
@@ -540,7 +544,7 @@ export class Renderer {
         for (const message of shot.human ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'human-side', message: `human side, ${context}: ${message}` });
         if (shot.stray?.length && theme === 'light') errors.push({ source: 'restraint', message: `${context}: a close control is on screen with nothing open: ${shot.stray.join('; ')}. Show it only while its drawer, dialog or banner is open (hide it by default and at this width), or remove it.` });
         if (shot.faint?.length) errors.push({ source: 'render', message: `${context} in ${theme}: text that cannot be read, colour against its own background: ${shot.faint.join('; ')}. Give it at least 4.5:1 contrast (an active or selected state needs its own text colour on its fill).` });
-        if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again.`});
+        if(shot.covered.length) errors.push({source:'render',message:`${context} in ${theme} has text covered by fixed or sticky navigation: ${shot.covered.join('; ')}. Do not lay that bar over content: make it a normal in-flow bottom row (a 100dvh shell grid whose content row scrolls above the nav row), or keep it sticky only where its space is reserved so no text sits under it, then call done again. Only when the screen is a source dialog or sheet over a dimmed page: put the dialog in one role=dialog aria-modal=true element and mark the page behind it inert.`});
         if(shot.measured.textClipped?.length) errors.push({source:'render',message:`${context} in ${theme} has clipped text: ${shot.measured.textClipped.join('; ')}. Remove hidden/clip truncation or allow the complete text to wrap, then call done again.`});
         if (shot.measured.scrollWidth <= width) continue;
         const { measured: m } = shot, worst = m.worst.tag ? m.worst : null;
