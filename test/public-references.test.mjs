@@ -259,3 +259,13 @@ let data;addEventListener('hashchange',()=>data&&draw(data));setTimeout(()=>fetc
   assert.equal((await liveUrl('http://10.0.0.2:4420/',['10.0.0.2'])).host,'10.0.0.2:4420','a private host the owner names');
   await assert.rejects(liveUrl('http://8.8.8.8/',['8.8.8.8']),/neither/,'naming a public host never opens the internet');
 });
+
+test('redesign covered-text gate: a modal screen may dim only an inert page behind a live aria-modal dialog',async t=>{
+  const {renderCheck}=await import(new URL('../src/render-check.mjs',import.meta.url).href);
+  const page={id:'screen-1',title:'Search',text:'Today Search',links:[]};
+  const screen=(dialog,inert)=>`<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>:root{color-scheme:light dark;background:#fff;color:#111}@media(prefers-color-scheme:dark){:root{background:#111;color:#eee}}body{margin:0;font:16px Arial}.scrim{position:fixed;inset:0;background:rgb(0 0 0/.4)}.dlg{position:fixed;left:16px;right:16px;top:30%;padding:16px;background:Canvas}</style></head><body><section data-oc-screen id="screen-1"><main${inert?' inert':''}><h1>Umer today</h1><p>Up next, 1 of 8</p></main><div class="scrim"></div><div class="dlg"${dialog?' role="dialog" aria-modal="true"':''}><label>Search <input placeholder="An ask or a ticket"></label></div></section></body></html>`;
+  const covered=async html=>{const render=renderCheck(()=>{},{redesignPages:[page]});try{const errors=await render.verify(html);assert.equal(render.status,'checked');return errors.filter(e=>/covered by fixed/.test(e.message));}finally{render.close();}};
+  assert.deepEqual(await covered(screen(true,true)),[],'the inert page behind a live modal dialog is meant to be dimmed');
+  assert.ok((await covered(screen(true,false))).length,'a live page under the scrim is still refused');
+  assert.ok((await covered(screen(false,true))).length,'inert excuses nothing without an aria-modal dialog');
+});
