@@ -33,11 +33,7 @@ For reference-grounded screen comparison: `first-draft-axi benchmark --product "
 
 Also: `first-draft-axi doctor` (is the model ready, no paid call), `first-draft-axi refine <option.html> "<change>" --out <new.html>` (change the option the user picked), `first-draft-axi logo "<brief>" --out <file.html>`, `first-draft-axi --help`.
 
-## Polish the user's pick
-
-After the person chooses one direction (or asks for only one), run `first-draft-axi polish <chosen.html> "<original brief>" --out-dir <new-folder> [--max-rounds 5] [--feedback "<request>"]`. This refines only that direction with the original brief, independent judge gaps and all cumulative feedback. Add feedback during the run from another terminal: `first-draft-axi polish-feedback <run-folder> "<request>"`. Studio exposes the same controls beside the chosen option.
-
-Read each `polish_round` JSON line, then `polished.final` and `polished.stop_reason`. Round 0 is the starting assessment; the default cap is five refinements. Stop at 9/10, cap, or two rounds without score improvement. A candidate that changes direction or undoes feedback is retained but not promoted (`accepted: false`); never report its higher score as the final score. Every version and assessment stays in the run folder; `view <run-folder>` uses the existing option picker. Report a below-nine stop and its reason honestly. Independent model checks are not guaranteed fidelity. Normal `make` and single-step `refine` behavior is unchanged. `polish` spends subscription quota and must not run in CI against a real provider.
+**Polish the user's pick:** `first-draft-axi polish <chosen.html> "<original brief>" --out-dir <new-folder> [--max-rounds 5] [--feedback "<request>"]`; during the loop, `first-draft-axi polish-feedback <run-folder> "<request>"`. Studio offers the same loop. Every version/score is retained; it stops at 9/10, the cap, or two rounds without improvement. Read `polish_round`, `polished.final` and `stop_reason`; rejected direction/feedback regressions are not promoted. Report below-nine stops honestly. `make` scoring is unchanged. This spends subscription quota: never run against real providers in CI.
 
 ## Where outputs land
 

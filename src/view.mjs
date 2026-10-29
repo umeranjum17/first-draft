@@ -141,11 +141,6 @@ export async function serve({ files, name, host, advertise = host, port, framePo
   // One change runs at a time: the model call takes minutes and the person's agent is one account.
   let running = false;
   const polishRuns = [];
-  const addVersion = (file) => {
-    const added = { n: options.length + 1, label: basename(dirname(file)) + ' · ' + basename(file, extname(file)), file };
-    options.push(added);
-    return shown(added);
-  };
   // A POST from the view page itself: its JSON body, or null once it has answered why not.
   const posted = async (req, reply) => {
     const same = (() => { try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; } })();
@@ -207,7 +202,8 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     running = true;
     Promise.resolve().then(() => polish({ file: from.file, brief: body.brief, outDir, maxRounds,
       feedback: () => readPins(comments).pins.filter((p) => p.option === from.n).map((p) => p.text),
-      onRound: (entry, state) => { run.versions.push({ round: entry.round, score: entry.score, accepted: entry.accepted, gaps: entry.critique.gaps, option: addVersion(entry.file) }); run.state = state; }
+      onRound: (entry, state) => { const added = { n: options.length + 1, label: `${basename(outDir)} · round ${entry.round}`, file: entry.file }; options.push(added);
+        run.versions.push({ round: entry.round, score: entry.score, accepted: entry.accepted, gaps: entry.critique.gaps, option: shown(added) }); run.state = state; }
     })).then((state) => { run.state = state; run.status = state.status; }, (e) => { run.status = 'failed'; run.error = e.message; run.state = e.run; }).finally(() => { running = false; });
     reply(202, { run });
   };

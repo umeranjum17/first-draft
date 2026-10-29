@@ -14,14 +14,14 @@ export const images = (body) => JSON.parse(body).input.flatMap((m) => Array.isAr
 
 // A stand-in model: the plain page and the reviews by their tool, the scores in turn from `scores` ([design, plain] each; a landing brief's review also says which side it reads as and how many hero points it meets); each
 // engine conversation (told apart by its first message) plans, writes DESIGN.md and version N of the page, runs done and stops.
-export function standIn(seen, scores) {
+export function standIn(seen, scores, drawn = false, onRequest = () => {}) {
   const convo = new Map();
   let reviews = 0, drafts = 0;
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
-    req.on('end', () => {
-      seen.push(body);
+    req.on('end', async () => {
+      seen.push(body); await onRequest(body);
       let calls, text = 'The design is ready.';
       if (body.includes('Build one self-contained HTML page for this brief')) text = PLAIN; // the plain page comes back as the document itself
       else if (body.includes('"review_designs"')) {
@@ -37,8 +37,8 @@ export function standIn(seen, scores) {
         if (!convo.has(key)) convo.set(key, { n: 0, version: convo.size + 1 });
         const st = convo.get(key), n = st.n++;
         calls = [[['set_todos', { items: [{ text: 'Write the page', checked: false }] }]],
-          [['str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: DESIGN }], ['str_replace_based_edit_tool', { command: 'create', path: 'index.html', file_text: page(`Notes, version ${st.version}`) }]],
-          [['done', { path: 'index.html' }]]][n];
+          [['str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: DESIGN }], ['str_replace_based_edit_tool', { command: 'create', path: drawn ? 'App.jsx' : 'index.html', file_text: drawn ? `function App(){return <main><style>{${JSON.stringify('body{margin:0;background:#fff;color:#111;font:18px system-ui}main{padding:24px}@media(prefers-color-scheme:dark){body{background:#111;color:#fff}}')}}</style><h1>Notes, version ${st.version}</h1><p>Sample notes for Umer.</p></main>}` : page(`Notes, version ${st.version}`) }]],
+          [['done', { path: drawn ? 'App.jsx' : 'index.html' }]]][n];
       }
       const items = calls ? calls.map(([name, args], i) => ({ type: 'function_call', id: `fc${seen.length}-${i}`, call_id: `c${seen.length}-${i}`, name, arguments: JSON.stringify(args) }))
         : [{ type: 'message', id: 'm1', status: 'completed', content: [{ type: 'output_text', text }] }];
