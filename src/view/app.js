@@ -280,13 +280,35 @@ async function send(o, change) {
 }
 // The Studio redraws its panel and option menu (not its frames) when a change starts or ends; set while the Studio is open.
 let refreshStudio = null;
+let polishRuns = [], polishTimer, polishCap = 5, polishNotice = ''; const polishBusy = () => polishRuns.some((r) => r.status === 'running');
+async function pollPolish() { clearTimeout(polishTimer);
+  try { const response = await fetch('/polish'); if (!response.ok) throw new Error(`Polish status: ${response.status}`);
+    const next = (await response.json()).runs; if (JSON.stringify(next) !== JSON.stringify(polishRuns)) {
+      polishRuns = next; for (const run of polishRuns) for (const version of run.versions) if (!design.options.some((o) => o.n === version.option.n)) design.options.push(version.option);
+      refreshStudio?.(); }
+    if (polishBusy()) polishTimer = setTimeout(pollPolish, 2000);
+  } catch (e) { document.querySelector('.polish-status')?.replaceChildren(el('p', { role: 'alert' }, `${e.message}. Reload to reconnect; the server keeps the run.`)); }
+}
+if (design.canPolish) pollPolish();
+function polishControls(o) {
+  const active = polishRuns.find((r) => r.status === 'running'), note = el('p', { role: 'status' }, polishNotice);
+  const cap = el('input', { type: 'number', min: '1', max: '50', value: String(polishCap), 'aria-label': 'Maximum polish rounds' }); cap.oninput = () => { polishCap = Number(cap.value); };
+  const start = el('button', { type: 'button', class: 'button line', disabled: job ? '' : undefined }, active ? 'Add polish feedback' : 'Polish to 9/10'); start.onclick = async () => {
+    if (!draft.trim()) { note.textContent = 'Enter the original brief (or feedback) in the brief box below.'; return; }
+    try { const response = await fetch(active ? '/polish-feedback' : '/polish', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(active ? { id: active.id, text: draft } : { option: o.n, brief: draft, maxRounds: polishCap }) });
+      const body = await response.json(); if (!response.ok) throw Error(body.error); draft = ''; polishNotice = active ? 'Feedback saved for subsequent rounds.' : 'Polish started.'; await pollPolish(); refreshStudio?.();
+    } catch (e) { note.textContent = e.message; }
+  };
+  return el('section', { class: 'polish-controls' }, el('h2', { class: 'kicker' }, 'Polish chosen direction'), el('p', {}, 'Use the brief box below: original brief to start; feedback while running.'), cap, start, note,
+    el('div', { class: 'polish-status', 'aria-live': 'polite' }, ...polishRuns.flatMap((r) => [el('p', {}, `Option ${r.option}: ${r.status} · ${r.state?.final?.score ?? 'unscored'}/10 · ${r.state?.stop_reason?.replaceAll('_', ' ') ?? ''} ${r.error ?? ''}`),
+      el('ol', {}, ...r.versions.map((v) => el('li', {}, link(`#/o/${v.option.n}`, `Round ${v.round}: ${v.score}/10${v.accepted ? '' : ' · not promoted'}`), el('p', {}, v.gaps.join(' ')))))]))); }
 
 function brief(o) {
   const text = el('textarea', { rows: '2', 'aria-label': `Brief for a change to Option ${o.n}`, placeholder: `Describe a change to Option ${o.n}` });
   text.value = draft;
   text.oninput = () => { draft = text.value; };
   const cmd = el('div', { class: 'command', hidden: '' });
-  const go = el('button', { type: 'submit', class: 'button primary send', 'aria-label': job ? 'Working' : 'Send', title: job ? 'Working' : 'Send', disabled: job ? '' : undefined }, job ? el('span', { class: 'spinner' }) : icon('send'));
+  const go = el('button', { type: 'submit', class: 'button primary send', 'aria-label': job ? 'Working' : 'Send', title: job ? 'Working' : 'Send', disabled: job || polishBusy() ? '' : undefined }, job ? el('span', { class: 'spinner' }) : icon('send'));
   const terminal = el('button', { type: 'button', class: 'button link' }, icon('terminal'), 'Terminal command');
   const form = el('form', { class: 'brief' }, status(o), cmd, text, el('div', { class: 'brief-row' }, terminal, go));
   text.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } };
@@ -307,7 +329,7 @@ function brief(o) {
   form.onsubmit = (e) => {
     e.preventDefault();
     const change = text.value.trim();
-    if (job) return;
+    if (job || polishBusy()) return;
     if (!change) return text.focus();
     send(o, change);
   };
@@ -494,7 +516,8 @@ function canvas(o, device) {
   const side = el('aside', { id: 'studio-side', class: 'side', 'aria-label': 'Brief' },
     el('div', { class: 'side-scroll' },
       el('section', {}, el('h2', { class: 'kicker' }, 'Options', el('span', { class: 'mono' }, String(design.options.length))), options),
-      el('section', {}, el('h2', { class: 'kicker' }, `Comments · Option ${o.n}`, el('span', { class: 'mono' }, String(all.length))), notes)),
+      el('section', {}, el('h2', { class: 'kicker' }, `Comments · Option ${o.n}`, el('span', { class: 'mono' }, String(all.length))), notes),
+      ...(design.canPolish ? [polishControls(o)] : [])),
     ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]), version());
 
   const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), ...marketPanel(o), ...sourcesPanel(o), stage));
@@ -527,7 +550,11 @@ function canvas(o, device) {
   };
   refreshStudio = () => {
     side.querySelector('.list').replaceWith(optionList());
+    side.querySelector('.kicker .mono').textContent = String(design.options.length);
+    const focused = document.activeElement === side.querySelector('form.brief textarea'), caret = document.activeElement?.selectionStart;
     side.querySelector('form.brief')?.replaceWith(brief(o));
+    side.querySelector('.polish-controls')?.replaceWith(polishControls(o));
+    if (focused) { const next = side.querySelector('form.brief textarea'); next.focus({ preventScroll: true }); next.setSelectionRange(caret, caret); }
     const [b, m] = switcher(o, dev);
     bar.querySelector('.switch').replaceWith(b);
     bar.querySelector('#option-menu').replaceWith(m);

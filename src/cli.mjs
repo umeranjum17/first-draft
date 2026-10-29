@@ -34,6 +34,7 @@ import { PASS, openCritic } from './critic.mjs';
 import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
+import { polish, polishFeedback, roundCap } from './polish.mjs';
 
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const PICK = 'an optional preferred route and model with `first-draft-axi init --agent byokit:<route> --model <model>`';
@@ -192,6 +193,8 @@ commands[15]:
   styles [--logo]                     list the named design styles that make --direction <id> takes (or write your own direction in words); --logo lists the logo kinds logo --direction takes
   check <page.html...> --data <file.json>  compare visible figures and data-defined states with structured brief data
   refine <option.html> "<change>" --out <file.html> [--data <file.json>]   apply a follow-up; optional data check gates the new page
+  polish <option.html> "<brief>" --out-dir <new-folder> [--max-rounds 5] [--feedback "<request>"] [--model <id>]   refine only this direction; independently judge each version until 9/10, cap, or two rounds without improvement
+  polish-feedback <run-folder> "<request>"   add cumulative feedback while polish is running
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B|$FIRST_DRAFT_BOARD] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
   doctor                              show whether the configured agent is ready, with no paid call
@@ -469,6 +472,19 @@ if (command === 'check') {
     if (!e.code) throw e;
     fail(e.code, e.message, e.help);
   }
+} else if (command === 'polish-feedback') {
+  const { positionals } = flags(rest, {});
+  if (positionals.length !== 2) fail('USAGE', 'polish-feedback <run-folder> "<request>"');
+  console.log(JSON.stringify({ feedback: polishFeedback(resolve(positionals[0]), positionals[1]) }));
+} else if (command === 'polish') {
+  const { values, positionals } = flags(rest, { 'out-dir': { type: 'string' }, 'max-rounds': { type: 'string', default: '5' }, feedback: { type: 'string', multiple: true }, model: { type: 'string' } });
+  if (positionals.length !== 2 || !values['out-dir']) fail('USAGE', 'polish <option.html> "<brief>" --out-dir <new-folder> [--max-rounds 5] [--feedback "<request>"]');
+  const maxRounds = roundCap(values['max-rounds']), c = await agentOrAsk(values.model);
+  try {
+    const result = await polish({ c, home: HOME(), file: resolve(positionals[0]), brief: positionals[1], outDir: resolve(values['out-dir']), maxRounds, feedback: values.feedback ?? [],
+      onRound: (r) => console.log(JSON.stringify({ polish_round: { round: r.round, score: r.score, accepted: r.accepted, file: r.file, gaps: r.critique.gaps, judge: r.critique.judge, feedback_pending: r.feedback_pending } })) });
+    console.log(JSON.stringify({ polished: result }));
+  } catch (e) { console.log(JSON.stringify({ error: { code: e.code ?? 'POLISH_FAILED', message: e.message }, ...(e.run && { polished: e.run, out_dir: e.outDir }) })); process.exitCode = 1; }
 } else if (command === 'refine') {
   const { values, positionals } = flags(rest, { out: { type: 'string' }, data: { type: 'string' }, ...referenceFlags });
   const [file, ...words] = positionals, change = words.join(' ').trim();
@@ -551,7 +567,8 @@ if (command === 'check') {
   if (wildcard && !tailnet) fail('NO_TAILNET', 'a wildcard --host listens on every address, but tailscale ip -4 found no tailnet address to show', ['Pass --host <tailnet address>']);
   let v;
   try {
-    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1, comments: commentsPath(positionals[0]), refine: refineHtml });
+    v = await serve({ files, name: basename(positionals[0], extname(positionals[0])), host, advertise, port, framePort: port && port + 1, comments: commentsPath(positionals[0]), refine: refineHtml,
+      polish: async (args) => polish({ ...args, c: await agentOrThrow(), home: HOME() }) });
   } catch (e) { fail(e.code === 'EADDRINUSE' ? 'PORT_IN_USE' : 'VIEW_FAILED', `cannot serve on ${advertise}:${port}: ${e.message}`, ['Stop the other `first-draft-axi view`, or pass --port <port>']); }
   console.log(JSON.stringify({ viewing: { url: v.url, frames: v.frames, options: v.options.map((o) => ({ option: o.n, file: o.file, url: `${v.url}#/o/${o.n}` })) },
     help: [/^(127\.|::1$|localhost$)/.test(advertise) ? `${given ? 'This host' : 'tailscale ip -4 found no tailnet address, so this url'} opens on this machine only; pass --host <tailnet address>` : 'Open the url on any device that can reach this host; it serves until this process stops',
