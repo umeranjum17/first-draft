@@ -8,7 +8,7 @@ description: "Drive first-draft-axi to prototype and explore designs: several se
 Use it by judgement: bigger redesigns, new screens, landing pages, or "show me 3 options to pick from". A small UI fix (a colour, a margin, a label) does not need it; edit the code.
 Every command prints JSON; its `help` list says what to do next, and a failure is `{"error": {"code", "message"}, "help": [...]}`: read the message, do not retry blindly.
 
-## The 5 commands
+## The 7 commands
 
 1. **init**, once per repo (safe to re-run; writes only inside the repo):
    `first-draft-axi init`
@@ -28,6 +28,12 @@ Every command prints JSON; its `help` list says what to do next, and a failure i
    `first-draft-axi post .first-draft/designs/settings.html --title "Which settings layout?" --recommend a --option a="Grouped list" --option b="Tabs" --option c="Single scroll"`
    Copies the options to the board's `mocks/`, starts the view, and each option card gets an Open link to its live Play page (desktop and phone urls are in the output). The board is the nearest `.sign-off/` above the folder, or `--board <board.json>`, or `$FIRST_DRAFT_BOARD`. You choose `--recommend` (the option you would pick); a second post on the same title needs `--key <new-key>`. Tests, journeys and demos ask nobody: `--evidence --media shot.png` instead of `--recommend`.
    On a machine without a tailnet address pass `--host <address>` (or `FIRST_DRAFT_VIEW_HOST`).
+6. **polish**, to refine only the one direction the user picked (an independent judge scores every version; run it in the background, it takes several rounds):
+   `first-draft-axi polish .first-draft/designs/settings-2.html "A settings page for a podcast app" --out-dir .first-draft/designs/settings-polished --max-rounds 4 --feedback "Calmer billing section"`
+   Stops at a score of 9/10, at `--max-rounds` (default 5), or after two rounds without improvement; it does not guarantee 9/10. Each round prints a `polish_round` line (`score`, `accepted`, `file`, `gaps`), and `polished` holds the result. A version below 9 is below the bar: report its score and gaps, never call it finished. The original file is untouched.
+7. **polish-feedback**, to add the user's request to a polish run that is still going:
+   `first-draft-axi polish-feedback .first-draft/designs/settings-polished "Make the tabs larger"`
+   Feedback is cumulative and each later round is judged against it. A run that has stopped refuses it: start a new `polish`.
 
 For reference-grounded screen comparison: `first-draft-axi benchmark --product "AI chat app" --screen "phone chat" --input screens.json --width 390 --theme light --out benchmark.html`. The manifest must contain at least one current/candidate and is an array of `{role,name,file,source,permission,captured_at,theme}` captures; roles are `current`, `candidate`, `reference`, `counterexample`, paths resolve beside the manifest, capture time may be null if unknown. Search reuses public robots/terms capture; every refusal remains in the sheet/report. Positive references and targets must match the requested theme; negative examples may differ. The self-contained sheet scales original images to one width without recolouring them; adjacent JSON records per-axis reference observations, cited capture IDs and target scores (1–10 or null when not comparable). Every current/candidate is judged separately by the configured independent subscription judge, never a prose-only bar. Public acquisition currently supports light HTML captures only, not app-store/press image extraction. The central resolver requires an authenticated engine and a judge on a different engine, named in the output. `--no-discovery` and `--no-judge` are private test plumbing only (`FIRST_DRAFT_TEST_BENCHMARK=1`), not user modes. Missing references, unavailable judges and failed reviews publish no new sheet/report, including no partial scores; credential failures give one sign-in step. An earlier complete result remains unchanged.
 

@@ -56,6 +56,18 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
 - **See the market first.** `--competitors` finds 3–5 real products of the brief's kind, captures their public pages through the same robots/terms review as a reference, and shows them beside the options with their sources and every refusal.
 - **Keep the original.** Refine into a new option, or send the choices to [sign-off](https://github.com/umeranjum17/sign-off) for someone's pick.
 
+**Polish one direction.** Pick one option you already generated and refine only that direction. An independent judge scores each version, and the loop stops at 9/10, at `--max-rounds` (default 5), or after two rounds without improvement. It does not guarantee 9/10: a version below the bar is reported as below the bar, not as finished.
+
+```sh
+first-draft-axi polish notes-1.html "A notes app" \
+  --out-dir notes-polished \
+  --max-rounds 4 \
+  --feedback "Warmer paper background"
+first-draft-axi polish-feedback notes-polished "Make the sidebar narrower"
+```
+
+`polish-feedback <run-folder> "<request>"` adds cumulative feedback while a run is in progress; the next round judges it. The original file is untouched.
+
 `first-draft-axi init` also installs the [agent skill](skills/first-draft-axi/SKILL.md) for Claude Code, Codex and pi in your repo. Commands return JSON, so your coding agent can drive the same workflow.
 
 ## Proof, not a promise of perfect design
