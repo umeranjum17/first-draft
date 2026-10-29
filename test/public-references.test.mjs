@@ -249,7 +249,7 @@ let data;addEventListener('hashchange',()=>data&&draw(data));setTimeout(()=>fetc
   assert.deepEqual(inventory.pages[0].links.map(l=>[l.label,l.target,l.url]),[['Today','screen-1','/'],['Decide','screen-2','/#decide'],['Tickets','screen-3','/#tickets'],['Search',null,'/#find']]);
   assert.deepEqual(inventory.pending,['/#find']);
   assert.match(brief,/Keep every source navigation entry/);assert.match(brief,/on phone exactly the source phone navigation/,'phone keeps the source phone navigation, not every desktop entry');
-  assert.match(brief,/holds every text in full/);assert.doesNotMatch(brief,/literal … as the source shows it/,'a live phone ellipsis is styling, not missing text');assert.ok(inventory.pages.every(p=>p.live===true),'the reviewer sees each screen is live');assert.match(inventory.limitations[0],/same-origin GETs/);
+  assert.match(brief,/holds every text in full/);assert.doesNotMatch(brief,/literal … as the source shows it/,'a live phone ellipsis is styling, not missing text');assert.match(brief,/one line of title and one line of meta/,'a live list row is one title line and one meta line');assert.match(brief,/icons only, none dropped and none added: only the active entry shows its label, and no count/,'the phone dock is icons with one active label and no counts');assert.match(brief,/columns of a screen end at about the same height/,'desktop columns are balanced');assert.ok(inventory.pages.every(p=>p.live===true),'the reviewer sees each screen is live');assert.match(inventory.limitations[0],/same-origin GETs/);
   assert.ok(requests.every(r=>r.method==='GET'),'no write reached the app');assert.equal(requests[0].cookie,undefined,'a fresh profile brings no cookie');
   assert.ok(!requests.some(r=>r.url.includes('outside')),'no other origin');
   const im=['magick','convert'].find(b=>{try{execFileSync(b,['-version'],{stdio:'ignore'});return true;}catch{return false;}});
@@ -270,4 +270,17 @@ test('redesign covered-text gate: a modal screen may dim only an inert page behi
   assert.deepEqual(await covered(screen(true,true)),[],'the inert page behind a live modal dialog is meant to be dimmed');
   assert.ok((await covered(screen(true,false))).length,'a live page under the scrim is still refused');
   assert.ok((await covered(screen(false,true))).length,'inert excuses nothing without an aria-modal dialog');
+});
+test('redesign clipped-text gate: on a live screen a one-line CSS ellipsis on the text\'s own box shows its cut; other hidden overflow is still refused',async t=>{
+  const {renderCheck}=await import(new URL('../src/render-check.mjs',import.meta.url).href);
+  const title='Pick the Juggernaut working animation for Stealth mode before the review of the new sailboat sequence closes tonight';
+  const row=(body,css)=>`<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>:root{color-scheme:light dark;background:#fff;color:#111}@media(prefers-color-scheme:dark){:root{background:#111;color:#eee}}body{margin:0;font:16px Arial}.card{margin:16px;overflow:hidden;border-radius:12px}.t{overflow:hidden;${css}}</style></head><body><section data-oc-screen id="screen-1"><h1>Replies</h1>${body}</section></body></html>`;
+  const clipped=async(html,live=true)=>{const render=renderCheck(()=>{},{redesignPages:[{id:'screen-1',title:'Replies',text:'Replies',links:[],...(live&&{live})}]});try{const errors=await render.verify(html);assert.equal(render.status,'checked');return errors.filter(e=>/clipped text/.test(e.message));}finally{render.close();}};
+  const one='white-space:nowrap;text-overflow:ellipsis';
+  assert.deepEqual(await clipped(row(`<p class=t>${title}</p>`,one)),[],'a one-line ellipsis over the complete text passes');
+  assert.deepEqual(await clipped(row(`<div class=card><p class=t><span>${title}</span></p></div>`,one)),[],'inside a rounded overflow:hidden card too');
+  assert.ok((await clipped(row(`<div class=t><div>${title}</div></div>`,one))).length,'an ellipsis on an outer box paints nothing when a block sits between: refused');
+  assert.ok((await clipped(row(`<p class=t>${title}</p>`,one),false)).length,'a static redesign keeps refusing ellipsis cuts');
+  assert.ok((await clipped(row(`<p class=t>${title}</p>`,'white-space:nowrap'))).length,'a silent one-line cut is still refused');
+  assert.ok((await clipped(row(`<p class=t>${title}</p>`,'height:1.2em;text-overflow:ellipsis'))).length,'wrapped lines hidden under a short box are still refused');
 });
