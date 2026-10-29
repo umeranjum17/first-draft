@@ -168,6 +168,7 @@ commands[15]:
   benchmark --product <type> --screen <view> --input <captures.json> --out <sheet.html> [--width 390|1280] [--theme light|dark] [--project <folder>]   authenticated engine and independent judge required; publish only complete reference-based assessments
     --no-discovery / --no-judge are test-only plumbing, refused unless FIRST_DRAFT_TEST_BENCHMARK=1; never for user results
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
+  redesign <your-app-url> "<intent>" --live [--allow-host <private-host>] --out <folder>   your own running app (loopback, or a private host you name): scripts on, same-origin GETs only, hash routes are screens
     --used-screen-attempts <0-2> --used-plan-attempts <0-1>   account for earlier attempts in a bounded repair (never raises caps)
   references "<prompt>" [--like <brand-or-https-url>] [--capture] [--project <folder>]   discover a candidate; optionally check policy, capture and cache
   assets                              detect installed asset providers without spending
@@ -286,7 +287,7 @@ if (command === 'check') {
 } else if (command === 'make' || command === 'redesign' || command === 'logo') {
   const redesign = command === 'redesign', logo = command === 'logo';
   const { values, positionals } = flags(rest, logo ? { ref: referenceFlags.ref, ...Object.fromEntries(['out', 'out-dir', 'options', 'direction', 'model', 'explore'].map((name) => [name, { type: 'string' }])) }
-    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' }, inspiration: { type: 'boolean' }, app: { type: 'string', multiple: true }, device: { type: 'string' }, data: { type: 'string' }, 'skip-check': { type: 'boolean' } }), ...(!redesign && { engine: { type: 'boolean' }, 'first-view': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])) });
+    : { ...referenceFlags, ...assetFlags, ...(command === 'make' && { competitors: { type: 'boolean' }, inspiration: { type: 'boolean' }, app: { type: 'string', multiple: true }, device: { type: 'string' }, data: { type: 'string' }, 'skip-check': { type: 'boolean' } }), ...(!redesign && { engine: { type: 'boolean' }, 'first-view': { type: 'boolean' } }), ...Object.fromEntries(['out', 'out-dir', 'options', 'count', 'direction', 'style', 'screens', 'brief-file', 'model', ...(redesign ? ['max-pages','used-screen-attempts','used-plan-attempts'] : [])].map((name) => [name, { type: 'string' }])), ...(redesign && { live: { type: 'boolean' }, 'allow-host': { type: 'string', multiple: true } }) });
   const source = redesign ? positionals.shift() : null;
   if (redesign && (!source || !positionals.join(' ').trim() || !values.out || values['out-dir'] || values.screens || values['brief-file'])) fail('USAGE', 'redesign needs a source, intent and --out <folder>; screens come from discovery, not --screens or --brief-file',
     ['Run `first-draft-axi redesign https://example.com/pricing "Clearer plans" --out .first-draft/designs/pricing --model claude-sonnet-5-5`', 'Only have a screenshot? Run `first-draft-axi make "Redesign this screen: <what to change>" --ref shot.png --out .first-draft/designs/screen.html`']);
@@ -336,7 +337,7 @@ if (command === 'check') {
   let inventory;
   if (redesign) {
     try {
-      const captured = await redesignSource({ source, out: values.out, maxPages: Number(values['max-pages'] ?? 6) });
+      const captured = await redesignSource({ source, out: values.out, maxPages: Number(values['max-pages'] ?? 6), live: Boolean(values.live), allowHosts: values['allow-host'] ?? [] });
       inventory = captured.inventory;
       prompt = `${prompt}\n\n${captured.brief}`;
       screens = inventory.pages.map(p => p.id);
@@ -374,7 +375,7 @@ if (command === 'check') {
   const directionOf = (i) => logo ? values.direction ?? null : values.direction ?? values.style ?? planned?.directions[i].text;
   // A new option is one page from one call (draft.mjs); generated images and --engine use the multi-turn engine.
   const engine = assetSession || values.engine;
-  const build = (i, numbered) => (redesign ? makeRedesign : engine ? make : draft)({ prompt, ...c, screens, assets: assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) }, redesignPages: inventory?.pages, screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction: directionOf(i) });
+  const build = (i, numbered) => (redesign ? makeRedesign : engine ? make : draft)({ prompt, ...c, screens, assets: assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) }, redesignPages: inventory?.pages, sources: inventory && resolve(values.out, 'sources'), screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction: directionOf(i) });
   // The default one-call options are independent, so they are drawn and judged OPTIONS_AT_ONCE at a time, and the critic's plain page is written
   // beside them. A logo's options were drawn already; redesign pages, the engine loop (--engine) and generated assets (paid, one budget) keep their order.
   const slots = [], stages = {}; // stages: the seconds each kind of work took, summed over the options (the critic reports its own)

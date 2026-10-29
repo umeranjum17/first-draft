@@ -1,6 +1,6 @@
 // Full CLI/browser journey: a local brand site, native subscription stand-in, actual cached PNGs.
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createServer as portServer } from 'node:net';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -109,6 +109,8 @@ else {
   assert.equal(redesigned.made.render_check,'checked');
   assert.equal(redesigned.made.files[0].self_check.reviews,5);
   assert.equal(redesigned.made.files[0].source,'per-screen HTML');assert.equal(redesigned.made.files[0].tools.define_redesign_plan,1);assert.equal(redesigned.made.files[0].tools.write_redesign_screen,5);assert.deepEqual(redesigned.made.files[0].self_check.screen_attempts.map(p=>p.attempts),[3,2]);assert.equal(redesigned.made.files[0].self_check.screen_reviews.length,2);
+  const writerImages=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>['define_redesign_plan','write_redesign_screen'].includes(t.name))).map(r=>r.images);
+  assert.deepEqual([...new Set(writerImages)].sort(),[2,4],'the plan sees both screens and each screen writer sees its own phone and desktop source captures');
   const third=JSON.parse(readFileSync(join(redesignOut,'writer-option-1/screen-1-attempt-3.json')));for(const p of [/clipped text/,/Redesign semantic metrics/,/Remove diagnostic provenance notes/])assert.ok(third.feedback_sent.some(f=>p.test(f)),'third response gets every earlier finding');
   assert.ok(redesigned.made.files[0].self_check.semantic.every(c=>c.passed));
   assert.match(readFileSync(redesigned.made.files[0].file,'utf8'),/© Umer/,'copyright text is not emoji filler');
@@ -222,4 +224,38 @@ else {
   const requestsBeforeCorruption=requests.length;
   await assert.rejects(run('references','--like',origin+'/','--capture'),e=>/Cached reference screenshot changed/.test(e.stdout));
   assert.equal(requests.length,requestsBeforeCorruption,'corrupt cache refuses instead of silently refetching');
+});
+
+test('live redesign discovery: own loopback hash-route app, scripts on, same-origin GETs only, light captures',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'fd-live-')); t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const requests=[];
+  const APP=`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>Umer board</title><style>:root{color-scheme:light dark;background:#fff;color:#111}@media(prefers-color-scheme:dark){:root{background:#000;color:#eee}}body{margin:0;font:16px Arial}nav a{margin:8px}dialog{display:block}</style></head><body><nav><a href="#">Today</a> <a href="#decide">Decide</a> <a href="#tickets">Tickets</a> <a href="#find">Search</a></nav><main aria-busy="true">Loading</main><script>
+fetch('/write',{method:'POST',body:'seen'}).catch(()=>{});fetch('https://outside.invalid/track').catch(()=>{});document.cookie='seen=1';
+const draw=d=>{const m=document.querySelector('main'),r=location.hash.slice(1)||'today';m.innerHTML='<h1>'+(d.titles[r]||r)+'</h1><p>'+d.counts[r]+' waiting on Umer</p>'+(r==='find'?'':'');m.removeAttribute('aria-busy');};
+let data;addEventListener('hashchange',()=>data&&draw(data));setTimeout(()=>fetch('/data.json').then(r=>r.json()).then(d=>{data=d;draw(d);}),300);
+</script></body></html>`;
+  const app=createServer((req,res)=>{requests.push({method:req.method,url:req.url,cookie:req.headers.cookie});
+    if(req.method!=='GET'){res.writeHead(405);return res.end();}
+    if(req.url==='/data.json'){res.writeHead(200,{'content-type':'application/json'});return res.end(JSON.stringify({titles:{today:'Today',decide:'Decide',tickets:'Tickets',find:'Search'},counts:{today:8,decide:3,tickets:12,find:0}}));}
+    if(req.url==='/'){res.writeHead(200,{'content-type':'text/html'});return res.end(APP);}
+    res.writeHead(404);res.end();});
+  await new Promise(ok=>app.listen(0,'127.0.0.1',ok)); t.after(()=>{app.closeAllConnections();app.close();});
+  const url=`http://127.0.0.1:${app.address().port}/`;
+  const {redesignSource,liveUrl}=await import(new URL('../src/redesign.mjs',import.meta.url).href);
+  const out=join(dir,'live'),{inventory,brief}=await redesignSource({source:url,out,maxPages:3,live:true});
+  assert.deepEqual(inventory.pages.map(p=>p.url),['/','/#decide','/#tickets'],'hash routes are screens, in link order');
+  assert.deepEqual(inventory.pages.map(p=>/(\d+) waiting on Umer/.exec(p.text)?.[1]),['8','3','12'],'each screen is read after its scripts render the data');
+  assert.deepEqual(inventory.pages[0].links.map(l=>[l.label,l.target,l.url]),[['Today','screen-1','/'],['Decide','screen-2','/#decide'],['Tickets','screen-3','/#tickets'],['Search',null,'/#find']]);
+  assert.deepEqual(inventory.pending,['/#find']);
+  assert.match(brief,/Keep every source navigation entry/);assert.match(inventory.limitations[0],/same-origin GETs/);
+  assert.ok(requests.every(r=>r.method==='GET'),'no write reached the app');assert.equal(requests[0].cookie,undefined,'a fresh profile brings no cookie');
+  assert.ok(!requests.some(r=>r.url.includes('outside')),'no other origin');
+  const im=['magick','convert'].find(b=>{try{execFileSync(b,['-version'],{stdio:'ignore'});return true;}catch{return false;}});
+  for(const p of inventory.pages)for(const shot of p.screenshots){const file=join(out,'sources',shot.file),b=readFileSync(file);assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);
+    if(im)assert.match(execFileSync(im,[file,'-format','%[pixel:p{300,700}]','info:'],{encoding:'utf8'}),/white|255,255,255/,'source captures are light even on a dark host');}
+  await assert.rejects(redesignSource({source:url,out:join(dir,'not-live'),maxPages:1}),/public HTTPS/,'without --live a loopback app is refused as before');
+  await assert.rejects(redesignSource({source:url,out:join(dir,'x'),allowHosts:['10.0.0.2']}),/only applies with --live/);
+  for(const bad of ['https://example.com/','http://127.0.0.1:1/?token=abc','http://u:p@127.0.0.1:1/','http://10.0.0.2/','file:///etc/hosts'])await assert.rejects(liveUrl(bad),/--live/,bad);
+  assert.equal((await liveUrl('http://10.0.0.2:4420/',['10.0.0.2'])).host,'10.0.0.2:4420','a private host the owner names');
+  await assert.rejects(liveUrl('http://8.8.8.8/',['8.8.8.8']),/neither/,'naming a public host never opens the internet');
 });
