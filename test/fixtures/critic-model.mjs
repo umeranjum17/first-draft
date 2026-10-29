@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 
-const DESIGN = readFileSync(new URL('../../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const DESIGN = readFileSync(new URL('../../templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const page = (title) => `<!doctype html><html><head><title>Notes</title><style>:root{--bg:#fff;--fg:#111}@media (prefers-color-scheme: dark){:root{--bg:#101418;--fg:#e8eaed}}body{margin:0;min-height:2500px;font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}main{max-width:100%;padding:24px}</style></head><body><main><h1>${title}</h1><p>Umer's notes, searchable.</p></main></body></html>`;
 export const PLAIN = page('A plain page from one prompt');
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;

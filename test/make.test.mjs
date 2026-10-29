@@ -16,7 +16,7 @@ const PAGE = theme('<!doctype html><html><body><h1>Sign in to your notes</h1><im
 
 const ev = (o) => `event: ${o.type}\ndata: ${JSON.stringify(o)}\n\n`;
 // The engine's own first steps on a fresh workspace: a plan (set_todos), then the DESIGN.md its done requires, here the engine's own starter one.
-const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const DESIGN = readFileSync(new URL('../templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const PLAN = { type: 'function_call', id: 'fc-plan', call_id: 'c-plan', name: 'set_todos', arguments: JSON.stringify({ items: [{ text: 'Write the page', checked: false }] }) };
 const START = [{ type: 'function_call', id: 'fc-design', call_id: 'c-design', name: 'str_replace_based_edit_tool', arguments: JSON.stringify({ command: 'create', path: 'DESIGN.md', file_text: DESIGN }) }];
 const fresh = (body) => !body.includes('function_call_output'); // the conversation's first turn: the engine asks for a plan before any edit

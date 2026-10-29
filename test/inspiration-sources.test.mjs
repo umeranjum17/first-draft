@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { installJudge } from './fixtures/judge-cli.mjs';
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
-const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const DESIGN = readFileSync(new URL('../templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const PERMISSION = 'Anonymous automated browsers may store screenshots of this entire website privately as visual design references. Do not copy our text or assets into generated designs.';
 const RESTRICTED = 'Automated screenshots are prohibited.';
 const PICTURE = new URL('../docs/logo-512.png', import.meta.url).pathname;

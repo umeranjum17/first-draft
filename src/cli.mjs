@@ -177,7 +177,7 @@ commands[15]:
     --direction <look> named style or free-text direction for all options; --style is an alias; otherwise the model plans one direction per option for this brief
     --data <file.json> compare generated pages with structured brief data; mismatches fail the round
     --skip-check       explicitly skip the data check for a non-numeric brief (visible in make output)
-    --engine           make each option with the Open CoDesign engine's multi-turn tool loop instead of one page from one call (--assets always does)
+    --engine           make each option with the OpenDesign engine's multi-turn tool loop instead of one page from one call (--assets always does)
     --screens <names>  comma-separated screen/page names to cover (1-12); default: infer from brief
     --brief-file <file> append a nonempty UTF-8 brief (up to 100 KB); prompt may be omitted
     --model <id>       override the configured model for this run only (same BYOKit route)

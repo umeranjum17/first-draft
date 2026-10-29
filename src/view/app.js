@@ -1,6 +1,6 @@
 // The first-draft view: every option of a design as a grid, one option in the Studio (a panel beside a canvas showing the desktop and the phone side by side, or one of them), fullscreen, and Play (clickable screens).
 // Each option renders from the frame origin in an iframe sandboxed to scripts only; it can post only errors, Escape and (in Play) its active screen back.
-import { isIframeErrorMessage } from '../../vendor/open-codesign/packages/runtime/src/iframe-errors.ts';
+import { isIframeErrorMessage } from '../../vendor/studio-runtime/src/iframe-errors.ts';
 import { BOTH_MIN, FRAMES, PIN_GUTTER, SANDBOX, WIDE, commentBubblePosition, commentKeyAction, deviceFor, fitDevice, formatIframeError, isTrustedPreviewMessageSource, pageFor, pairGap } from './canvas.js';
 import './view.css';
 
