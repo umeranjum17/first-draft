@@ -6,6 +6,7 @@ import { flowOf } from './flow.mjs';
 import { AXES, openJudge } from './judge.mjs';
 import { routeOf, writePage } from './byokit.mjs';
 import { ask } from './logo-concepts.mjs';
+import { fallbackNote, judgeChain, judgeWithFallback } from './judge-fallback.mjs';
 import { findBrowser, renderCheck } from './render-check.mjs';
 import { stopwatch } from './timing.mjs';
 
@@ -90,6 +91,8 @@ export async function openCritic({ c, brief, references = [], plainOut, plainSou
   const mode = flow ? 'flow-screens' : firstView ? 'first-viewport' : 'full-page-both-themes', full = mode === 'full-page-both-themes';
   const used = { tokens_in: 0, tokens_out: 0 };
   const add = (r) => { used.tokens_in += r.tokens_in ?? 0; used.tokens_out += r.tokens_out ?? 0; };
+  const chain = judgeChain(judge.c, { timeoutMs: c.timeoutMs }), fallbacks = [];
+  let verdictBy = { agent: judge.c.agent, model: judge.c.model };
   const { timed, seconds } = stopwatch();
   let busy = Promise.resolve(), plain, plainFile;
   const shoot = (html) => { const run = busy.then(() => flow ? render.capture(html, flow.count) : full ? render.views(html) : render.shoot(html, 800)); busy = run.catch(() => {}); return run; }; // options are judged at once: one browser page, one shot at a time
@@ -107,17 +110,20 @@ export async function openCritic({ c, brief, references = [], plainOut, plainSou
     const seen = [...mine.map((s, i) => ({ ...s, side: 'design', id: `design-${s.id ?? i + 1}` })), ...theirs.shots.map((s, i) => ({ ...s, side: 'plain', id: `plain-${s.id ?? i + 1}` }))];
     const shots = seen.map((s) => ({ id: s.id, mime: s.mime ?? 'image/png', dataUrl: s.dataUrl }));
     const set = captureSet(seen), ids = seen.filter((s) => s.side === 'design').map((s) => s.id), notes = captureNotes(set);
-    const r = await ask(judge.c, { system: JUDGE_SYSTEM(judge.kind, references.length, landing, flow, full), tool: JUDGED(landing, flow, ids), user: JSON.stringify({ brief, capture_set: set, capture_notes: notes, image_order: shots.map((s) => s.id), references: judge.refs.images.map((i) => i.label), reference_notes: judge.refs.shown, not_captured: judge.refs.notes }),
-        images: [...shots, ...judge.refs.images.map(({ id, mime, dataUrl }) => ({ id, mime, dataUrl })), ...references] }, judgedProblems(landing, flow, ids));
+    const asked = await judgeWithFallback(chain, (jc) => ask(jc, { system: JUDGE_SYSTEM(judge.kind, references.length, landing, flow, full), tool: JUDGED(landing, flow, ids), user: JSON.stringify({ brief, capture_set: set, capture_notes: notes, image_order: shots.map((s) => s.id), references: judge.refs.images.map((i) => i.label), reference_notes: judge.refs.shown, not_captured: judge.refs.notes }),
+        images: [...shots, ...judge.refs.images.map(({ id, mime, dataUrl }) => ({ id, mime, dataUrl })), ...references] }, judgedProblems(landing, flow, ids)));
+    const r = asked.value, fallback = await fallbackNote(judge.c, c, asked);
     add(r);
-    return { ...r.value, capture: { mode, images: set.length, set }, retries: r.retries };
+    if (fallback) { fallbacks.push(fallback); process.stderr.write(`${JSON.stringify({ judge_fallback: fallback.summary })}\n`); }
+    verdictBy = asked.by;
+    return { ...r.value, capture: { mode, images: set.length, set }, retries: r.retries, fallback };
   };
   const passes = (r) => r.design.score >= PASS && r.design.score >= r.plain.score && !r.ai_side?.reads_as_ai && (!r.flow || (r.flow.shell.score >= PASS && r.flow.character.score >= PASS));
   const judgeOne = async (made) => {
     const started = Date.now(), r = await timed('review', () => review(made.html));
     const baseline = await plainPage();
     if (baseline.html && !plainFile) { mkdirSync(dirname(plainOut), { recursive: true }); writeFileSync(plainOut, baseline.html); plainFile = plainOut; }
-    return { made, critique: { score: r.design.score, views: r.views, capture: r.capture, passed: passes(r), plain_score: r.plain.score, rounds: 1, scores: [r.design.score], against: r.against, reads_as: r.reads_as, gaps: r.design.gaps, fix: r.fix, ...(r.flow && { flow: r.flow }), ...(r.axes && { axes: r.axes }), ...(r.ai_side && { ai_side: r.ai_side, hero: { met: r.hero.filter((h) => h.met).length, of: 9, points: r.hero } }), seconds: (Date.now() - started) / 1000, judge: judge.label, ...(r.retries && { judge_retries: r.retries.map(({ attempt, error }) => ({ attempt, error })) }) } };
+    return { made, critique: { score: r.design.score, views: r.views, capture: r.capture, passed: passes(r), plain_score: r.plain.score, rounds: 1, scores: [r.design.score], against: r.against, reads_as: r.reads_as, gaps: r.design.gaps, fix: r.fix, ...(r.flow && { flow: r.flow }), ...(r.axes && { axes: r.axes }), ...(r.ai_side && { ai_side: r.ai_side, hero: { met: r.hero.filter((h) => h.met).length, of: 9, points: r.hero } }), seconds: (Date.now() - started) / 1000, judge: r.fallback?.used ? `fallback: ${r.fallback.summary}` : judge.label, ...(r.fallback && { judge_fallback: r.fallback }), ...(r.retries && { judge_retries: r.retries.map(({ attempt, error }) => ({ attempt, error })) }) } };
   };
-  return { judge: judgeOne, warm: () => plainPage().catch(() => {}), /* the plain page is written while the options are drawn; the first review reports a failure */ timing: seconds, get judged() { return { model: judge.c.model, agent: judge.c.agent, kind: judge.kind, references: judge.refs.shown }; }, used, plainFile: () => plainFile, close: () => render.close() };
+  return { judge: judgeOne, warm: () => plainPage().catch(() => {}), /* the plain page is written while the options are drawn; the first review reports a failure */ timing: seconds, get judged() { return { model: verdictBy.model, agent: verdictBy.agent, kind: judge.kind, references: judge.refs.shown, ...(fallbacks.length && { fallbacks: fallbacks.map(({ summary, verdict_by, failed }) => ({ summary, verdict_by, failed })) }) }; }, fallbacks, used, plainFile: () => plainFile, close: () => render.close() };
 }
