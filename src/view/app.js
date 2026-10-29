@@ -287,11 +287,14 @@ async function pollPolish() {
   try {
     const response = await fetch('/polish');
     if (!response.ok) throw new Error(`Polish status: ${response.status}`);
-    polishRuns = (await response.json()).runs;
-    for (const run of polishRuns) for (const version of run.versions) {
-      if (!design.options.some((o) => o.n === version.option.n)) design.options.push(version.option);
+    const next = (await response.json()).runs;
+    if (JSON.stringify(next) !== JSON.stringify(polishRuns)) {
+      polishRuns = next;
+      for (const run of polishRuns) for (const version of run.versions) {
+        if (!design.options.some((o) => o.n === version.option.n)) design.options.push(version.option);
+      }
+      refreshStudio?.();
     }
-    refreshStudio?.();
     if (polishBusy()) polishTimer = setTimeout(pollPolish, 2000);
   } catch (e) {
     document.querySelector('.polish-status')?.replaceChildren(el('p', { role: 'alert' }, `${e.message}. Reload to reconnect; the server keeps the run.`));
