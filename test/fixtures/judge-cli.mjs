@@ -33,6 +33,16 @@ else {
   if (process.env.FD_JUDGE_FAILURE) { if (process.env.FD_JUDGE_FAILURE === 'credentials') writeFileSync(home+'/judge-signed-out','1'); process.exit(1); }
   if (!args.includes('read-only') || !args.includes('forced_login_method="chatgpt"') || process.env.OPENAI_API_KEY) throw Error('unsafe judge route');
   const files=args.filter(a=>a.startsWith('--image=')).map(a=>a.slice(8));
+  if (input.includes('"judge_polish"')) {
+    const context=JSON.parse(input.slice(input.indexOf('{'))),q=JSON.parse(context.messages.at(-1).content.split('\\n\\nYour last')[0]);
+    if (files.length!==q.image_order.length || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing polish images');
+    appendFileSync(home+'/polish-calls.jsonl',JSON.stringify({q,model:args[args.indexOf('--model')+1],images:files.length})+'\\n');
+    const n=readFileSync(home+'/polish-calls.jsonl','utf8').trim().split('\\n').length-1,score=JSON.parse(process.env.FD_POLISH_SCORES||'[7,8,9]')[n];
+    const value={score,gaps:score<9?['Give the phone title more breathing room']:[],direction_kept:true,direction_reason:'Same notes layout and palette',feedback:q.feedback.map(f=>({id:f.id,kept:true,reason:'Visible in notes'}))};
+    console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_polish',arguments:JSON.stringify(value)}]})}}));
+    console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
+    process.exit(0);
+  }
   if (input.includes('"score_benchmark"')) {
     const context=JSON.parse(input.slice(input.indexOf('{'))),q=JSON.parse(context.messages.at(-1).content.split('\\n\\nYour last')[0]),refs=q.captures.filter(c=>c.role==='reference');
     if (files.length!==q.captures.length || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing benchmark images');

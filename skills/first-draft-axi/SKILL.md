@@ -33,6 +33,12 @@ For reference-grounded screen comparison: `first-draft-axi benchmark --product "
 
 Also: `first-draft-axi doctor` (is the model ready, no paid call), `first-draft-axi refine <option.html> "<change>" --out <new.html>` (change the option the user picked), `first-draft-axi logo "<brief>" --out <file.html>`, `first-draft-axi --help`.
 
+## Polish the user's pick
+
+After the person chooses one direction (or asks for only one), run `first-draft-axi polish <chosen.html> "<original brief>" --out-dir <new-folder> [--max-rounds 5] [--feedback "<request>"]`. This refines only that direction with the original brief, independent judge gaps and all cumulative feedback. Add feedback during the run from another terminal: `first-draft-axi polish-feedback <run-folder> "<request>"`. Studio exposes the same controls beside the chosen option.
+
+Read each `polish_round` JSON line, then `polished.final` and `polished.stop_reason`. Round 0 is the starting assessment; the default cap is five refinements. Stop at 9/10, cap, or two rounds without score improvement. A candidate that changes direction or undoes feedback is retained but not promoted (`accepted: false`); never report its higher score as the final score. Every version and assessment stays in the run folder; `view <run-folder>` uses the existing option picker. Report a below-nine stop and its reason honestly. Independent model checks are not guaranteed fidelity. Normal `make` and single-step `refine` behavior is unchanged. `polish` spends subscription quota and must not run in CI against a real provider.
+
 ## Where outputs land
 
 Under `.first-draft/designs/` when you use the paths above (git ignores it: `git add -f` a design the user wants kept; never commit by default). Each option is one self-contained HTML file that loads nothing from the network. The CLI prints no paths you have to guess: `made.files[].file` lists every option, `redesign.sources` the captured original.

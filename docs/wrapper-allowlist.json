@@ -5,6 +5,15 @@
   "verdicts": {"accepted": "Repeated paired comparisons (same brief, same model) on at least two briefs, every one up, none down; or a delivery or policy reason.", "provisional": "In the default make on a measured but mixed, bundled or missing comparison. Named with who decided it and the comparison still needed; review these entries manually."},
   "entries": [
   {
+    "id": "polish-chosen-direction",
+    "source": "src/polish.mjs:runPolish",
+    "kind": "policy",
+    "what": "Polish this chosen design, not a new direction. Preserve its identity, palette, typography, composition, content, screens, ids and links except where the following feedback requires a targeted improvement. User feedback is cumulative and takes priority over judge suggestions; never undo an earlier request.",
+    "sha256": "5fd110e81af04df8409a2ebad50d7040fb3158907b2290b9d1bcb898f47dfc34",
+    "verdict": "accepted",
+    "reason": "Owner-requested opt-in polish workflow, 29 October 2026: keep the selected direction and all user feedback across bounded rounds. This preservation policy does not change make, its initial scoring or its generation prompt; no isolated quality-gain claim is made. Independent visual assessments enforce promotion, not guaranteed fidelity."
+  },
+  {
     "id": "opendesign-engine-guidance",
     "source": "src/design-engine.mjs",
     "kind": "quality",

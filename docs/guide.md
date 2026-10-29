@@ -12,6 +12,29 @@
 
 Generating needs your chosen model; viewing does not call it. Options are prototypes, not production apps.
 
+## Polish the direction you picked
+
+`make` still draws and scores its directions once. A 7/10 draft is a starting point: choose its file (a one-option run is already a choice), then polish **that** design rather than asking for another direction.
+
+```sh
+first-draft-axi polish notes-1.html "A notes app for a solo researcher" \
+  --out-dir notes-polish --max-rounds 5 \
+  --feedback "Keep the warm paper palette"
+# From another terminal while it runs:
+first-draft-axi polish-feedback notes-polish "Make the phone note title easier to read"
+first-draft-axi view notes-polish
+```
+
+The output directory must be new and its parent must exist. `--max-rounds` is 1–50, default **5 refinement rounds**, after the initial assessment (round 0). `--feedback` may be repeated; `--model` overrides the generator as on `make`.
+
+Each round renders the whole page at 390 and 1280, in light and dark, then asks an independent authenticated subscription judge on a **different engine and model** for a score out of 10, concrete gaps, direction preservation, and a check of every feedback item. The next refinement starts from the last accepted page with the original brief, the judge's gaps and **all feedback received so far**. Candidates that change direction or undo feedback remain on disk, flagged `accepted: false`, but never seed the next round. Feedback arriving during a judge call is pending for the next round, not silently treated as applied. These are model assessments, not a mechanical guarantee of fidelity or accessibility.
+
+It stops at **9/10**, the cap, or **two consecutive rounds without a rise in the accepted design's score**. `polish_round` JSON lines print every score and gap as it finishes; the final `polished` JSON names the accepted final file/score and `stop_reason` (`target_reached`, `round_cap`, `no_improvement_two_rounds`, or an error). Below nine is an honest outcome, never a passing claim. A rejected high-scoring candidate is not the final score. Judge/generator failure stops with a nonzero exit and keeps the failed run, earlier scores and all already-written pages.
+
+The folder keeps `round-0.html`, every `round-N.html`, their `round-N.json` assessments, immutable `feedback/*.json` entries and atomic `run.json` status. The chosen source stays untouched. Open any round directly or use `view <folder>` to compare/go back with the existing option picker. There is no automatic restart of a stopped or interrupted run: start a new output folder from the version you want to keep, carrying its brief and feedback.
+
+**Studio:** open the chosen option, find **Polish chosen direction** in the existing side panel, paste its original brief, set the round cap and press **Polish to 9/10**. Scores and version links appear as rounds finish; **Add feedback** stays available during the run. Existing comment pins on the chosen option feed the first round; comments added on it or a running version feed subsequent rounds. The same loop runs server-side, even if the tab closes; reopening the same running view reconnects. Stopping the view process stops its model work; disk history survives. Completed-run feedback is refused explicitly—start another run to apply it. `refine` remains the single-change command; neither it nor `make` has changed its scoring policy.
+
 ## Works alone, or with sign-off
 
 First Draft needs nothing else: `make`, `view` and `refine` work on their own, and comments from people show as read-only pins on the canvas ([comment pins ↓](#reference)).

@@ -54,6 +54,7 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
 - **Compare at the right size.** Studio has Desktop, Phone and Both views; Play opens a screen flow.
 - **Point at the change.** Click a spot to leave a comment; numbered pins and plain JSON keep the feedback beside the design.
 - **See the market first.** `--competitors` finds 3–5 real products of the brief's kind, captures their public pages through the same robots/terms review as a reference, and shows them beside the options with their sources and every refusal.
+- **Polish your pick to nine.** `first-draft-axi polish notes-1.html "<original brief>" --out-dir notes-polish` refines that same direction with independent scoring and cumulative feedback, stopping at 9/10, five rounds, or two rounds without improvement. Every version and score stays on disk; [Studio has the same loop](docs/guide.md#polish-the-direction-you-picked).
 - **Keep the original.** Refine into a new option, or send the choices to [sign-off](https://github.com/umeranjum17/sign-off) for someone's pick.
 
 `first-draft-axi init` also installs the [agent skill](skills/first-draft-axi/SKILL.md) for Claude Code, Codex and pi in your repo. Commands return JSON, so your coding agent can drive the same workflow.

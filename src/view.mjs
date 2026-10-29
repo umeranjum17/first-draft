@@ -8,6 +8,7 @@ import { readOptionReferences, writeOptionReferences } from './reference-capture
 import { readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { readSources } from './reference-sources.mjs';
 import { VERSION } from './version.mjs';
+import { polishFeedback, roundCap } from './polish.mjs';
 
 const LIMIT = 5_000_000; // sign-off takes mocks of 5 MB or less
 const DIST = new URL('../dist/view/', import.meta.url);
@@ -107,7 +108,7 @@ const readBody = (req) => new Promise((ok, fail) => {
 });
 
 // `refine(seed, change)` makes the html of a new option from an option's html; the view runs no model of its own. A failure's `shown` is { error, help } worded for the person.
-export async function serve({ files, name, host, advertise = host, port, framePort, comments, refine }) {
+export async function serve({ files, name, host, advertise = host, port, framePort, comments, refine, polish }) {
   const options = files.map((file, i) => ({ n: i + 1, label: basename(file, extname(file)), file }));
   const { buildPreviewDocument } = await import('../dist/engine.mjs');
   let viewOrigin, frameOrigin;
@@ -133,12 +134,18 @@ export async function serve({ files, name, host, advertise = host, port, framePo
   };
   const page = () => {
     const { pins, error: pinsError } = readPins(comments);
-    const data = { name, version: VERSION, frames: frameOrigin, pins, pinsError, options: options.map(shown) };
+    const data = { name, version: VERSION, frames: frameOrigin, pins, pinsError, options: options.map(shown), canPolish: Boolean(polish) };
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${name.replace(/[<&"]/g, (c) => `&#${c.charCodeAt(0)};`)}</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/view.css"></head>`
       + `<body><div id="app"></div><script type="application/json" id="design">${JSON.stringify(data).replaceAll('<', '\\u003c')}</script><script src="/view.js"></script></body></html>`;
   };
   // One change runs at a time: the model call takes minutes and the person's agent is one account.
   let running = false;
+  const polishRuns = [];
+  const addVersion = (file) => {
+    const added = { n: options.length + 1, label: basename(dirname(file)) + ' · ' + basename(file, extname(file)), file };
+    options.push(added);
+    return shown(added);
+  };
   // A POST from the view page itself: its JSON body, or null once it has answered why not.
   const posted = async (req, reply) => {
     const same = (() => { try { return new URL(req.headers.origin).host === req.headers.host; } catch { return false; } })();
@@ -154,7 +161,11 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       return reply(400, { error: 'a comment needs an option, a point on its frame and a few words' });
     }
     if (!comments) return reply(501, { error: 'this view cannot save comments' });
-    try { addComment(comments, { option: body.option, device: body.device, x: body.x, y: body.y, text }); } catch (e) { return reply(409, { error: e.message }); }
+    try {
+      addComment(comments, { option: body.option, device: body.device, x: body.x, y: body.y, text });
+      const active = polishRuns.find((r) => r.status === 'running' && (r.option === body.option || r.versions.some((v) => v.option.n === body.option)));
+      if (active && existsSync(join(active.pendingDir, 'run.json'))) polishFeedback(active.pendingDir, text);
+    } catch (e) { return reply(409, { error: e.message }); }
     reply(200, readPins(comments));
   };
   const change = async (req, res) => {
@@ -178,8 +189,42 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       reply(200, { option: shown(added), ...(made.engine && { engine: made.engine }) });
     } catch (e) { reply(500, e.shown ?? { error: e.message }); } finally { running = false; }
   };
+  const startPolish = async (req, res) => {
+    const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
+    const body = await posted(req, reply);
+    if (!body) return;
+    const from = options.find((o) => o.n === body.option);
+    if (!polish) return reply(501, { error: 'this view cannot polish' });
+    if (!from || typeof body.brief !== 'string' || !body.brief.trim() || body.brief.length > 32000) return reply(400, { error: 'Pick an option and provide its original brief' });
+    let maxRounds;
+    try { maxRounds = roundCap(body.maxRounds ?? 5); } catch (e) { return reply(400, { error: e.message }); }
+    if (running) return reply(409, { error: 'Another change is still running' });
+    const base = from.file.replace(/\.html?$/i, '') + '-polish';
+    let outDir = base;
+    for (let n = 2; existsSync(outDir); n++) outDir = `${base}-${n}`;
+    const run = { id: polishRuns.length + 1, option: from.n, status: 'running', versions: [], pendingDir: outDir };
+    polishRuns.push(run);
+    running = true;
+    Promise.resolve().then(() => polish({ file: from.file, brief: body.brief, outDir, maxRounds,
+      feedback: () => readPins(comments).pins.filter((p) => p.option === from.n).map((p) => p.text),
+      onRound: (entry, state) => { run.versions.push({ round: entry.round, score: entry.score, accepted: entry.accepted, gaps: entry.critique.gaps, option: addVersion(entry.file) }); run.state = state; }
+    })).then((state) => { run.state = state; run.status = state.status; }, (e) => { run.status = 'failed'; run.error = e.message; run.state = e.run; }).finally(() => { running = false; });
+    reply(202, { run });
+  };
+  const addPolishFeedback = async (req, res) => {
+    const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
+    const body = await posted(req, reply);
+    if (!body) return;
+    const run = polishRuns.find((r) => r.id === body.id);
+    if (!run || run.status !== 'running') return reply(409, { error: 'No active polish run; start another run with your feedback' });
+    try { reply(200, { feedback: polishFeedback(run.pendingDir, body.text) }); }
+    catch (e) { reply(409, { error: e.code === 'ENOENT' ? 'The judge is preparing; retry once the run starts' : e.message }); }
+  };
   const view = createServer((req, res) => {
     const path = pathOf(req);
+    if (req.method === 'POST' && path === '/polish') return startPolish(req, res);
+    if (req.method === 'POST' && path === '/polish-feedback') return addPolishFeedback(req, res);
+    if (req.method === 'GET' && path === '/polish') return send(res, 200, 'application/json', JSON.stringify({ runs: polishRuns }));
     if (req.method === 'POST' && path === '/refine') return change(req, res);
     if (req.method === 'POST' && path === '/comments') return comment(req, res);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'text/plain', 'GET only');
