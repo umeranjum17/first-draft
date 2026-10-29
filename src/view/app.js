@@ -280,40 +280,28 @@ async function send(o, change) {
 }
 // The Studio redraws its panel and option menu (not its frames) when a change starts or ends; set while the Studio is open.
 let refreshStudio = null;
-let polishRuns = [], polishTimer, polishCap = 5, polishNotice = '';
-const polishBusy = () => polishRuns.some((r) => r.status === 'running');
-async function pollPolish() {
-  clearTimeout(polishTimer);
-  try {
-    const response = await fetch('/polish'); if (!response.ok) throw new Error(`Polish status: ${response.status}`);
-    const next = (await response.json()).runs;
-    if (JSON.stringify(next) !== JSON.stringify(polishRuns)) {
-      polishRuns = next;
-      for (const run of polishRuns) for (const version of run.versions) if (!design.options.some((o) => o.n === version.option.n)) design.options.push(version.option);
-      refreshStudio?.();
-    }
+let polishRuns = [], polishTimer, polishCap = 5, polishNotice = ''; const polishBusy = () => polishRuns.some((r) => r.status === 'running');
+async function pollPolish() { clearTimeout(polishTimer);
+  try { const response = await fetch('/polish'); if (!response.ok) throw new Error(`Polish status: ${response.status}`);
+    const next = (await response.json()).runs; if (JSON.stringify(next) !== JSON.stringify(polishRuns)) {
+      polishRuns = next; for (const run of polishRuns) for (const version of run.versions) if (!design.options.some((o) => o.n === version.option.n)) design.options.push(version.option);
+      refreshStudio?.(); }
     if (polishBusy()) polishTimer = setTimeout(pollPolish, 2000);
   } catch (e) { document.querySelector('.polish-status')?.replaceChildren(el('p', { role: 'alert' }, `${e.message}. Reload to reconnect; the server keeps the run.`)); }
 }
 if (design.canPolish) pollPolish();
-
 function polishControls(o) {
   const active = polishRuns.find((r) => r.status === 'running'), note = el('p', { role: 'status' }, polishNotice);
-  const cap = el('input', { type: 'number', min: '1', max: '50', value: String(polishCap), 'aria-label': 'Maximum polish rounds' });
-  cap.oninput = () => { polishCap = Number(cap.value); };
-  const start = el('button', { type: 'button', class: 'button line', disabled: job ? '' : undefined }, active ? 'Add polish feedback' : 'Polish to 9/10');
-  start.onclick = async () => {
+  const cap = el('input', { type: 'number', min: '1', max: '50', value: String(polishCap), 'aria-label': 'Maximum polish rounds' }); cap.oninput = () => { polishCap = Number(cap.value); };
+  const start = el('button', { type: 'button', class: 'button line', disabled: job ? '' : undefined }, active ? 'Add polish feedback' : 'Polish to 9/10'); start.onclick = async () => {
     if (!draft.trim()) { note.textContent = 'Enter the original brief (or feedback) in the brief box below.'; return; }
-    try {
-      const response = await fetch(active ? '/polish-feedback' : '/polish', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(active ? { id: active.id, text: draft } : { option: o.n, brief: draft, maxRounds: polishCap }) });
-      const body = await response.json(); if (!response.ok) throw Error(body.error);
-      draft = ''; polishNotice = active ? 'Feedback saved for subsequent rounds.' : 'Polish started.'; await pollPolish(); refreshStudio?.();
+    try { const response = await fetch(active ? '/polish-feedback' : '/polish', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(active ? { id: active.id, text: draft } : { option: o.n, brief: draft, maxRounds: polishCap }) });
+      const body = await response.json(); if (!response.ok) throw Error(body.error); draft = ''; polishNotice = active ? 'Feedback saved for subsequent rounds.' : 'Polish started.'; await pollPolish(); refreshStudio?.();
     } catch (e) { note.textContent = e.message; }
   };
   return el('section', { class: 'polish-controls' }, el('h2', { class: 'kicker' }, 'Polish chosen direction'), el('p', {}, 'Use the brief box below: original brief to start; feedback while running.'), cap, start, note,
     el('div', { class: 'polish-status', 'aria-live': 'polite' }, ...polishRuns.flatMap((r) => [el('p', {}, `Option ${r.option}: ${r.status} · ${r.state?.final?.score ?? 'unscored'}/10 · ${r.state?.stop_reason?.replaceAll('_', ' ') ?? ''} ${r.error ?? ''}`),
-      el('ol', {}, ...r.versions.map((v) => el('li', {}, link(`#/o/${v.option.n}`, `Round ${v.round}: ${v.score}/10${v.accepted ? '' : ' · not promoted'}`), el('p', {}, v.gaps.join(' ')))))])));
-}
+      el('ol', {}, ...r.versions.map((v) => el('li', {}, link(`#/o/${v.option.n}`, `Round ${v.round}: ${v.score}/10${v.accepted ? '' : ' · not promoted'}`), el('p', {}, v.gaps.join(' ')))))]))); }
 
 function brief(o) {
   const text = el('textarea', { rows: '2', 'aria-label': `Brief for a change to Option ${o.n}`, placeholder: `Describe a change to Option ${o.n}` });

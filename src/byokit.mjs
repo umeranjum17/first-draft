@@ -181,6 +181,19 @@ export async function imageSupport(route, model) {
   return key ? (await modelFor(key.upstream.id, model)).input?.includes('image') === true : false;
 }
 
+export function parseToolArguments(raw, name = 'tool') {
+  try { return JSON.parse(raw); } catch { /* one bounded lexical repair below */ }
+  let quoted = false, escaped = false, repaired = '';
+  if (raw.length <= 5_000_000) for (const c of raw) {
+    if (quoted && c.charCodeAt(0) < 32) { repaired += `${escaped ? '' : '\\'}u${c.charCodeAt(0).toString(16).padStart(4, '0')}`; escaped = false; continue; }
+    repaired += c; if (c === '"' && !escaped) quoted = !quoted; escaped = quoted && c === '\\' && !escaped;
+  }
+  const value = raw.length <= 5_000_000 ? repaired : raw; try { return JSON.parse(value); } catch (e) {
+    const position = e.message.match(/position (\d+)/)?.[1], at = Number(position ?? 0), cp = position === undefined ? e.message.match(/Unexpected token ['"](.)['"]/)?.[1]?.codePointAt(0) : value.codePointAt(at);
+    const detail = `${name}: ${e.message.slice(0, 160)}; position ${position ?? 'unreported'}; offending ${cp === undefined ? 'EOF/unknown' : `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`}; snippet ${JSON.stringify(value.slice(Math.max(0, at - 24), at + 25))}${raw.length > 5_000_000 ? '; repair limit 5000000 code units exceeded' : ''}`;
+    throw Object.assign(new SyntaxError(detail), { code: 'bad_json', detail });
+  }
+}
 // One engine turn as a pi-ai assistant message. BYOKit owns authentication and execution.
 export async function respond({ route, model, context, maxTokens, signal, timeoutMs, images = [], singleCall = false, asOnce = false }) {
   const problem = await check(route, model);
@@ -191,22 +204,10 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
       text: { type: 'string' }, calls: { type: 'array', ...(singleCall && { minItems: 1, maxItems: 1 }), items: { type: 'object', additionalProperties: false, required: ['name', 'arguments'], properties: {
         name: { type: 'string', enum: context.tools.map((t) => t.name) }, arguments: { type: 'string', description: 'JSON-encoded tool arguments matching the supplied tool schema' } } } } } };
     return cliAnswer(route, { model, images, timeoutMs, signal }, async (backend) => {
-      // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes; Sonnet 5.5 did in a judge call, which lost a finished make): asked again twice.
-      for (let attempt = 0; ; attempt++) {
-        const answer = await backend.generate({
-          system: `${context.systemPrompt}\n\nFirst-draft transport contract: The tools in the user JSON are virtual host-side actions, NOT native CLI tools. Do not invoke their names through native tools. Return the next actions exclusively in the structured calls array, each with name and a valid JSON-encoded arguments string matching its input schema. The host executes these actions and returns tool results on the next turn. When a done tool is supplied, submit a done action through calls and wait for its successful host result before ending with an empty calls array.`, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
-        if (!answer.data) throw new Error('BYOKit returned no structured engine response');
-        const { text, calls } = answer.data;
-        let args;
-        try { args = calls.map((c) => JSON.parse(c.arguments)); } catch (e) {
-          if (asOnce) throw Object.assign(new Error(`not valid JSON: ${e.message}`), { code: 'bad_json', detail: e.message }); // the caller counts and records the attempts
-          if (attempt >= 2) throw new Error(`the model's tool call was not valid JSON three times: ${e.message}`);
-          continue;
-        }
-        return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(),
-          content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: args[i] }))],
-          stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
-      }
+      const answer = await backend.generate({ system: `${context.systemPrompt}\n\nFirst-draft transport contract: The tools in the user JSON are virtual host-side actions, NOT native CLI tools. Do not invoke their names through native tools. Return the next actions exclusively in the structured calls array, each with name and a valid JSON-encoded arguments string matching its input schema. The host executes these actions and returns tool results on the next turn. When a done tool is supplied, submit a done action through calls and wait for its successful host result before ending with an empty calls array.`, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
+      if (!answer.data) throw new Error('BYOKit returned no structured engine response');
+      const { text, calls } = answer.data, args = calls.map((c) => parseToolArguments(c.arguments, c.name));
+      return { role: 'assistant', api: 'openai-responses', provider: route, model, timestamp: Date.now(), content: [...(text ? [{ type: 'text', text }] : []), ...calls.map((c, i) => ({ type: 'toolCall', id: `call-${Date.now()}-${i}`, name: c.name, arguments: args[i] }))], stopReason: calls.length ? 'toolUse' : 'stop', usage: { input: answer.usage?.input_tokens ?? 0, output: answer.usage?.output_tokens ?? 0 } };
     });
   }
   const key = await planKey(route);

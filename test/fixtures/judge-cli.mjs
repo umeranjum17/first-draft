@@ -39,7 +39,7 @@ else {
     appendFileSync(home+'/polish-calls.jsonl',JSON.stringify({q,model:args[args.indexOf('--model')+1],images:files.length,system:args.find(a=>a.startsWith('developer_instructions='))})+'\\n');
     const n=readFileSync(home+'/polish-calls.jsonl','utf8').trim().split('\\n').length-1,score=JSON.parse(process.env.FD_POLISH_SCORES||'[7,8,9]')[n];
     const value={score,gaps:score<9?['Give the phone title more breathing room']:[],direction_kept:true,direction_reason:'Same notes layout and palette',feedback:q.feedback.map(f=>({id:f.id,kept:true,reason:'Visible in notes'}))};
-    console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_polish',arguments:JSON.stringify(value)}]})}}));
+    console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_polish',arguments:JSON.stringify(value).replace('breathing room','breathing'+String.fromCharCode(10)+'room')}]})}}));
     console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
     process.exit(0);
   }

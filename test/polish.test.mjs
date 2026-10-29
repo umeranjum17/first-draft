@@ -9,6 +9,17 @@ import { test } from 'node:test';
 import { installJudge } from './fixtures/judge-cli.mjs';
 import { standIn } from './fixtures/critic-model.mjs';
 import { polishFeedback } from '../src/polish.mjs';
+import { parseToolArguments } from '../src/byokit.mjs';
+test('synthetic raw newline, tab and null fixture guards attempt-3 nested arguments failure at 9952', () => {
+  const fixture = JSON.parse(readFileSync(new URL('./fixtures/raw-control-arguments.json', import.meta.url), 'utf8'));
+  assert.equal(fixture.synthetic, true); assert.throws(() => JSON.parse(fixture.calls[0].arguments), SyntaxError);
+  const calls = fixture.calls.map((c) => ({ name: c.name, arguments: parseToolArguments(c.arguments, c.name) }));
+  assert.deepEqual(calls.map((c) => c.name), ['str_replace_based_edit_tool', 'done']); assert.equal(calls[0].arguments.new_str, '\n\t\0'); assert.equal(calls[1].arguments.path, 'App.jsx');
+  for (const c of ['\n', '\t', '\0']) { const raw = `{"new_str":"${c}"}`; assert.throws(() => JSON.parse(raw)); assert.equal(parseToolArguments(raw).new_str, c); }
+  const tricky = String.raw`{"new_str":"a\"b\\` + '\n' + 'c"}'; assert.equal(parseToolArguments(tricky).new_str, 'a"b\\\nc');
+  assert.throws(() => parseToolArguments('{"x":1}\0'), (e) => e.code === 'bad_json' && /position 7.*U\+0000.*snippet/.test(e.message) && e.message.length < 600);
+  assert.throws(() => parseToolArguments('{bad:"\n"}'), (e) => e.code === 'bad_json' && /position 1.*U\+0062/.test(e.message));
+});
 test('chosen drawn source survives three independently judged refine rounds; Studio admits cumulative feedback', async (t) => {
   let inject = () => {}, added = false;
   const dir = mkdtempSync(join(tmpdir(), 'fd-polish-')), seen = [], server = await standIn(seen, [], true, (body) => inject(body));

@@ -131,7 +131,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
   };
   const pause = (ms) => new Promise((r) => setTimeout(r, ms));
   // A call that timed out or whose connection closed is asked again on the same route and model, twice at most; anything else is the real failure.
-  const dropped = (e, call) => call.reason?.name === 'TimeoutError' || /other side closed|stream ended before message_stop|terminated|fetch failed|ECONNRESET|socket hang up|took too long|was cancelled|operation was aborted/i.test(e.message);
+  const dropped = (e, call) => e.code !== 'bad_json' && (call.reason?.name === 'TimeoutError' || /other side closed|stream ended before message_stop|terminated|fetch failed|ECONNRESET|socket hang up|took too long|was cancelled|operation was aborted/i.test(e.message));
   const ask = async (args, outer) => {
     for (let retry = 0; ; retry++) {
       const call = AbortSignal.any([signal, ...(outer ? [outer] : []), AbortSignal.timeout(timeoutMs)]); // Bound each call independently, not the whole incremental design.

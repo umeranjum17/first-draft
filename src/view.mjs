@@ -184,22 +184,24 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       reply(200, { option: shown(added), ...(made.engine && { engine: made.engine }) });
     } catch (e) { reply(500, e.shown ?? { error: e.message }); } finally { running = false; }
   };
-  const startPolish = async (req, res) => {
+  const polishAction = async (req, res, feedbackOnly) => {
     const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
-    const body = await posted(req, reply);
-    if (!body) return;
+    const body = await posted(req, reply); if (!body) return;
+    if (feedbackOnly) {
+      const run = polishRuns.find((r) => r.id === body.id);
+      if (!run || run.status !== 'running') return reply(409, { error: 'No active polish run; start another run with your feedback' });
+      try { return reply(200, { feedback: polishFeedback(run.pendingDir, body.text) }); }
+      catch (e) { return reply(409, { error: e.code === 'ENOENT' ? 'The judge is preparing; retry once the run starts' : e.message }); }
+    }
     const from = options.find((o) => o.n === body.option);
     if (!polish) return reply(501, { error: 'this view cannot polish' });
     if (!from || typeof body.brief !== 'string' || !body.brief.trim() || body.brief.length > 32000) return reply(400, { error: 'Pick an option and provide its original brief' });
-    let maxRounds;
-    try { maxRounds = roundCap(body.maxRounds ?? 5); } catch (e) { return reply(400, { error: e.message }); }
+    let maxRounds; try { maxRounds = roundCap(body.maxRounds ?? 5); } catch (e) { return reply(400, { error: e.message }); }
     if (running) return reply(409, { error: 'Another change is still running' });
-    const base = from.file.replace(/\.html?$/i, '') + '-polish';
-    let outDir = base;
+    const base = from.file.replace(/\.html?$/i, '') + '-polish'; let outDir = base;
     for (let n = 2; existsSync(outDir); n++) outDir = `${base}-${n}`;
     const run = { id: polishRuns.length + 1, option: from.n, status: 'running', versions: [], pendingDir: outDir };
-    polishRuns.push(run);
-    running = true;
+    polishRuns.push(run); running = true;
     Promise.resolve().then(() => polish({ file: from.file, brief: body.brief, outDir, maxRounds,
       feedback: () => readPins(comments).pins.filter((p) => p.option === from.n).map((p) => p.text),
       onRound: (entry, state) => { const added = { n: options.length + 1, label: `${basename(outDir)} · round ${entry.round}`, file: entry.file }; options.push(added);
@@ -207,19 +209,9 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     })).then((state) => { run.state = state; run.status = state.status; }, (e) => { run.status = 'failed'; run.error = e.message; run.state = e.run; }).finally(() => { running = false; });
     reply(202, { run });
   };
-  const addPolishFeedback = async (req, res) => {
-    const reply = (status, body) => send(res, status, 'application/json', JSON.stringify(body));
-    const body = await posted(req, reply);
-    if (!body) return;
-    const run = polishRuns.find((r) => r.id === body.id);
-    if (!run || run.status !== 'running') return reply(409, { error: 'No active polish run; start another run with your feedback' });
-    try { reply(200, { feedback: polishFeedback(run.pendingDir, body.text) }); }
-    catch (e) { reply(409, { error: e.code === 'ENOENT' ? 'The judge is preparing; retry once the run starts' : e.message }); }
-  };
   const view = createServer((req, res) => {
     const path = pathOf(req);
-    if (req.method === 'POST' && path === '/polish') return startPolish(req, res);
-    if (req.method === 'POST' && path === '/polish-feedback') return addPolishFeedback(req, res);
+    if (req.method === 'POST' && ['/polish', '/polish-feedback'].includes(path)) return polishAction(req, res, path === '/polish-feedback');
     if (req.method === 'GET' && path === '/polish') return send(res, 200, 'application/json', JSON.stringify({ runs: polishRuns }));
     if (req.method === 'POST' && path === '/refine') return change(req, res);
     if (req.method === 'POST' && path === '/comments') return comment(req, res);
