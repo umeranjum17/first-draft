@@ -33,8 +33,6 @@ For reference-grounded screen comparison: `first-draft-axi benchmark --product "
 
 Also: `first-draft-axi doctor` (is the model ready, no paid call), `first-draft-axi refine <option.html> "<change>" --out <new.html>` (change the option the user picked), `first-draft-axi logo "<brief>" --out <file.html>`, `first-draft-axi --help`.
 
-**Polish the user's pick:** `first-draft-axi polish <chosen.html> "<original brief>" --out-dir <new-folder> [--max-rounds 5] [--feedback "<request>"]`; during the loop, `first-draft-axi polish-feedback <run-folder> "<request>"`. Studio offers the same loop. Every version/score is retained; it stops at 9/10, the cap, or two rounds without improvement. Read `polish_round`, `polished.final` and `stop_reason`; rejected direction/feedback regressions are not promoted. Report below-nine stops honestly. `make` scoring is unchanged. This spends subscription quota: never run against real providers in CI.
-
 ## Where outputs land
 
 Under `.first-draft/designs/` when you use the paths above (git ignores it: `git add -f` a design the user wants kept; never commit by default). Each option is one self-contained HTML file that loads nothing from the network. The CLI prints no paths you have to guess: `made.files[].file` lists every option, `redesign.sources` the captured original.

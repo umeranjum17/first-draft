@@ -138,8 +138,8 @@ if (args.includes('auth')) {
   }
   writeFileSync(config, original);
   env.FD_BAD_ONCE = '1';
-  await run('make', 'Notes for Umer', '--out', join(dir, 'retried.html'), ...refs);
-  assert.equal(generated(), 17, 'an answer whose call arguments were not JSON was asked again once, and the five turns then ran');
+  await assert.rejects(run('make', 'Notes for Umer', '--out', join(dir, 'retried.html'), ...refs), e => /done:.*position 17.*snippet/.test(JSON.parse(e.stdout).error.message));
+  assert.equal(generated(), 12, 'irreparable arguments fail after one answer, never regenerate'); assert.throws(() => readFileSync(join(dir, 'retried.html')), { code: 'ENOENT' });
   delete env.FD_BAD_ONCE;
   env.PATH = dir + '/missing';
   await assert.rejects(run('make', 'Notes', '--out', out, ...refs), e => /claude auth login/.test(e.stdout));
