@@ -97,7 +97,7 @@ Same brief, same model (Claude Sonnet 5.5), 24 October 2026 — First Draft on t
 
 One run per cell, scored by the review worker, not customers and not an independent judge; before our fixes First Draft scored **4** on both of these. **[How good is it?](docs/quality.md)** has all four briefs side by side, the method, the limits, what we fixed and the rerun command.
 
-- [Published npm releases](https://www.npmjs.com/package/first-draft-axi?activeTab=versions): the clean install path was checked with the packed **0.5.0** build; the release workflow publishes after merge.
+- [Published npm releases](https://www.npmjs.com/package/first-draft-axi?activeTab=versions): the clean install path was checked with the packed **0.6.0** build; the release workflow publishes after merge.
 - [CI](https://github.com/umeranjum17/first-draft/actions/workflows/ci.yml): builds and drives CLI/browser checks with local provider stand-ins, without paid generation. The **25 October 2026** local run passed **74 tests, zero failures, zero skips**.
 - [Comparison contract](CONTRIBUTING.md): wrapper additions need paired rendered evidence; our own tool must not quietly lower the plain model's output bar.
 
