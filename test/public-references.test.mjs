@@ -271,11 +271,16 @@ test('redesign covered-text gate: a modal screen may dim only an inert page behi
   assert.ok((await covered(screen(true,false))).length,'a live page under the scrim is still refused');
   assert.ok((await covered(screen(false,true))).length,'inert excuses nothing without an aria-modal dialog');
 });
-test('redesign clipped-text gate: a one-line CSS ellipsis shows its cut; other hidden overflow is still refused',async t=>{
+test('redesign clipped-text gate: on a live screen a one-line CSS ellipsis on the text\'s own box shows its cut; other hidden overflow is still refused',async t=>{
   const {renderCheck}=await import(new URL('../src/render-check.mjs',import.meta.url).href);
-  const row=css=>`<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>:root{color-scheme:light dark;background:#fff;color:#111}@media(prefers-color-scheme:dark){:root{background:#111;color:#eee}}body{margin:0;font:16px Arial}p{margin:16px;overflow:hidden;${css}}</style></head><body><section data-oc-screen id="screen-1"><h1>Replies</h1><p>Pick the Juggernaut working animation for Stealth mode before the review of the new sailboat sequence closes tonight</p></section></body></html>`;
-  const clipped=async html=>{const render=renderCheck(()=>{},{redesignPages:[{id:'screen-1',title:'Replies',text:'Replies',links:[]}]});try{const errors=await render.verify(html);assert.equal(render.status,'checked');return errors.filter(e=>/clipped text/.test(e.message));}finally{render.close();}};
-  assert.deepEqual(await clipped(row('white-space:nowrap;text-overflow:ellipsis')),[],'a one-line ellipsis over the complete text passes');
-  assert.ok((await clipped(row('white-space:nowrap'))).length,'a silent one-line cut is still refused');
-  assert.ok((await clipped(row('height:1.2em;text-overflow:ellipsis'))).length,'wrapped lines hidden under a short box are still refused');
+  const title='Pick the Juggernaut working animation for Stealth mode before the review of the new sailboat sequence closes tonight';
+  const row=(body,css)=>`<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>:root{color-scheme:light dark;background:#fff;color:#111}@media(prefers-color-scheme:dark){:root{background:#111;color:#eee}}body{margin:0;font:16px Arial}.card{margin:16px;overflow:hidden;border-radius:12px}.t{overflow:hidden;${css}}</style></head><body><section data-oc-screen id="screen-1"><h1>Replies</h1>${body}</section></body></html>`;
+  const clipped=async(html,live=true)=>{const render=renderCheck(()=>{},{redesignPages:[{id:'screen-1',title:'Replies',text:'Replies',links:[],...(live&&{live})}]});try{const errors=await render.verify(html);assert.equal(render.status,'checked');return errors.filter(e=>/clipped text/.test(e.message));}finally{render.close();}};
+  const one='white-space:nowrap;text-overflow:ellipsis';
+  assert.deepEqual(await clipped(row(`<p class=t>${title}</p>`,one)),[],'a one-line ellipsis over the complete text passes');
+  assert.deepEqual(await clipped(row(`<div class=card><p class=t><span>${title}</span></p></div>`,one)),[],'inside a rounded overflow:hidden card too');
+  assert.ok((await clipped(row(`<div class=t><div>${title}</div></div>`,one))).length,'an ellipsis on an outer box paints nothing when a block sits between: refused');
+  assert.ok((await clipped(row(`<p class=t>${title}</p>`,one),false)).length,'a static redesign keeps refusing ellipsis cuts');
+  assert.ok((await clipped(row(`<p class=t>${title}</p>`,'white-space:nowrap'))).length,'a silent one-line cut is still refused');
+  assert.ok((await clipped(row(`<p class=t>${title}</p>`,'height:1.2em;text-overflow:ellipsis'))).length,'wrapped lines hidden under a short box are still refused');
 });

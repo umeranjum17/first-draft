@@ -71,7 +71,7 @@ const connect = async (url) => {
 };
 
 // Measure against the actual viewport, not a fixed phone width.
-const measurePage = (strict = false) => {
+const measurePage = (strict = false, ellipsisOk = false) => {
   const vw = innerWidth;
   const clipped = (el) => {
     for (let p = el.parentElement; p; p = p.parentElement) {
@@ -101,11 +101,15 @@ const measurePage = (strict = false) => {
       const node=walker.currentNode, e=node.parentElement;
       if(!node.textContent.trim() || !(e instanceof HTMLElement) || !e.getClientRects().length || getComputedStyle(e).visibility==='hidden')continue;
       const range=document.createRange();range.selectNodeContents(node);
+      let rects=[...range.getClientRects()].map(({left,right,top,bottom})=>({left,right,top,bottom})),own=true; // own: no block box yet between the text and p
       for(let p=e;p;p=p.parentElement) {
-        const s=getComputedStyle(p),box=p.getBoundingClientRect(),left=box.left+p.clientLeft,top=box.top+p.clientTop;
-        if(!p.clientWidth || !p.clientHeight)continue; // Inline boxes do not establish overflow clipping.
-        const ellipsis=s.textOverflow==='ellipsis'&&/nowrap/.test(s.whiteSpace)&&(p===e||/^inline/.test(getComputedStyle(e).display)); // a one-line CSS ellipsis on the text's own box shows its cut with the … glyph
-        if([...range.getClientRects()].some(r=>(/^(hidden|clip)$/.test(s.overflowX)&&!ellipsis&&(r.left<left-2||r.right>left+p.clientWidth+2))||(/^(hidden|clip)$/.test(s.overflowY)&&(r.top<top-2||r.bottom>top+p.clientHeight+2)))) {textClipped.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))}`);break;}
+        const s=getComputedStyle(p),box=p.getBoundingClientRect(),left=box.left+p.clientLeft,top=box.top+p.clientTop,flow=/^(inline|contents)$/.test(s.display);
+        if(!p.clientWidth || !p.clientHeight){if(!flow)own=false;continue;} // Inline boxes do not establish overflow clipping.
+        // On a live redesign, a one-line CSS ellipsis on the text's own block shows its cut with the … glyph; outer boxes then see the text end at that block.
+        const ellipsis=ellipsisOk&&own&&s.textOverflow==='ellipsis'&&/nowrap/.test(s.whiteSpace)&&/^(hidden|clip)$/.test(s.overflowX);
+        if(rects.some(r=>(/^(hidden|clip)$/.test(s.overflowX)&&!ellipsis&&(r.left<left-2||r.right>left+p.clientWidth+2))||(/^(hidden|clip)$/.test(s.overflowY)&&(r.top<top-2||r.bottom>top+p.clientHeight+2)))) {textClipped.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))}`);break;}
+        if(ellipsis)rects=rects.map(r=>({...r,left:Math.max(r.left,left),right:Math.min(r.right,left+p.clientWidth)}));
+        if(!flow)own=false;
       }
     }
   }
@@ -366,7 +370,7 @@ export class Renderer {
   }
 
   async read(c, screen) {
-    const measured = await this.eval(c, `(${measurePage.toString()})(${Boolean(this.redesign)})`);
+    const measured = await this.eval(c, `(${measurePage.toString()})(${Boolean(this.redesign)},${Boolean(this.live)})`);
     const sig = await this.eval(c, `(${paintSignature.toString()})()`);
     const lightness = await this.eval(c, `(${pageLightness.toString()})()`);
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
@@ -505,7 +509,7 @@ export class Renderer {
 
   // The check itself: the errors done must report, so the model can fix the page in the loop.
   async check(html, redesignPages) {
-    this.redesign = Boolean(redesignPages);
+    this.redesign = Boolean(redesignPages); this.live = Boolean(redesignPages?.some((p) => p.live));
     const errors = [];
     let shots;
     try {
