@@ -194,7 +194,7 @@ export async function respond({ route, model, context, maxTokens, signal, timeou
       // The model writes each call's arguments as JSON inside a JSON string and sometimes breaks it (Opus 5.5 did, in a concept call, after 5 minutes; Sonnet 5.5 did in a judge call, which lost a finished make): asked again twice.
       for (let attempt = 0; ; attempt++) {
         const answer = await backend.generate({
-          system: context.systemPrompt, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
+          system: `${context.systemPrompt}\n\nFirst-draft transport contract: The tools in the user JSON are virtual host-side actions, NOT native CLI tools. Do not invoke their names through native tools. Return the next actions exclusively in the structured calls array, each with name and a valid JSON-encoded arguments string matching its input schema. The host executes these actions and returns tool results on the next turn. When a done tool is supplied, submit a done action through calls and wait for its successful host result before ending with an empty calls array.`, prompt: JSON.stringify({ messages: context.messages, tools: context.tools }), images, schema, signal, maxOutputTokens: maxTokens });
         if (!answer.data) throw new Error('BYOKit returned no structured engine response');
         const { text, calls } = answer.data;
         let args;

@@ -11,10 +11,9 @@ import { optionReferenceImages, readOptionReferences, writeOptionReferences } fr
 import { readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { readSources, writeSources } from './reference-sources.mjs';
 const json = (file, value, flag = 'w') => writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag });
-export const polishState = (dir) => JSON.parse(readFileSync(join(dir, 'run.json'), 'utf8'));
 export function polishFeedback(dir, text) {
   if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw new Error('Feedback must be 1–8000 characters');
-  if (polishState(dir).status !== 'running') throw new Error('This run has stopped; start a new polish run with your feedback');
+  if (JSON.parse(readFileSync(join(dir, 'run.json'), 'utf8')).status !== 'running') throw new Error('This run has stopped; start a new polish run with your feedback');
   const entry = { id: randomUUID(), at: new Date().toISOString(), text: text.trim() };
   json(join(dir, 'feedback', `${entry.id}.json`), entry, 'wx');
   return entry;

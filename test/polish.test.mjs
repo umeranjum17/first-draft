@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { test } from 'node:test';
 import { installJudge } from './fixtures/judge-cli.mjs';
 import { standIn } from './fixtures/critic-model.mjs';
-import { polishFeedback, polishState } from '../src/polish.mjs';
+import { polishFeedback } from '../src/polish.mjs';
 test('chosen drawn source survives three independently judged refine rounds; Studio admits cumulative feedback', async (t) => {
   let inject = () => {}, added = false;
   const dir = mkdtempSync(join(tmpdir(), 'fd-polish-')), seen = [], server = await standIn(seen, [], true, (body) => inject(body));
@@ -26,13 +26,13 @@ test('chosen drawn source survives three independently judged refine rounds; Stu
   inject = async (body) => { if (!added && body.includes('Revise this')) { added = true; await run('polish-feedback', out, 'Keep the sample disclosure'); } };
   const lines = await run('polish', file, 'A notes app', '--out-dir', out, '--feedback', 'Keep the notes', '--max-rounds', '3');
   assert.deepEqual(lines.slice(0, -1).map((l) => l.polish_round.score), [7, 8, 8.5, 9]);
-  const result = polishState(out); assert.equal(result.stop_reason, 'target_reached');
+  const result = JSON.parse(readFileSync(join(out, 'run.json'), 'utf8')); assert.equal(result.stop_reason, 'target_reached');
   for (const r of result.rounds) { const s = source(readFileSync(r.file, 'utf8')); assert.equal(s.main, 'App.jsx'); assert.ok(s.files.some(([p]) => p === 'DESIGN.md')); assert.equal(r.critique.feedback[0].kept, true); }
   const inputs = seen.filter((s) => s.includes('Revise this'));
   assert.ok(inputs.every((s) => s.includes('Revise this App.jsx') && s.includes('Current App.jsx:')));
   assert.equal(readFileSync(file, 'utf8'), original);
   const calls = readFileSync(join(dir, 'polish-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(calls.every((c) => c.model === 'gpt-6.1-sol' && c.images >= 8));
+  assert.ok(calls.every((c) => c.model === 'gpt-6.1-sol' && c.images >= 8 && c.system.includes('virtual host-side actions')));
   assert.equal(result.rounds.at(-1).round, 3); assert.equal(result.rounds[1].feedback_pending, true);
   assert.ok(result.rounds.slice(2).every((r) => r.feedback.length === 2 && r.critique.feedback.every((f) => f.kept)));
   assert.throws(() => polishFeedback(out, 'late'), /stopped/);
