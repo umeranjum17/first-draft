@@ -1,6 +1,6 @@
 {
   "name": "first-draft-axi",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Pick a design direction before writing app code. A CLI for developers and coding agents.",
   "keywords": ["ai", "cli", "design", "design-tools", "prototyping", "html", "developer-tools", "coding-agents"],
   "license": "MIT",
@@ -29,7 +29,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "prepack": "npm run build",
-    "test": "npm run build && node --import ./test/fixtures/provider-hooks.mjs --test --test-concurrency=1 test/engine-required.test.mjs test/consistency-check.test.mjs test/critic.test.mjs test/init.test.mjs test/make.test.mjs test/inspiration-sources.test.mjs test/post.test.mjs test/claude.test.mjs test/model-pool.test.mjs test/logo.test.mjs test/public-references.test.mjs test/view.test.mjs tests/e2e/onboarding-flow.test.mjs"
+    "test": "npm run build && node --import ./test/fixtures/provider-hooks.mjs --test --test-concurrency=1 test/engine-required.test.mjs test/consistency-check.test.mjs test/critic.test.mjs test/judge-fallback.test.mjs test/init.test.mjs test/make.test.mjs test/inspiration-sources.test.mjs test/post.test.mjs test/claude.test.mjs test/model-pool.test.mjs test/logo.test.mjs test/public-references.test.mjs test/view.test.mjs tests/e2e/onboarding-flow.test.mjs"
   },
   "dependencies": {
     "@byokit/accounts": "0.29.0",

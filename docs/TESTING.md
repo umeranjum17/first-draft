@@ -12,7 +12,7 @@ Every line below was run from a fresh clone of `main` plus this change, with a t
 
 ```sh
 git clone https://github.com/umeranjum17/first-draft && cd first-draft
-npm ci && npm pack && npm install -g ./first-draft-axi-*.tgz   # npm's published 0.4.0 includes the current refine fix
+npm ci && npm pack && npm install -g ./first-draft-axi-*.tgz   # npm's published 0.4.1 includes the current refine fix
 export FIRST_DRAFT_HOME=$(mktemp -d)                            # throwaway config, nothing of yours is touched
 mkdir ~/fd-test && cd ~/fd-test
 
@@ -74,6 +74,7 @@ first-draft-axi <the command> 2>&1 | tee -a evidence.txt; echo "exit ${PIPESTATU
 ```
 
 - `NO_ENGINE`: sign in as the line says, then rerun. Nothing was written.
+- `critique.judge_fallback` / a `help` line starting "The critic fell back": the first judge failed, cancelled, timed out or answered unreadably twice, so another signed-in judge (Claude Opus 5.5, then Codex) gave the verdict. The output names who gave it, which engine failed and its error, and says when the fallback shares an engine with the model that made the design (not independent). If every judge fails, that option gets `critique.code: "JUDGE_ALL_FAILED"` with each engine's error, is never marked passed, and the other options still finish.
 - `JUDGE_FAILED … gave no usable … answer in 3 attempts`: the judging model's reply could not be read three times (the message lists each attempt's parse error and says if the output was cut off); no score and no pages are kept. Just rerun `make`. If a call succeeded only on a retry, the JSON says so in `critique.judge_retries`. Before this guide's last fix, `make` died this way 3 times in 7 runs, always while the plain baseline page was written as JSON inside JSON; the final walk passed first time.
 - `MAKE_FAILED … did not refine the design`: send `evidence.txt`; a refine on a normal `make` output should finish in minutes, not 14.
 - Stuck for more than 20 minutes with no output: Ctrl+C, then send `evidence.txt`.

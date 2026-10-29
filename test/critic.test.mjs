@@ -117,3 +117,17 @@ test('refs pull -> independent subscription judge -> refusal, never self-assessm
   writeFileSync(join(dir, 'refs-library/umer-notes/desktop-light.png'), 'changed');
   await assert.rejects(run('judge', out, 'A notes app for Umer', '--plain', baseline), e => /changed since it was captured/.test(e.stdout));
 });
+
+test('make does not die when every judge fails: that option is unscored and flagged, with each engine\'s error', async (t) => {
+  assert.ok(findBrowser(), 'Chrome or Chromium is required for this integration journey');
+  const { dir, env, run } = await lab(t, [[9, 7]]);
+  env.FD_JUDGE_FAILURE = '1'; // the Codex judge exits at once; Claude is signed out here, so no judge is left
+  const out = join(dir, 'down.html');
+  const { made, help } = await run('make', 'A notes app for Umer', '--out', out, '--options', '1');
+  const c = made.files[0].critique;
+  assert.deepEqual([c.passed, c.score, c.code], [false, null, 'JUDGE_ALL_FAILED']);
+  assert.match(c.error, /every judge failed, so nothing was scored: gpt-6\.1-sol \(byokit:codex\):.*claude-opus-5-5 \(byokit:claude\):/s);
+  assert.ok(c.judge_failures.some((f) => f.agent === 'byokit:codex' && f.attempt === 2) && c.judge_failures.some((f) => f.agent === 'byokit:claude'));
+  assert.match(readFileSync(out, 'utf8'), /Notes, version 1/);
+  assert.ok(help.some((h) => /not scored because every judge failed/.test(h)));
+});
