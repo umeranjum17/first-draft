@@ -104,7 +104,8 @@ const measurePage = (strict = false) => {
       for(let p=e;p;p=p.parentElement) {
         const s=getComputedStyle(p),box=p.getBoundingClientRect(),left=box.left+p.clientLeft,top=box.top+p.clientTop;
         if(!p.clientWidth || !p.clientHeight)continue; // Inline boxes do not establish overflow clipping.
-        if([...range.getClientRects()].some(r=>(/^(hidden|clip)$/.test(s.overflowX)&&(r.left<left-2||r.right>left+p.clientWidth+2))||(/^(hidden|clip)$/.test(s.overflowY)&&(r.top<top-2||r.bottom>top+p.clientHeight+2)))) {textClipped.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))}`);break;}
+        const ellipsis=s.textOverflow==='ellipsis'&&/nowrap/.test(s.whiteSpace)&&(p===e||/^inline/.test(getComputedStyle(e).display)); // a one-line CSS ellipsis on the text's own box shows its cut with the … glyph
+        if([...range.getClientRects()].some(r=>(/^(hidden|clip)$/.test(s.overflowX)&&!ellipsis&&(r.left<left-2||r.right>left+p.clientWidth+2))||(/^(hidden|clip)$/.test(s.overflowY)&&(r.top<top-2||r.bottom>top+p.clientHeight+2)))) {textClipped.push(`${e.tagName.toLowerCase()} ${JSON.stringify(node.textContent.trim().slice(0,80))}`);break;}
       }
     }
   }
