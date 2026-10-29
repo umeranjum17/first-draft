@@ -281,4 +281,4 @@ npm test
 
 Tests build and exercise the engine loop against local stand-ins, with no paid model call. A command, default or viewer change updates this README, the agent skill and the screenshots together.
 
-MIT · [License](../LICENSE) · [Notice](../NOTICE): the design engine is [Open CoDesign](https://github.com/OpenCoworkAI/open-codesign), MIT
+MIT · [License](../LICENSE) · [Notice](../NOTICE): the design engine is [OpenDesign](https://github.com/umeranjum17/open-design), Apache-2.0 ([pinned source and host boundary](../ENGINE.md))

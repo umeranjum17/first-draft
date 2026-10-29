@@ -12,7 +12,7 @@ Every line below was run from a fresh clone of `main` plus this change, with a t
 
 ```sh
 git clone https://github.com/umeranjum17/first-draft && cd first-draft
-npm ci && npm pack && npm install -g ./first-draft-axi-*.tgz   # npm's published 0.4.2 includes the current refine fix
+npm ci && npm pack && npm install -g ./first-draft-axi-*.tgz   # pack and install the current source release (0.5.0)
 export FIRST_DRAFT_HOME=$(mktemp -d)                            # throwaway config, nothing of yours is touched
 mkdir ~/fd-test && cd ~/fd-test
 

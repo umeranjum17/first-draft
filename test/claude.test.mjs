@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { theme } from './fixtures/plain-page.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
-const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const DESIGN = readFileSync(new URL('../templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const PAGE = theme('<!doctype html><html><body><h1>Umer’s notes</h1><a href="#detail">Open note</a><section id="detail" data-oc-screen="detail">A note</section></body></html>');
 
 test('installed Claude: no-paid doctor, account launch, engine make/refine and subscription refusals', async (t) => {
@@ -28,6 +28,7 @@ if (args.includes('auth')) {
   if (input.includes('Build one self-contained HTML page for this brief')) { // the plain baseline: the document itself, not a tool call
     console.log(JSON.stringify({ type:'result', subtype:'success', is_error:false, structured_output:{html:'<!doctype html><html><body><h1>Umer baseline</h1></body></html>'}, usage:{input_tokens:0,output_tokens:0} })); process.exit(0);
   }
+  if (!args[args.indexOf('--system-prompt') + 1].includes('# Open Design execution and security boundary')) throw Error('OpenDesign recipe missing at the actual CLI boundary');
   if (args[args.indexOf('--model') + 1] !== 'claude-opus-5-5') throw Error('model changed');
   if (args[args.indexOf('--json-schema') + 1].includes('"html"')) { // make's one-call page (draft.mjs): the page comes back as one string
     const content = JSON.parse(input).message.content;

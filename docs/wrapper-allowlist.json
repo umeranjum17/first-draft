@@ -5,6 +5,21 @@
   "verdicts": {"accepted": "Repeated paired comparisons (same brief, same model) on at least two briefs, every one up, none down; or a delivery or policy reason.", "provisional": "In the default make on a measured but mixed, bundled or missing comparison. Named with who decided it and the comparison still needed; review these entries manually."},
   "entries": [
   {
+    "id": "opendesign-engine-guidance",
+    "source": "src/design-engine.mjs",
+    "kind": "quality",
+    "what": "The pinned OpenDesign OD Next text-artifact recipe plus first-draft's static-host bridge, before the unchanged taste/page contract. The SHA-256 is the exact default-make prefix designPrompt() + two newlines + --- + two newlines + HOST_EXECUTION.",
+    "sha256": "6b798a9a86e89a43b1b9f5234fd80133a3b947dd32ae4a96615c49bef68ac12f",
+    "verdict": "provisional",
+    "note": "Owner-requested engine replacement, measured as a bundle rather than isolated rules. Blind round one regressed (new 7/7.3 vs old 8/7.7). After the one allowed static-host integration repair, round two scored new 8/8, old 7.5/7 and plain 7/6.5. New also meets the original old scores 8/7.7. All scores remain below nine; no approved-layout match is claimed. Old/plain HTML was frozen, all frames freshly recaptured, and both rounds' blinding and failures retained.",
+    "decided_by": "Owner engine-swap brief, 2026-10-29: release only after overall non-regression on both required briefs",
+    "needed": "Repeated or isolated comparisons before attributing gains to any individual OpenDesign/static-host rule; this two-brief bundled result is not a variance estimate.",
+    "evidence": [
+      {"brief": "Ledgerline landing (verbatim fd-plain-headtohead brief A)", "model": "claude-opus-5-5", "plain_run": "engine-swap-A-plain", "plain": 7, "with_run": "engine-swap-round2-A-new", "with": 8, "scored_by": "independent blinded byokit:codex / gpt-6.1-sol", "report": "move-first-draft-engine-onto-opendesign-e1 comparative report, round two, 2026-10-29"},
+      {"brief": "Regional food-bank operations dashboard (verbatim fd-plain-headtohead brief B)", "model": "claude-opus-5-5", "plain_run": "engine-swap-B-plain", "plain": 6.5, "with_run": "engine-swap-round2-B-new", "with": 8, "scored_by": "independent blinded byokit:codex / gpt-6.1-sol", "report": "move-first-draft-engine-onto-opendesign-e1 comparative report, round two, 2026-10-29"}
+    ]
+  },
+  {
     "id": "frontend-design-guidance",
     "source": "taste",
     "kind": "quality",

@@ -1,19 +1,37 @@
 first-draft
 Copyright 2026 first-draft contributors
+first-draft's own code is licensed under the MIT License (LICENSE).
 
-This product includes the Open CoDesign design engine
-(https://github.com/OpenCoworkAI/open-codesign), MIT License,
-Copyright 2026 OpenCoworkAI Contributors. Its core, providers, shared and
-runtime packages are vendored unmodified in vendor/open-codesign at the commit
-named in ENGINE.md, with their own LICENSE and NOTICE in that folder. The
-published package carries them as dist/LICENSE and dist/NOTICE.
+OpenDesign design-generation slice
+https://github.com/umeranjum17/open-design
+Upstream: https://github.com/nexu-io/open-design
+Copyright 2026 Open Design contributors
+Licensed under the Apache License, Version 2.0 (Apache-2.0).
+The exact fork/upstream commits and imported paths are recorded in ENGINE.md.
+Unmodified source and its LICENSE are in vendor/open-design; the published
+package includes them in dist/opendesign. first-draft's adapter is separate.
+
+Skill-specific terms are preserved alongside each vendored skill, including
+frontend-design/LICENSE.txt, animate/LICENSE and SOURCES.md, and
+gsap-core/LICENSE and SOURCES.md. The MIT notice for GreenSock's skill material
+covers that material only. GSAP's runtime is governed by GSAP's own no-charge
+license (https://gsap.com/standard-license/), NOT MIT or Apache-2.0. No GSAP
+runtime library is bundled by this migration; using one retains its own terms.
+
+Studio preview/export compatibility runtime
+Copyright 2026 OpenCoworkAI Contributors, MIT License.
+The non-generating runtime/HTML helpers and vendored React, ReactDOM and Babel
+files are retained from OpenCoworkAI/open-codesign at the commit in ENGINE.md.
+Their original LICENSE and NOTICE remain in vendor/studio-runtime and are
+shipped as dist/STUDIO-LICENSE and dist/STUDIO-NOTICE. The existing plain-code
+Studio ports and compatibility DESIGN.md starter retain the same attribution.
+The former core/providers design-generation engine is not used or shipped.
 
 The view's typefaces, Instrument Sans, Instrument Serif and JetBrains Mono, are
 included as latin-subset web fonts in src/view/fonts under the SIL Open Font
 License 1.1, with their copyright notices and the licence in src/view/fonts/OFL.txt.
 
-The planned directions and the design critic (src/critic.mjs) take ideas, not
-text or code, from these public projects, rewritten in first-draft's own words:
+The planned directions and design critic take ideas, not text or code, from
 anthropics/skills frontend-design (https://github.com/anthropics/skills),
 pbakaus/impeccable (https://github.com/pbakaus/impeccable, Apache-2.0) and
 abi/screenshot-to-code (https://github.com/abi/screenshot-to-code, MIT).

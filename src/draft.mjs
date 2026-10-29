@@ -14,6 +14,7 @@ import { renderCheck } from './render-check.mjs';
 import { flowOf, flowRule } from './flow.mjs';
 import { directionText } from './styles.mjs';
 import { stopwatch } from './timing.mjs';
+import { designPrompt, HOST_EXECUTION } from './design-engine.mjs';
 
 // The skill's own words, unmodified (Apache-2.0, src/taste/LICENSE.txt), without its attribution comment and frontmatter.
 const TASTE = readFileSync(new URL('./taste/frontend-design.md', import.meta.url), 'utf8').replace(/^<!--[\s\S]*?-->\s*---[\s\S]*?\n---\s*/, '');
@@ -42,7 +43,7 @@ export const contractRules = (drawing, human, flow) => [
     : { id: 'no-script', text: 'Write no script, no on* event handler and no javascript: URL: the page is shown as a static document.' },
 ];
 // What the model is told besides the brief: the vendored guidance, first-draft's own guidance for a company or landing page when the brief is one, then the contract.
-export const systemPrompt = (drawing, human, flow) => `${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human, flow).map((r) => r.text).join(' ')}`;
+export const systemPrompt = (drawing, human, flow) => `${designPrompt()}\n\n---\n\n${HOST_EXECUTION}\n\n${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human, flow).map((r) => r.text).join(' ')}`;
 export { HUMAN, TASTE };
 
 // How many options are drawn at once. Every call is the person's one subscription, shared with whatever else is signed into it: in the two live

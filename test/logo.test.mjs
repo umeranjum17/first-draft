@@ -19,7 +19,7 @@ import { promisify } from 'node:util';
 import { findBrowser } from '../src/render-check.mjs';
 
 const CLI = new URL('../src/cli.mjs', import.meta.url).pathname;
-const DESIGN = readFileSync(new URL('../vendor/open-codesign/apps/desktop/resources/templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
+const DESIGN = readFileSync(new URL('../templates/scaffolds/design-systems/DESIGN.md', import.meta.url), 'utf8');
 const svg = (box, body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box}">${body}</svg>`;
 const leaf = (c, d = 'M48 12C30 28 24 50 48 84C72 50 66 28 48 12Z') => `<path fill="${c}" d="${d}"/>`;
 const word = (c, x = 0) => `<path fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round" d="M${x + 12} 12V44M${x + 28} 24V44M${x + 28} 32a10 10 0 0 1 20 0V44"/>`;
