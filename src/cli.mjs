@@ -32,6 +32,7 @@ import { LOGO_DIRECTIONS, logoDirection, readLogo, writeLogo } from './logo.mjs'
 import { conceptSummary, drawLogos, pool } from './logo-concepts.mjs';
 import { PASS, openCritic } from './critic.mjs';
 import { writeMotion } from './motion.mjs';
+import { sourceDir, writeSource } from './source.mjs';
 import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
@@ -409,6 +410,7 @@ if (command === 'check') {
     try {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, made.html);
+      if (made.source_files) writeSource(out, made.source_files); // the source the page was drawn from, readable beside it
       if (film) film.dir = writeMotion(out, film, critique.motion); // the frame series the judge read, beside the option for the view
       writeOptionReferences(out,refs.metadata);
       writeCompetitors(out,refs.competitors);
@@ -427,7 +429,7 @@ if (command === 'check') {
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
     const consistency = values.data !== undefined ? checkConsistency(made.html, consistencyData) : values['skip-check'] ? { note: 'consistency check explicitly skipped', mismatches: [] } : null;
-    slots[i] = { file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(consistency && { consistency }), ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.repaired && { repaired: made.repaired }), ...(made.unrepaired && { unrepaired: made.unrepaired, repair_failed: made.repair_failed }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.videos && { videos: made.videos }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }), ...(film && { motion: { moves: film.moves, frames: film.frames.length, dir: film.dir } }), ...(made.timing && { seconds: Math.round((Date.now() - opened) / 1000) }) };
+    slots[i] = { file: out, bytes: Buffer.byteLength(made.html), source: made.source, ...(made.source_files && { source_dir: sourceDir(out) }), turns: made.turns, tools: made.tools, ...(consistency && { consistency }), ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.repaired && { repaired: made.repaired }), ...(made.unrepaired && { unrepaired: made.unrepaired, repair_failed: made.repair_failed }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.videos && { videos: made.videos }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }), ...(film && { motion: { moves: film.moves, frames: film.frames.length, dir: film.dir } }), ...(made.timing && { seconds: Math.round((Date.now() - opened) / 1000) }) };
     if (!logo) { tokens_in += made.tokens_in; tokens_out += made.tokens_out; }
     made.remote.forEach((r) => blocked.add(r));
     if (made.render_check === 'skipped') render_check = 'skipped';

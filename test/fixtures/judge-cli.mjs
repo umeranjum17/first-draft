@@ -54,13 +54,14 @@ else {
     console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
     process.exit(0);
   }
-  const order=(input.match(/^Images, in attachment order: (.*)$/m)?.[1] ?? '').split(', '), ids=order.filter(i=>/^(design|plain)-/.test(i)), design=ids.filter(i=>i.startsWith('design-')), film=order.filter(i=>/^motion-\\d+-\\d+$/.test(i));
-  if (!design.length || ![ids.length+film.length,ids.length+film.length+2].includes(files.length) || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing capture-set images (one per attachment id, then the two references)');
+  const order=(input.match(/^Images, in attachment order: (.*)$/m)?.[1] ?? '').split(', '), ids=order.filter(i=>/^(design|plain)-/.test(i)), design=ids.filter(i=>i.startsWith('design-')), film=order.filter(i=>/^motion-\\d+-\\d+$/.test(i)), press=order.filter(i=>/^click-\\d+-(?:before|after)$/.test(i));
+  if (!design.length || ![ids.length+film.length+press.length,ids.length+film.length+press.length+2].includes(files.length) || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing capture-set images (one per attachment id, then the two references)');
   appendFileSync(home+'/judge-calls.jsonl',JSON.stringify({model:args[args.indexOf('--model')+1],images:files.length,input,system:args.find(a=>a.startsWith('developer_instructions='))})+'\\n');
   const scores=JSON.parse(process.env.FD_JUDGE_SCORES||'[]'),n=readFileSync(home+'/judge-calls.jsonl','utf8').trim().split('\\n').length-1;
   const [score,plain]=process.env.FD_JUDGE_AI?[9,7]:(scores[n]||[6,7]);
   const value={views:design.map(view=>({view,judged:'The notes list and its theme at this width'})),design:{score,gaps:['No product screen']},plain:{score:plain,gaps:['Generic layout']},against:'Captured Umer notes: real content',reads_as:'Notes for Umer',fix:'Show the product',axes:Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'The captured reference shows content, the option does not'}]))};
   if(film.length) value.motion={score:7,reason:'The terminal types its command across the frames at a readable pace',defects:[film[0]+': the cursor blinks before any text is typed']};
+  if(input.includes('"behaviour"')) value.behaviour=press.length?{score:Number(process.env.FD_JUDGE_BEHAVIOUR||7),reason:'The Unread press narrows the list to one row at both widths',defects:[press[0]+': the reading pane still shows a row the filter hid']}:{score:4,reason:'The control changed nothing',defects:['the press changed nothing at 390 or at 1280']};
   if(input.includes('"ai_side"')) Object.assign(value,{ai_side:{reads_as_ai:!!process.env.FD_JUDGE_AI||score<9,tells:process.env.FD_JUDGE_AI||score<9?['Repeated generic cards']:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:score>=9||i<5,reason:'Shown in fixture'}))});
   const cut=n<Number(process.env.FD_JUDGE_BAD||0)?(x=>x.slice(0,x.length>>1)):(x=>x); // the model breaks the JSON of its first FD_JUDGE_BAD answers
   console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_designs',arguments:cut(JSON.stringify(value))}]})}}));
