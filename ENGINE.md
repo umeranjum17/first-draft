@@ -86,10 +86,13 @@ remain first-draft inputs. Model scores are assessments, not a design-match
 or functional certification.
 
 The host still draws every exported screen at 390x844 and 1280x800 in light
-and dark. The whole design is a script-free, self-contained static HTML page
-under the existing CSP, at most 5 MB. Fonts and permitted media are embedded;
-remote files do not load. JSX is drawn once by the compatibility renderer and
-snapshotted; browserless generation must deliver script-free HTML. `done`
+and dark. The whole design is a self-contained HTML page under the existing
+CSP, at most 5 MB. Fonts and permitted media are embedded; remote files do not
+load. JSX is drawn once by the compatibility renderer and snapshotted without
+script. An HTML page whose script is all inline keeps it, so the motion a brief
+asks for plays; its CSP adds `script-src 'unsafe-inline'` and nothing else, so
+it still loads and sends nothing. A `<script src>` is refused, or drawn once
+and dropped when a browser is present. `done`
 submits source to these same gates, and a failed submission returns the exact
 findings. Turn limits, bounded retries and the last verified version remain
 host-owned. Logo SVG/palette/icon validation and independent logo review stay

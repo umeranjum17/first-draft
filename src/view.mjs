@@ -9,6 +9,7 @@ import { readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { readSources } from './reference-sources.mjs';
 import { VERSION } from './version.mjs';
 import { polishFeedback, roundCap } from './polish.mjs';
+import { motionDir, readMotion } from './motion.mjs';
 
 const LIMIT = 5_000_000; // sign-off takes mocks of 5 MB or less
 const DIST = new URL('../dist/view/', import.meta.url);
@@ -130,6 +131,9 @@ export async function serve({ files, name, host, advertise = host, port, framePo
     // The sources list: what the free search found for this brief, what was captured, and every refusal with its description.
     try { const list=readSources(o.file); if(list) value.sources={...list,sources:list.sources.map((x,k)=>({...x,...(x.shots?.length && {shots:x.shots.map((s,i)=>({width:s.width,height:s.height,src:`/inspiration/${o.n}/${k}/${i}`}))})}))}; }
     catch(e) { value.sourcesError=`Inspiration sources unavailable: ${e.message}`; }
+    // The motion series the judge read, at 390 and 1280, with its verdict.
+    try { const m=readMotion(o.file); if(m) value.motion={moves:m.moves,widths:m.widths,verdict:m.verdict,frames:m.frames.map((f)=>({...f,src:`/motion/${o.n}/${f.file}`}))}; }
+    catch(e) { value.motionError=`Motion frames unavailable: ${e.message}`; }
     return value;
   };
   const page = () => {
@@ -234,6 +238,12 @@ export async function serve({ files, name, host, advertise = host, port, framePo
       const o=options[Number(market[1])-1]; if(!o) return send(res,404,'text/plain','not found');
       try { const c=readCompetitors(o.file),s=c?.competitors[Number(market[2])]?.shots[Number(market[3])]; if(!s) return send(res,404,'text/plain','not found'); return send(res,200,'image/png',Buffer.from(s.dataUrl.slice(22),'base64')); }
       catch(e) { return send(res,422,'text/plain',`Market capture cannot be read: ${e.message}`); }
+    }
+    const frame=path.match(/^\/motion\/(\d+)\/(motion-\d+-\d+\.jpg)$/);
+    if (frame) {
+      const o=options[Number(frame[1])-1]; if(!o) return send(res,404,'text/plain','not found');
+      try { if(!readMotion(o.file)?.frames.some((f)=>f.file===frame[2])) return send(res,404,'text/plain','not found'); return send(res,200,'image/jpeg',readFileSync(join(motionDir(o.file),frame[2]))); }
+      catch(e) { return send(res,422,'text/plain',`Motion frame cannot be read: ${e.message}`); }
     }
     if (ASSETS[path]) {
       try { return send(res, 200, ASSETS[path], readFileSync(new URL(path.slice(1), DIST))); }

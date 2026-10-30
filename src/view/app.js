@@ -399,6 +399,21 @@ function referencePanel(o) {
   return [el('section',{class:'references','aria-label':`Reference images for Option ${o.n}`},heading,...shots)];
 }
 
+// The option's motion as the judge read it: the frame series at phone and desktop width, in time order, and the motion verdict.
+// The option itself plays in the canvas and in Play; these are the stills it was scored on.
+function motionPanel(o) {
+  if(o.motionError) return [el('p',{class:'reference-error',role:'alert'},o.motionError)];
+  const m=o.motion; if(!m) return [];
+  const v=m.verdict??{};
+  const rows=[390,1280].map((w)=>m.frames.filter((f)=>f.width===w)).filter((r)=>r.length).map((r)=>el('div',{class:'motion-row'},
+    ...r.map((f)=>el('a',{href:f.src,target:'_blank',rel:'noopener',class:'market-shot','aria-label':`Open frame ${f.frame} at ${f.width} pixels`},
+      el('img',{src:f.src,alt:`Option ${o.n} at ${f.width} pixels, ${(f.at_ms/1000).toFixed(1)} s after load`,width:f.width,height:f.height}),el('span',{},`${f.width}px · ${(f.at_ms/1000).toFixed(1)} s`)))));
+  return [el('section',{class:'references market motion','aria-label':`Motion frames for Option ${o.n}`},
+    el('div',{class:'reference-heading'},el('h2',{},m.moves?`Motion · ${v.score ?? '–'}/10`:'Motion · none'),el('p',{class:'muted'},v.reason ?? ''),
+      ...(v.defects?.length?[el('ul',{},...v.defects.map((d)=>el('li',{},d)))]:[])),
+    ...rows)];
+}
+
 // What the market does for this brief: every captured competitor with its own live source, beside the options, and every refusal with its reason.
 function marketPanel(o) {
   if(o.competitorError) return [el('p',{class:'reference-error',role:'alert'},o.competitorError)];
@@ -520,7 +535,7 @@ function canvas(o, device) {
       ...(design.canPolish ? [polishControls(o)] : [])),
     ...(o.error ? [] : [brief(o), el('p', { class: 'brief-foot' }, 'Your agent makes a new option; this one stays.')]), version());
 
-  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), ...marketPanel(o), ...sourcesPanel(o), stage));
+  const studio = el('div', { class: `studio${column ? '' : ' folded'}` }, side, el('main', { class: 'work' }, errorBar(o.n), ...pinsNotice(), ...referencePanel(o), ...motionPanel(o), ...marketPanel(o), ...sourcesPanel(o), stage));
   const commenting = (on) => { studio.classList.toggle('commenting', on); tool.setAttribute('aria-pressed', String(on)); if (!on) close?.(); fit?.(); };
   tool.onclick = () => commenting(!studio.classList.contains('commenting'));
   add.onclick = () => { moreMenu.hidePopover(); commenting(true); };

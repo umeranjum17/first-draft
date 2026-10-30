@@ -218,22 +218,31 @@
     "reason": "An owner decision about honesty, not a design restriction (2026-10-24). It replaced the engine rule that labelled all sample content, which produced \"Placeholder quote\" and \"concept design\" copy (bake-off cause 2)."
   },
   {
-    "id": "script-drawn-once",
+    "id": "script-kept-inline",
     "source": "contract",
     "kind": "delivery",
-    "what": "Script may run once; the host keeps what the first render shows, without the script.",
-    "sha256": "17b216e97598b4f5",
+    "what": "Inline script and CSS animation are kept and play; a script loaded from a URL runs once and the host keeps what that first render shows, without any script.",
+    "sha256": "09292f0980fef96e",
     "verdict": "accepted",
-    "reason": "Where Chrome is installed the host draws the page once into a static document; the sentence says what survives."
+    "reason": "Where Chrome is installed the exported page keeps its inline script under a policy that loads and sends nothing; a script from a URL cannot run there, so that page is drawn once into a static document. The sentence says what survives. It replaced script-drawn-once (2026-10-30), which dropped every script and with it the motion a brief asked for."
   },
   {
-    "id": "no-script",
+    "id": "script-inline-only",
     "source": "contract",
     "kind": "delivery",
-    "what": "Write no script: the page is shown as a static document.",
-    "sha256": "63d1c2d956a51103",
+    "what": "Script is inline only: a script with a src or a javascript: URL is refused; inline script and CSS animation play.",
+    "sha256": "4ca6767afc035144",
     "verdict": "accepted",
-    "reason": "Without Chrome the page cannot be drawn, so script would not run in the exported document."
+    "reason": "Without Chrome the page cannot be drawn, so a script from a URL would not run in the exported document; inline script runs under the page's own policy, which loads and sends nothing. It replaced no-script (2026-10-30)."
+  },
+  {
+    "id": "motion-for-real",
+    "source": "contract",
+    "kind": "policy",
+    "what": "Motion the brief asks for is written for real (CSS animation or inline script), not as a still, honouring prefers-reduced-motion.",
+    "sha256": "a8b9700872e8c2bc",
+    "verdict": "accepted",
+    "reason": "An owner decision (2026-10-30): a brief that asks for a terminal animation, a pulse or a marquee gets that motion in the option. Under no-script the model was told to remove exactly what was asked for, and the animation was hand-rolled in the product instead. It restricts nothing the plain call would do."
   },
   {
     "id": "critic-flow-check",
