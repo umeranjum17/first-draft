@@ -57,6 +57,24 @@ journeys:
   human-side-recapture:
     command: node journeys/human-side.mjs
     timeout: 8m
+  motion:
+    command: node journeys/motion.mjs
+    timeout: 15m
 
-# This repo's coding agent, over agent in ~/.done-done/config.yaml (model, effort and the other agent settings stay there).
-# agent: opencode
+# Written requirements for the motion journey: an option's own animation, captured as frames (no mock: it is a new capture, not a new screen).
+approved_requirements:
+  - kind: spec
+    name: motion frame at 390, first
+    requirement: "A narrow page with the heading 'Notes, version 1, draw 1' and a grey terminal block that holds only one partly typed command line beginning with '$ npm'."
+    capture: motion-390-1.jpg
+    journey: motion
+  - kind: spec
+    name: motion frame at 390, last
+    requirement: "A narrow page with the heading 'Notes, version 1, draw 1' whose grey terminal block holds three lines: '$ npm install -g first-draft-axi', 'added 1 package in 2s' and '$ first-draft-axi make \"a notes app\"'."
+    capture: motion-390-4.jpg
+    journey: motion
+  - kind: spec
+    name: motion frame at 1280, last
+    requirement: "A wide page with the heading 'Notes, version 1, draw 1' whose grey terminal block holds the same three lines, with an underscore cursor below the block."
+    capture: motion-1280-4.jpg
+    journey: motion

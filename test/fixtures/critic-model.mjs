@@ -13,8 +13,8 @@ export const viewsOf = (body) => (JSON.parse(body).tools.find((t) => t.name === 
 export const images = (body) => JSON.parse(body).input.flatMap((m) => Array.isArray(m.content) ? m.content.filter((p) => p.type === 'input_image') : []).length;
 
 // A stand-in model: the plain page and the reviews by their tool, the scores in turn from `scores` ([design, plain] each; a landing brief's review also says which side it reads as and how many hero points it meets); each
-// engine conversation (told apart by its first message) plans, writes DESIGN.md and version N of the page, runs done and stops.
-export function standIn(seen, scores, drawn = false, onRequest = () => {}) {
+// engine conversation (told apart by its first message) plans, writes DESIGN.md and version N of the page, runs done and stops. `draw(title)` is the page it writes.
+export function standIn(seen, scores, drawn = false, onRequest = () => {}, draw = page) {
   const convo = new Map();
   let reviews = 0, drafts = 0;
   const server = createServer((req, res) => {
@@ -31,13 +31,13 @@ export function standIn(seen, scores, drawn = false, onRequest = () => {}) {
           ...(body.includes('"ai_side"') && { // a landing brief is also asked which side it reads as and for the nine hero points: below 9 it reads as the AI side with five met
             ai_side: { reads_as_ai: design < 9, tells: design < 9 ? [`version ${reviews}: soft pastel on every section and a card grid after a card grid`] : [] },
             hero: Array.from({ length: 9 }, (_, i) => ({ point: i + 1, met: design >= 9 || i < 5, reason: design >= 9 || i < 5 ? 'shown' : `version ${reviews}: point ${i + 1} is missing` })) }) }]];
-      } else if (!JSON.parse(body).tools?.length) text = page(`Notes, version ${++drafts}`); // the one-call make asks for the page as text, no tools
+      } else if (!JSON.parse(body).tools?.length) text = draw(`Notes, version ${++drafts}`); // the one-call make asks for the page as text, no tools
       else {
         const key = userText(body)[0];
         if (!convo.has(key)) convo.set(key, { n: 0, version: convo.size + 1 });
         const st = convo.get(key), n = st.n++;
         calls = [[['set_todos', { items: [{ text: 'Write the page', checked: false }] }]],
-          [['str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: DESIGN }], ['str_replace_based_edit_tool', { command: 'create', path: drawn ? 'App.jsx' : 'index.html', file_text: drawn ? `function App(){return <main><style>{${JSON.stringify('body{margin:0;background:#fff;color:#111;font:18px system-ui}main{padding:24px}@media(prefers-color-scheme:dark){body{background:#111;color:#fff}}')}}</style><h1>Notes, version ${st.version}</h1><p>Sample notes for Umer.</p></main>}` : page(`Notes, version ${st.version}`) }]],
+          [['str_replace_based_edit_tool', { command: 'create', path: 'DESIGN.md', file_text: DESIGN }], ['str_replace_based_edit_tool', { command: 'create', path: drawn ? 'App.jsx' : 'index.html', file_text: drawn ? `function App(){return <main><style>{${JSON.stringify('body{margin:0;background:#fff;color:#111;font:18px system-ui}main{padding:24px}@media(prefers-color-scheme:dark){body{background:#111;color:#fff}}')}}</style><h1>Notes, version ${st.version}</h1><p>Sample notes for Umer.</p></main>}` : draw(`Notes, version ${st.version}`) }]],
           [['done', { path: drawn ? 'App.jsx' : 'index.html' }]]][n];
       }
       const items = calls ? calls.map(([name, args], i) => ({ type: 'function_call', id: `fc${seen.length}-${i}`, call_id: `c${seen.length}-${i}`, name, arguments: JSON.stringify(args) }))

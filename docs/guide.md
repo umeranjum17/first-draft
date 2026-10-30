@@ -266,7 +266,7 @@ The viewer's grid links to each canvas at `#/o/<n>`; add `/both`, `/phone` or `/
 
 `view` defaults to the machine's tailnet address (`tailscale ip -4`), port 4430. Use `--host` and `--port` to change it; `--host 127.0.0.1` keeps the viewer on this machine. Option frames use the next port, a separate origin.
 
-Generated files carry no scripts and their own content security policy. The viewer adds a sandboxed runtime for screen navigation, but options load and send nothing over the network. Remote assets named by a design are listed as `blocked_remote` and show empty.
+Generated files carry their own content security policy; an option keeps only inline script (the motion its brief asked for), never a script from a URL. The viewer adds a sandboxed runtime for screen navigation, but options load and send nothing over the network. Remote assets named by a design are listed as `blocked_remote` and show empty.
 
 Comments live in `notes.comments.json` next to `notes.html`, an array such as `[{"option":1,"device":"phone","x":0.4,"y":0.2,"text":"More space here"}]`. Coordinates are fractions of the frame; `device` (`phone` or `desktop`) is optional, and a comment without it shows on both frames. Comments added in the viewer are appended to this file, which is created if missing; the viewer never rewrites an invalid file, it shows a notice instead. Tap a numbered pin to read it.
 

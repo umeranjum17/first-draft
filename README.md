@@ -52,6 +52,7 @@ Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 w
 
 - **Explore more than one direction.** Ask for 1–5 options, a named style, or a multi-screen flow.
 - **Compare at the right size.** Studio has Desktop, Phone and Both views; Play opens a screen flow.
+- **Get the motion you asked for.** A brief that asks for motion (a typing terminal, a pulse, a marquee) gets it for real: the option keeps its CSS animation and inline script and plays in the Studio, sandboxed, loading nothing from the network. A script loaded from a URL is still dropped. Four frames at 390 and four at 1280 are kept in `<option>.motion/` and shown beside the option, and the independent judge scores motion from them, naming each defect. A page that does not move gets no motion score; a looping animation that only decorates is scored as a defect.
 - **Point at the change.** Click a spot to leave a comment; numbered pins and plain JSON keep the feedback beside the design.
 - **See the market first.** `--competitors` finds 3–5 real products of the brief's kind, captures their public pages through the same robots/terms review as a reference, and shows them beside the options with their sources and every refusal.
 - **Keep the original.** Refine into a new option, or send the choices to [sign-off](https://github.com/umeranjum17/sign-off) for someone's pick.
@@ -66,7 +67,7 @@ first-draft-axi polish notes-1.html "A notes app" \
 first-draft-axi polish-feedback notes-polished "Make the sidebar narrower"
 ```
 
-`polish-feedback <run-folder> "<request>"` adds cumulative feedback while a run is in progress; the next round judges it. The original file is untouched.
+`polish-feedback <run-folder> "<request>"` adds cumulative feedback while a run is in progress; the next round judges it. The original file is untouched. An animated option keeps its motion through polish: each round has its own `round-N.motion/` frames, and a round that stops moving is not accepted.
 
 `first-draft-axi init` also installs the [agent skill](skills/first-draft-axi/SKILL.md) for Claude Code, Codex and pi in your repo. Commands return JSON, so your coding agent can drive the same workflow.
 

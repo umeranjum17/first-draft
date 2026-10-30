@@ -38,7 +38,7 @@ else {
     if (files.length!==q.image_order.length || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing polish images');
     appendFileSync(home+'/polish-calls.jsonl',JSON.stringify({q,model:args[args.indexOf('--model')+1],images:files.length,system:args.find(a=>a.startsWith('developer_instructions='))})+'\\n');
     const n=readFileSync(home+'/polish-calls.jsonl','utf8').trim().split('\\n').length-1,score=JSON.parse(process.env.FD_POLISH_SCORES||'[7,8,9]')[n];
-    const value={score,gaps:score<9?['Give the phone title more breathing room']:[],direction_kept:true,direction_reason:'Same notes layout and palette',feedback:q.feedback.map(f=>({id:f.id,kept:true,reason:'Visible in notes'}))};
+    const value={score,gaps:score<9?['Give the phone title more breathing room']:[],direction_kept:true,direction_reason:'Same notes layout and palette',feedback:q.feedback.map(f=>({id:f.id,kept:true,reason:'Visible in notes'})),...(q.motion&&{motion:{score:7,reason:'The terminal types its command line by line across the frames',defects:['motion-390-1: the first line starts below the fold of the terminal card']}})};
     console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_polish',arguments:JSON.stringify(value).replace('breathing room','breathing'+String.fromCharCode(10)+'room')}]})}}));
     console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
     process.exit(0);
@@ -54,12 +54,13 @@ else {
     console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
     process.exit(0);
   }
-  const ids=(input.match(/^Images, in attachment order: (.*)$/m)?.[1] ?? '').split(', ').filter(i=>/^(design|plain)-/.test(i)), design=ids.filter(i=>i.startsWith('design-'));
-  if (!design.length || ![ids.length,ids.length+2].includes(files.length) || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing capture-set images (one per attachment id, then the two references)');
+  const order=(input.match(/^Images, in attachment order: (.*)$/m)?.[1] ?? '').split(', '), ids=order.filter(i=>/^(design|plain)-/.test(i)), design=ids.filter(i=>i.startsWith('design-')), film=order.filter(i=>/^motion-\\d+-\\d+$/.test(i));
+  if (!design.length || ![ids.length+film.length,ids.length+film.length+2].includes(files.length) || files.some(f=>{const h=readFileSync(f).toString('hex',0,3);return h!=='89504e'&&h!=='ffd8ff'})) throw Error('missing capture-set images (one per attachment id, then the two references)');
   appendFileSync(home+'/judge-calls.jsonl',JSON.stringify({model:args[args.indexOf('--model')+1],images:files.length,input,system:args.find(a=>a.startsWith('developer_instructions='))})+'\\n');
   const scores=JSON.parse(process.env.FD_JUDGE_SCORES||'[]'),n=readFileSync(home+'/judge-calls.jsonl','utf8').trim().split('\\n').length-1;
   const [score,plain]=process.env.FD_JUDGE_AI?[9,7]:(scores[n]||[6,7]);
   const value={views:design.map(view=>({view,judged:'The notes list and its theme at this width'})),design:{score,gaps:['No product screen']},plain:{score:plain,gaps:['Generic layout']},against:'Captured Umer notes: real content',reads_as:'Notes for Umer',fix:'Show the product',axes:Object.fromEntries(['hierarchy','type','colour','spacing','imagery','proof_clarity','ai_tells'].map(a=>[a,{score,reason:'The captured reference shows content, the option does not'}]))};
+  if(film.length) value.motion={score:7,reason:'The terminal types its command across the frames at a readable pace',defects:[film[0]+': the cursor blinks before any text is typed']};
   if(input.includes('"ai_side"')) Object.assign(value,{ai_side:{reads_as_ai:!!process.env.FD_JUDGE_AI||score<9,tells:process.env.FD_JUDGE_AI||score<9?['Repeated generic cards']:[]},hero:Array.from({length:9},(_,i)=>({point:i+1,met:score>=9||i<5,reason:'Shown in fixture'}))});
   const cut=n<Number(process.env.FD_JUDGE_BAD||0)?(x=>x.slice(0,x.length>>1)):(x=>x); // the model breaks the JSON of its first FD_JUDGE_BAD answers
   console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify({text:'',calls:[{name:'judge_designs',arguments:cut(JSON.stringify(value))}]})}}));

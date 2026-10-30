@@ -180,6 +180,25 @@ const staticPage = () => {
   return `<!doctype html>\n${page.outerHTML}`;
 };
 
+// Motion: what changes on its own after load. WATCH runs before the page's own script and records each element whose children, text, style or
+// class change from load on; moving() then names what moves (CSS and Web Animations and those elements) and brings the first of it into view.
+const WATCH = `addEventListener('load',()=>{const moved=window.__firstDraftMoved=new Set();new MutationObserver((r)=>{for(const m of r){const t=m.target.nodeType===1?m.target:m.target.parentElement;if(t&&t!==document.documentElement&&t!==document.body)moved.add(t)}}).observe(document,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['style','class']})})`;
+const moving = () => {
+  const shown = (el) => el instanceof Element && el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const label = (el) => `<${el.tagName.toLowerCase()}${el.id ? ` id="${el.id}"` : typeof el.className === 'string' && el.className.trim() ? ` class="${el.className.trim().split(/\s+/)[0]}"` : ''}>`;
+  const animations = document.getAnimations().filter((a) => a.playState === 'running' && shown(a.effect?.target));
+  const timing = animations.map((a) => a.effect.getComputedTiming());
+  const scripted = [...(window.__firstDraftMoved ?? [])].filter(shown);
+  const all = [...animations.map((a) => a.effect.target), ...scripted];
+  const top = (el) => el.getBoundingClientRect().top + scrollY;
+  const first = all.sort((a, b) => top(a) - top(b))[0];
+  if (first) { const r = first.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) first.scrollIntoView({ block: r.height > innerHeight ? 'start' : 'center' }); }
+  return { animations: animations.length, infinite: timing.filter((t) => t.iterations === Infinity).length, longest_ms: Math.round(Math.max(0, ...timing.map((t) => Number.isFinite(t.endTime) ? t.endTime : t.duration))),
+    scripted: scripted.length, first: first ? label(first) : null, scrolled_to: Math.round(scrollY), looping: [...new Set(animations.filter((a) => a.effect.getComputedTiming().iterations === Infinity).map((a) => label(a.effect.target)))].slice(0, 5) };
+};
+// When each frame of the motion series is taken, in ms after load: the first seconds, where a load sequence, a typing terminal or a loop shows.
+export const MOTION_AT = [400, 1400, 2600, 4200];
+
 // Text the eye cannot read because a fixed or sticky bar is painted over it in the first viewport.
 // A screen that is an open modal (a source dialog or sheet over a dimmed page) declares the page behind it inert: only that
 // inert text may sit under its scrim. Without a visible, live role=dialog aria-modal=true (or open <dialog>), inert excuses nothing.
@@ -507,6 +526,36 @@ export class Renderer {
     return shots;
   }
 
+  // The page in motion, for the judge and the board: at 390x844 then 1280x800, in light, with motion allowed, the viewport around the
+  // first thing that moves, as a frame at each MOTION_AT. moves: whether any two frames of one width differ.
+  async motion(html, at = MOTION_AT) {
+    const file = join(this.dir, `motion-${++this.n}.html`);
+    writeFileSync(file, html);
+    const c = this.client, frames = [], widths = [];
+    const { identifier } = await c.send('Page.addScriptToEvaluateOnNewDocument', { source: WATCH });
+    try {
+      for (const [width, height] of VIEWPORTS) {
+        await c.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+        await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'no-preference' }] });
+        const loaded = c.once('Page.loadEventFired');
+        await c.send('Page.navigate', { url: `file://${file}` });
+        await loaded;
+        const start = Date.now();
+        await this.eval(c, 'document.fonts.ready.then(() => 1)');
+        await new Promise((r) => setTimeout(r, Math.max(0, start + at[0] - 150 - Date.now())));
+        const seen = await this.eval(c, `(${moving.toString()})()`), shots = [];
+        for (const [i, ms] of at.entries()) {
+          await new Promise((r) => setTimeout(r, Math.max(0, start + ms - Date.now())));
+          const { data } = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 80 });
+          shots.push({ id: `motion-${width}-${i + 1}`, width, height, frame: i + 1, at_ms: ms, mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${data}` });
+        }
+        widths.push({ width, moves: new Set(shots.map((s) => s.dataUrl)).size > 1, ...seen });
+        frames.push(...shots);
+      }
+    } finally { await c.send('Page.removeScriptToEvaluateOnNewDocument', { identifier }); }
+    return { moves: widths.some((w) => w.moves), widths, frames };
+  }
+
   // The check itself: the errors done must report, so the model can fix the page in the loop.
   async check(html, redesignPages) {
     this.redesign = Boolean(redesignPages); this.live = Boolean(redesignPages?.some((p) => p.live));
@@ -614,6 +663,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, cl
     shoot: async (html, tall = 2400) => {
       if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to show the critic the design: ${e.message}`); });
       return render.shoot(html, tall);
+    },
+    // The motion series at 390 and 1280 (motion()); a browser that cannot start is the failure.
+    motion: async (html, at) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to capture the design's motion: ${e.message}`); });
+      return render.motion(html, at);
     },
     // The whole page at 1280 and 390 in light and dark, tiled when tall (the judge's eyes); a browser that cannot start is the failure.
     views: async (html, themes) => {

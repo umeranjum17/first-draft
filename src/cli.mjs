@@ -31,6 +31,7 @@ import { flowOf } from './flow.mjs';
 import { LOGO_DIRECTIONS, logoDirection, readLogo, writeLogo } from './logo.mjs';
 import { conceptSummary, drawLogos, pool } from './logo-concepts.mjs';
 import { PASS, openCritic } from './critic.mjs';
+import { writeMotion } from './motion.mjs';
 import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
@@ -268,8 +269,8 @@ if (command === 'check') {
   }
   const c = await agentOrAsk(), critic = await openCritic({ c, brief, home: HOME(), judgeSet: c.judge, plainSource: values.plain, firstView: values['first-view'] });
   try {
-    const { critique } = await critic.judge({ html: readFileSync(file, 'utf8') });
-    console.log(JSON.stringify({ file: resolve(file), generator: { agent: c.agent, model: c.model }, critique, judge: critic.judged, ...critic.used }));
+    const { critique, film } = await critic.judge({ html: readFileSync(file, 'utf8') });
+    console.log(JSON.stringify({ file: resolve(file), generator: { agent: c.agent, model: c.model }, critique, motion_frames: writeMotion(resolve(file), film, critique.motion), judge: critic.judged, ...critic.used }));
   } catch (e) { console.log(JSON.stringify({ error: { code: e.code === 'JUDGE_ALL_FAILED' ? e.code : 'JUDGE_FAILED', message: e.message, ...(e.failures && { judge_failures: e.failures }) } })); process.exitCode = 1; } finally { critic.close?.(); }
 } else if (command === 'references') {
   const { values, positionals } = flags(rest, { like: { type: 'string' }, capture: { type: 'boolean' }, project: { type: 'string' } });
@@ -395,9 +396,9 @@ if (command === 'check') {
     try { made = option?.made ?? await build(i, numbered); }
     catch (e) { critic?.close?.(); fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     for (const [stage, took] of Object.entries(made.timing ?? {})) stages[stage] = (stages[stage] ?? 0) + took;
-    let critique;
+    let critique, film;
     if (critic?.judge) {
-      try { ({ made, critique } = await critic.judge(made)); }
+      try { ({ made, critique, film } = await critic.judge(made)); }
       catch (e) {
         // Every judge failed: this option is unscored and flagged (never passed); the other options and every deterministic check go on.
         if (e.code !== 'JUDGE_ALL_FAILED') { critic.close(); fail('JUDGE_FAILED', e.message); }
@@ -408,6 +409,7 @@ if (command === 'check') {
     try {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, made.html);
+      if (film) film.dir = writeMotion(out, film, critique.motion); // the frame series the judge read, beside the option for the view
       writeOptionReferences(out,refs.metadata);
       writeCompetitors(out,refs.competitors);
       writeSources(out,refs.sources);
@@ -425,7 +427,7 @@ if (command === 'check') {
       { 'concepts.png': png(drawn.boards[0]), ...(drawn.boards[1] && { 'concepts-round2.png': png(drawn.boards[1]) }), 'critique.png': png(option.board), ...(option.picture?.webp && { 'exploration.webp': option.picture.webp }) });
     } catch (e) { fail('OUTPUT_FAILED', `cannot write ${out}: ${e.message}`); }
     const consistency = values.data !== undefined ? checkConsistency(made.html, consistencyData) : values['skip-check'] ? { note: 'consistency check explicitly skipped', mismatches: [] } : null;
-    slots[i] = { file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(consistency && { consistency }), ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.repaired && { repaired: made.repaired }), ...(made.unrepaired && { unrepaired: made.unrepaired, repair_failed: made.repair_failed }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.videos && { videos: made.videos }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }), ...(made.timing && { seconds: Math.round((Date.now() - opened) / 1000) }) };
+    slots[i] = { file: out, bytes: Buffer.byteLength(made.html), source: made.source, turns: made.turns, tools: made.tools, ...(consistency && { consistency }), ...(written && { logo_dir: written.dir, concept: { kind: option.concept.kind, name: option.concept.name, idea: option.concept.idea }, passed: option.passed, palette: written.logo.palette, critique: option.critiques.at(-1), ...(option.others.length && { dropped_attempts: `${out.replace(/\.html?$/i, '')}.dropped` }), checks: written.logo.checks }), ...(planned && { direction: planned.directions[i].name }), ...(made.repaired && { repaired: made.repaired }), ...(made.unrepaired && { unrepaired: made.unrepaired, repair_failed: made.repair_failed }), ...(made.images && { images: made.images }), ...(made.images_refused && { images_refused: made.images_refused }), ...(made.videos && { videos: made.videos }), ...(made.redesign_check && {self_check:made.redesign_check}), ...(critique && { critique }), ...(film && { motion: { moves: film.moves, frames: film.frames.length, dir: film.dir } }), ...(made.timing && { seconds: Math.round((Date.now() - opened) / 1000) }) };
     if (!logo) { tokens_in += made.tokens_in; tokens_out += made.tokens_out; }
     made.remote.forEach((r) => blocked.add(r));
     if (made.render_check === 'skipped') render_check = 'skipped';

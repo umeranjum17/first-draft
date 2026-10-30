@@ -1,5 +1,6 @@
 // make's create path: the plain call that beat the full engine loop in the 2026-10-24 bake-off. One prompt (the brief, Anthropic's
-// frontend-design guidance and the page contract) gives one complete HTML page; the host draws it once into a static page. The critic
+// frontend-design guidance and the page contract) gives one complete HTML page, kept with its inline script and motion (a page that loads a
+// script from a URL is drawn once into a static page). The critic
 // (critic.mjs, run by the cli) scores it once; a low score stays flagged, not revised. Logo, redesign and generated assets still run the
 // full engine (make.mjs).
 import { readFileSync } from 'node:fs';
@@ -9,7 +10,7 @@ import { humanSideOf } from './human-side.mjs';
 import { restraintProblems } from './restraint.mjs';
 import { embedFonts } from './fonts.mjs';
 import { embedMedia, mediaBrief, projectMedia } from './media.mjs';
-import { staticExport } from './make.mjs';
+import { EXTERNAL_SCRIPT, staticExport } from './make.mjs';
 import { renderCheck } from './render-check.mjs';
 import { flowOf, flowRule } from './flow.mjs';
 import { directionText } from './styles.mjs';
@@ -39,8 +40,9 @@ export const contractRules = (drawing, human, flow) => [
   { id: 'images-inline', text: 'Images are inline SVG, CSS or data: URIs: a remote image is blocked.' },
   { id: 'facts', text: FACTS },
   drawing
-    ? { id: 'script-drawn-once', text: 'Script may run once: the host draws the page in a browser at 1280px and keeps what that first render shows, without the script, so the first render must show the whole design.' }
-    : { id: 'no-script', text: 'Write no script, no on* event handler and no javascript: URL: the page is shown as a static document.' },
+    ? { id: 'script-kept-inline', text: 'Inline script and CSS animation are kept and play in the page. A script loaded from a URL runs once: the host draws the page in a browser at 1280px and keeps what that first render shows, without any script, so then the first render must show the whole design.' }
+    : { id: 'script-inline-only', text: 'Script is inline only: a <script> with a src or a javascript: URL is refused, and inline script and CSS animation are kept and play in the page.' },
+  { id: 'motion-for-real', text: 'When the brief asks for motion (an animation, a typing terminal, a pulse, a marquee), write that motion for real with CSS animation or inline script, not a still of it, and honour prefers-reduced-motion.' },
 ];
 // What the model is told besides the brief: the vendored guidance, first-draft's own guidance for a company or landing page when the brief is one, then the contract.
 export const systemPrompt = (drawing, human, flow) => `${designPrompt()}\n\n---\n\n${HOST_EXECUTION}\n\n${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human, flow).map((r) => r.text).join(' ')}`;
@@ -68,11 +70,13 @@ export async function draft({ prompt, brief: original, agent, model, timeoutMs, 
     used.tokens_in += answer.tokens_in; used.tokens_out += answer.tokens_out; used.calls++;
     return answer.html;
   });
-  // The page people see: drawn once (script runs, its result stays), script-free, with its fonts and the project's media inside.
+  // The page people see, with its fonts and the project's media inside. A page whose script is all inline keeps it, so its motion plays;
+  // one that loads a script from a URL is drawn once (script runs, its result stays) and kept script-free.
   const finish = async (source) => {
     let html = source;
-    if (render.drawing) html = (await render.snapshot(source)).html;
-    const exported = staticExport(html);
+    const live = !EXTERNAL_SCRIPT.test(source);
+    if (render.drawing && !live) html = (await render.snapshot(source)).html;
+    const exported = staticExport(html, { script: live });
     if (exported.errors.length) throw new Error(`the page fails the export: ${exported.errors.map((e) => e.message).join('; ')}`);
     return { page: embedMedia(await embedFonts(exported.html, warn), media), remote: exported.remote };
   };
