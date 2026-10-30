@@ -203,6 +203,8 @@ export const MOTION_AT = [400, 1400, 2600, 4200];
 // person would press first, and the page before and after that press. A link is navigation, judged by the stills; a button that changes
 // nothing is a control that does nothing.
 const PRESS = 400; // ms after the press before the page is read again: one animation frame is not enough for a script that redraws
+// The frames taken across the press, in ms after the first one: a caller can see the page change over time, and a run turns them into a clip.
+export const PRESS_AT = [0, 120, 240, 360, 480, 600, 720, 840, 960, 1080, 1200];
 const clickControls = () => {
   const shown = (el) => el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none' && !el.disabled && el.getAttribute('aria-disabled') !== 'true';
   const label = (el) => ((el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim() || el.tagName.toLowerCase()).slice(0, 60);
@@ -545,8 +547,9 @@ export class Renderer {
   }
 
   // A real click on the page, for the judge: at 390x844 then 1280x800, in light, the first control that a person can press is pressed with a
-  // mouse event (not element.click(), so handlers, :active and hit-testing run as they do for a mouse), and the page before and after it is
-  // kept. The first press that changes the page ends that width; `idle` says whether the page changed on its own in the same time.
+  // mouse event (not element.click(), so handlers, :active and hit-testing run as they do for a mouse), and the page is kept as a short
+  // frame sequence across the press (PRESS_AT, each frame with its own timestamp), not only before and after it. The first press that changes
+  // the page ends that width; `idle` says whether the page changed on its own in the same time.
   async clicks(html) {
     const file = join(this.dir, `click-${++this.n}.html`);
     writeFileSync(file, html);
@@ -572,20 +575,26 @@ export class Renderer {
         for (const control of seen) {
           await load();
           const pre = await state();
-          const shot = async () => (await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 80 })).data;
-          const beforeShot = await shot();
+          const started = Date.now(), sequence = [];
+          const grab = async () => {
+            const { data } = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 75 });
+            sequence.push({ at_ms: Date.now() - started, mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${data}` });
+          };
+          await grab(); // the page before the press
           await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: control.x, y: control.y, button: 'none' });
           await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: control.x, y: control.y, button: 'left', clickCount: 1 });
           await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: control.x, y: control.y, button: 'left', clickCount: 1 });
-          await new Promise((r) => setTimeout(r, PRESS));
+          for (const ms of PRESS_AT.slice(1)) {
+            await new Promise((r) => setTimeout(r, Math.max(0, started + ms - Date.now())));
+            await grab();
+          }
           await this.settle(c).catch(() => {});
           const post = await state();
-          if (post === pre) continue;
-          const afterShot = await shot();
+          if (post === pre) continue; // a control that changed nothing keeps no frames: nothing is claimed for it
           const after = await this.eval(c, 'document.body.innerText.replace(/\\s+/g, " ").trim().slice(0, 200)').catch(() => null); // what a person reads after the press
-          pressed = { label: control.label, tag: control.tag, changed: true, ...(after && { after }) };
-          frames.push({ id: `click-${width}-before`, width, when: 'before', mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${beforeShot}` },
-            { id: `click-${width}-after`, width, when: 'after', mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${afterShot}` });
+          pressed = { label: control.label, tag: control.tag, changed: true, ...(after && { after }), sequence };
+          frames.push({ id: `click-${width}-before`, width, when: 'before', at_ms: sequence[0].at_ms, mime: 'image/jpeg', dataUrl: sequence[0].dataUrl },
+            { id: `click-${width}-after`, width, when: 'after', at_ms: sequence.at(-1).at_ms, mime: 'image/jpeg', dataUrl: sequence.at(-1).dataUrl });
           break;
         }
         widths.push({ width, controls: seen.length, idle, clicked: pressed });

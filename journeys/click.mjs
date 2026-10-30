@@ -1,13 +1,14 @@
 // Nonpaid real-CLI proof that a clickable option stays clickable: an inbox brief whose rows and filter are wired by an inline script ->
 // make exports the option with its script, loading nothing -> the host presses one of its controls with a real mouse event in a headless
-// browser and keeps the page before and after it -> the independent judge is asked about behaviour and returns a verdict -> a control that
+// browser and keeps a frame sequence across it, encoded into click-390.mp4 and click-1280.mp4 -> the independent judge is asked about
+// behaviour and returns a verdict -> a control that
 // changes nothing is judged and refused -> a drawn App.jsx option keeps its source readable beside it -> the view serves the clickable page
 // in its sandy frame and a real click on what "Open live" opens still works. Local stand-ins answer the model and the judge, so scores are
 // synthetic, never design quality.
 import '../test/fixtures/provider-hooks.mjs';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -18,6 +19,21 @@ const root = new URL('..', import.meta.url).pathname, out = process.env.DONE_DON
 if (!out) throw Error('Give an evidence folder');
 mkdirSync(out, { recursive: true });
 const BRIEF = 'An inbox app: pick a message from the list to read it, and filter the list to unread';
+const ffmpeg = (...args) => promisify(execFile)('ffmpeg', args, { maxBuffer: 32_000_000 });
+// The press is a clip, not only two stills: the frame sequence across it (render-check's PRESS_AT) is encoded into a short mp4 per width.
+// Refuse before any work when ffmpeg is not on PATH, rather than after the CLI has made the option.
+try { await ffmpeg('-version'); } catch { throw Error('the click clips need ffmpeg: click-390.mp4 and click-1280.mp4 cannot be encoded without it. Install ffmpeg on PATH and run the journey again'); }
+const encode = async (width, sequence) => {
+  const dir = mkdtempSync(join(tmpdir(), `fd-click-seq-${width}-`)), list = join(dir, 'frames.txt');
+  sequence.forEach(({ dataUrl }, i) => writeFileSync(join(dir, `f-${String(i).padStart(3, '0')}.jpg`), Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64')));
+  // Each frame keeps the time it was really taken, so the clip plays the change at the pace a person saw it.
+  writeFileSync(list, `${sequence.map(({ at_ms }, i) => `file 'f-${String(i).padStart(3, '0')}.jpg'\nduration ${((sequence[i + 1]?.at_ms ?? at_ms + 200) - at_ms) / 1000}`).join('\n')}\n`);
+  const file = join(out, 'frames', `click-${width}.mp4`);
+  try {
+    await ffmpeg('-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-an', '-vf', "fps=15,scale='min(1280,iw)':-2", '-c:v', 'libx264', '-preset', 'slow', '-crf', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', file);
+    return { file, bytes: statSync(file).size };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+};
 // What the stand-in model writes: an inbox whose rows open their message and whose filter narrows the list, both wired by an inline script.
 const inbox = (title, wired = true) => `<!doctype html><html><head><title>${title}</title><style>:root{--bg:#fff;--fg:#14161a;--line:#e3e6ea;--sel:#eef2ff}@media (prefers-color-scheme: dark){:root{--bg:#111418;--fg:#e9ecef;--line:#262b32;--sel:#1c2433}}
 body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}main{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);min-height:100vh}
@@ -101,12 +117,21 @@ try {
   writeFileSync(join(out, 'make.json'), clean({ made }));
   writeFileSync(join(out, 'refused-dead-control.json'), clean({ refused }));
   writeFileSync(join(out, 'drawn-source-sidecar.json'), clean({ app }));
-  writeFileSync(join(out, 'click-log.json'), clean({ served: { options: 1, clicked: live.clicked, widths: live.widths }, judged: { behaviour: file.critique.behaviour, passed: file.critique.passed } }));
   mkdirSync(join(out, 'frames'), { recursive: true });
   for (const f of live.frames) writeFileSync(join(out, 'frames', `${f.id}.jpg`), Buffer.from(f.dataUrl.slice(f.dataUrl.indexOf(',') + 1), 'base64'));
+  // The click itself as a clip per width, beside those stills: the board refuses a click proved only by stills.
+  const clips = [];
+  for (const { width, clicked } of live.widths) {
+    assert.ok(clicked.sequence.length >= 10 && clicked.sequence.at(-1).at_ms >= 1000, `the ${width} sequence spans the press with its own timestamps`);
+    const clip = await encode(width, clicked.sequence);
+    assert.ok(clip.bytes > 2000, `click-${width}.mp4 is a real clip, not an empty file`);
+    clips.push({ width, file: `frames/click-${width}.mp4`, bytes: clip.bytes, frames: clicked.sequence.length, over_ms: clicked.sequence.at(-1).at_ms });
+  }
+  const logged = ({ width, controls, idle, clicked }) => ({ width, controls, idle, clicked: clicked && { label: clicked.label, tag: clicked.tag, changed: clicked.changed, after: clicked.after, frames: clicked.sequence.map(({ at_ms }) => at_ms) } }); // the timestamps, never the frame bytes
+  writeFileSync(join(out, 'click-log.json'), clean({ served: { options: 1, clicked: live.clicked, widths: live.widths.map(logged) }, judged: { behaviour: file.critique.behaviour, passed: file.critique.passed }, clips }));
   const head = (await promisify(execFile)('git', ['-C', root, 'rev-parse', 'HEAD'])).stdout.trim();
   writeFileSync(join(out, 'steps.json'), JSON.stringify({ target: { version: `first-draft-axi ${head}, source CLI and Chrome` }, start: 'Task-private HOME and local model and judge stand-ins; no owner state, network model or credentials.',
-    steps: ['make a clickable inbox option from a brief that asks for a row to open and a filter to narrow', 'read the option, its critique.behaviour and the judge call', 'judge a page whose control is wired to nothing', 'make a drawn App.jsx option and read its .source sidecar', 'open the option in first-draft-axi view and press the served page'],
-    result: `The export kept the option's inline script under a policy that loads nothing; the host's real mouse press changed the page at 390 and 1280, the judge was sent the frames before and after it and returned behaviour ${file.critique.behaviour.score}/10 with ${file.critique.behaviour.defects.length} defect(s); a control wired to nothing was judged and refused; the drawn option's source sits readable in ${drawnFile.source_dir}; the framed page Open live serves still changes on a real click. Scores are synthetic.` }, null, 2));
-  console.log('PASS: clickable option kept its script, a real press at 390 and 1280 was judged, a dead control was refused, the drawn source is readable beside its option, and Open live serves the clickable page');
+    steps: ['make a clickable inbox option from a brief that asks for a row to open and a filter to narrow', 'read the option, its critique.behaviour and the judge call', 'judge a page whose control is wired to nothing', 'make a drawn App.jsx option and read its .source sidecar', 'open the option in first-draft-axi view and press the served page', 'encode the frame sequence across each press into a short clip per width'],
+    result: `The export kept the option's inline script under a policy that loads nothing; the host's real mouse press changed the page at 390 and 1280, the judge was sent the frames before and after it and returned behaviour ${file.critique.behaviour.score}/10 with ${file.critique.behaviour.defects.length} defect(s); a control wired to nothing was judged and refused; the drawn option's source sits readable in ${drawnFile.source_dir}; the framed page Open live serves still changes on a real click; the press is kept as click-390.mp4 and click-1280.mp4 beside its stills. Scores are synthetic.` }, null, 2));
+  console.log('PASS: clickable option kept its script, a real press at 390 and 1280 was judged and kept as a clip, a dead control was refused, the drawn source is readable beside its option, and Open live serves the clickable page');
 } finally { view?.kill(); server.close(); drawnServer.close(); rmSync(dir, { recursive: true, force: true }); }
