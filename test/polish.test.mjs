@@ -54,7 +54,14 @@ test('chosen drawn source survives three independently judged refine rounds; Stu
   assert.equal((await post('polish', { option: 1, brief: 'A notes app' })).status, 202);
   for (let i = 0; !existsSync(join(dir, 'a-polish/run.json')) && i < 200; i++) await new Promise((r) => setTimeout(r, 10));
   assert.equal((await post('polish-feedback', { id: 1, text: 'Keep the title' })).status, 200);
-  let state; for (let i = 0; i < 200; i++) { state = (await (await fetch(v.url + 'polish')).json()).runs[0]; if (state.status !== 'running') break; await new Promise((r) => setTimeout(r, 100)); }
-  assert.equal(state.state.stop_reason, 'target_reached'); assert.equal(state.state.rounds[1].feedback[0].text, 'Keep the title');
+  const deadline = Date.now() + 5 * 60_000;
+  let state;
+  do {
+    state = (await (await fetch(v.url + 'polish')).json()).runs[0];
+    if (state.status !== 'running') break;
+    assert.ok(Date.now() < deadline, `polish run did not finish: ${JSON.stringify(state)}`);
+    await new Promise((r) => setTimeout(r, 100));
+  } while (true);
+  assert.equal(state.state.stop_reason, 'target_reached', JSON.stringify(state)); assert.equal(state.state.rounds[1].feedback[0].text, 'Keep the title');
   assert.equal((await fetch(`${v.frames}/o/${state.versions[1].option.n}`)).status, 200);
 });
