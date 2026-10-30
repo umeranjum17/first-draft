@@ -414,6 +414,8 @@ export class Renderer {
     const lightness = await this.eval(c, `(${pageLightness.toString()})()`);
     const shot = await c.send('Page.captureScreenshot', { format: 'png' });
     const layout = screen === null ? null : await this.eval(c, `(()=>{const e=document.querySelectorAll('[data-oc-screen]')[${screen}],r=e.getBoundingClientRect();return {width:r.width,height:r.height,visible:getComputedStyle(e).visibility!=='hidden'}})()`);
+    // A board: the whole page lays two or more phone-wide screens in one row, which is a design to review, not a phone canvas stretched over the desktop.
+    const board = screen === null ? await this.eval(c, `(()=>{const r=[...document.querySelectorAll('[data-oc-screen]')].map(e=>e.getBoundingClientRect()).filter(r=>r.width>0&&r.width<=390);return r.filter(a=>r.some(b=>b!==a&&Math.abs(a.top-b.top)<=2&&(a.right<=b.left+1||b.right<=a.left+1))).length>=2})()`) : false;
     const visible = screen === null || (layout.width > 0 && layout.height > 0 && layout.visible);
     const covered = (this.redesign && screen !== null) || (this.pageChecks && screen === null) ? await this.eval(c, `(${coveredText.toString()})()`) : [];
     const stray = this.pageChecks && screen === null ? await this.eval(c, `(${strayClose.toString()})()`) : [];
@@ -422,7 +424,7 @@ export class Renderer {
     const human = this.humanSide && screen === null ? await this.eval(c, `(${humanSidePage.toString()})(${CARD_RUN}, ${HUES}, ${JSON.stringify(TITLE_WORDS)})`) : []; // the human-side checks are the whole page's too
     const scene = this.flow && screen === null ? await this.eval(c, `(${flowScene.toString()})()`) : []; // the flow's scenes are measured across the screens, as the person sees them together
     const shell = this.flow && screen === null ? await this.eval(c, `(${flowShell.toString()})()`) : []; // so are its step labels and the actions on its last screen
-    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, scene, shell, screenWidth: layout?.width, png: Buffer.from(shot.data, 'base64') };
+    return { measured, sig, lightness, visible, covered, stray, faint, clarity, human, scene, shell, screenWidth: layout?.width, board, png: Buffer.from(shot.data, 'base64') };
   }
 
   async eval(c, expression) {
@@ -662,13 +664,14 @@ export class Renderer {
       }).toString()})(${JSON.stringify(redesignPages)})`);
       errors.push(...findings.map(message=>({source:'redesign',message})));
     }
+    const boards = new Set(shots.filter((s) => s.screen === null && s.width === 1280 && s.light.board && s.dark.board).map(() => 1280));
     const said = new Set(); // the same clarity finding in the other theme is one finding
     for (const { width, height, screen, light, dark } of shots) {
       const context = `${screen === null ? 'the page' : `screen ${JSON.stringify(screen)}`} at ${width}x${height}`;
       for (const [theme, shot] of Object.entries({ light, dark })) {
         if (!shot.visible) errors.push({ source: 'render', message: `${context} in ${theme} has no visible layout. Each screen must work independently on phone and desktop. Then call done again.` });
-        // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality.
-        if (width === 1280 && screen !== null && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
+        // ponytail: reject phone-sized outer boxes; visual review still decides desktop quality. A board of phone frames side by side at 1280 is the exception.
+        if (width === 1280 && screen !== null && !boards.has(width) && shot.visible && shot.screenWidth <= 390) errors.push({ source: 'render', message: `${context} in ${theme} is still phone-sized (${Math.round(shot.screenWidth)}px). Let each outer screen use the desktop width; put responsive columns inside it, not between screens. Then call done again.` });
         for (const { message } of shot.clarity) if (!said.has(message) && said.add(message)) errors.push({ source: 'clarity', message: `clarity over flash, ${context}: ${message}. Then call done again.` });
         for (const message of shot.scene ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'flow', message: `${context}: ${message}. Make the illustration part of the screen's own surface: let it run to the screen's left and right edges on the screen's own ground, or give it a soft edge that fades into that ground with a mask (mask-image: radial-gradient(...)), and take away the hard rim: no border, outline, frame, mat, drop shadow, oval or rounded clip. Then call done again.` });
         for (const message of shot.shell ?? []) if (!said.has(message) && said.add(message)) errors.push({ source: 'flow', message: `${context}: ${message}. Then call done again.` });
