@@ -1,8 +1,8 @@
 // A critic call that must not end the make: one more try on the same engine, then the next signed-in judge, every failure on record.
 import { engineOf, resolveEngine } from './byokit.mjs';
 
-// The judges tried after the configured one, in order: Claude Opus first, then Codex. Subscriptions only, never an API key.
-export const FALLBACK_JUDGES = [{ agent: 'byokit:claude', model: 'claude-opus-5-5' }, { agent: 'byokit:codex', model: 'gpt-6.1-sol' }];
+// The judges tried after the configured one, in order: Claude Sonnet first, then Codex. Subscriptions only, never an API key.
+export const FALLBACK_JUDGES = [{ agent: 'byokit:claude', model: 'claude-sonnet-5-5' }, { agent: 'byokit:codex', model: 'gpt-6.1-sol' }];
 
 const same = (a, b) => a.agent === b.agent && a.model === b.model;
 const named = (j) => `${j.model} (${j.agent})`;
