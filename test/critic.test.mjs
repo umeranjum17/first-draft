@@ -126,7 +126,7 @@ test('make does not die when every judge fails: that option is unscored and flag
   const { made, help } = await run('make', 'A notes app for Umer', '--out', out, '--options', '1');
   const c = made.files[0].critique;
   assert.deepEqual([c.passed, c.score, c.code], [false, null, 'JUDGE_ALL_FAILED']);
-  assert.match(c.error, /every judge failed, so nothing was scored: gpt-6\.1-sol \(byokit:codex\):.*claude-opus-5-5 \(byokit:claude\):/s);
+  assert.match(c.error, /every judge failed, so nothing was scored: gpt-6\.1-sol \(byokit:codex\):.*claude-sonnet-5-5 \(byokit:claude\):/s);
   assert.ok(c.judge_failures.some((f) => f.agent === 'byokit:codex' && f.attempt === 2) && c.judge_failures.some((f) => f.agent === 'byokit:claude'));
   assert.match(readFileSync(out, 'utf8'), /Notes, version 1/);
   assert.ok(help.some((h) => /not scored because every judge failed/.test(h)));
