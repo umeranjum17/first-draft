@@ -199,6 +199,26 @@ const moving = () => {
 // When each frame of the motion series is taken, in ms after load: the first seconds, where a load sequence, a typing terminal or a loop shows.
 export const MOTION_AT = [400, 1400, 2600, 4200];
 
+// What a real click does: the controls a page carries that are presses rather than links (a button, a tab, a menu item), which of them a
+// person would press first, and the page before and after that press. A link is navigation, judged by the stills; a button that changes
+// nothing is a control that does nothing.
+const PRESS = 400; // ms after the press before the page is read again: one animation frame is not enough for a script that redraws
+// The frames taken across the press, in ms after the first one: a caller can see the page change over time, and a run turns them into a clip.
+export const PRESS_AT = [0, 120, 240, 360, 480, 600, 720, 840, 960, 1080, 1200];
+const clickControls = () => {
+  const shown = (el) => el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none' && !el.disabled && el.getAttribute('aria-disabled') !== 'true';
+  const label = (el) => ((el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim() || el.tagName.toLowerCase()).slice(0, 60);
+  return [...document.querySelectorAll('button,[role=button],[role=tab],[role=menuitem],input[type=submit],input[type=button]')].filter(shown).map((el) => {
+    const r = el.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+    const hit = x > 0 && y > 0 && x < innerWidth && y < innerHeight && r.width >= 8 && r.height >= 8;
+    // a control under a fixed bar is not one a person can press where it is drawn
+    return { label: label(el), tag: el.tagName.toLowerCase(), x, y, pressable: Boolean(hit) && el.contains(document.elementFromPoint(x, y)) };
+  }).filter((c) => c.pressable).slice(0, 4);
+};
+// What the page shows, cheaply: the hash, its title, its text and markup length (an aria-current, a redrawn list or a hidden row changes one of
+// them) and where it is scrolled to.
+const pageState = () => [location.hash, document.title, document.body.innerText.length, document.body.innerHTML.length, Math.round(scrollY)].join('|');
+
 // Text the eye cannot read because a fixed or sticky bar is painted over it in the first viewport.
 // A screen that is an open modal (a source dialog or sheet over a dimmed page) declares the page behind it inert: only that
 // inert text may sit under its scrim. Without a visible, live role=dialog aria-modal=true (or open <dialog>), inert excuses nothing.
@@ -526,6 +546,63 @@ export class Renderer {
     return shots;
   }
 
+  // A real click on the page, for the judge: at 390x844 then 1280x800, in light, the first control that a person can press is pressed with a
+  // mouse event (not element.click(), so handlers, :active and hit-testing run as they do for a mouse), and the page is kept as a short
+  // frame sequence across the press (PRESS_AT, each frame with its own timestamp), not only before and after it. The first press that changes
+  // the page ends that width; `idle` says whether the page changed on its own in the same time.
+  async clicks(html) {
+    const file = join(this.dir, `click-${++this.n}.html`);
+    writeFileSync(file, html);
+    const c = this.client, widths = [], frames = [];
+    try {
+      for (const [width, height] of VIEWPORTS) {
+        await c.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+        await c.send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-motion', value: 'no-preference' }] });
+        const load = async () => {
+          const loaded = c.once('Page.loadEventFired');
+          await c.send('Page.navigate', { url: `file://${file}` });
+          await loaded;
+          await this.eval(c, 'document.fonts.ready.then(() => 1)');
+          await this.settle(c);
+        };
+        await load();
+        const before = await this.eval(c, `(${pageState.toString()})()`);
+        await new Promise((r) => setTimeout(r, PRESS));
+        const idle = await this.eval(c, `(${pageState.toString()})()`) !== before; // the page moves without being touched: a change is not credited to the click
+        const seen = await this.eval(c, `(${clickControls.toString()})()`);
+        const state = async () => this.eval(c, `(${pageState.toString()})()`).catch(() => null); // a press that navigates takes the old document with it
+        let pressed = null;
+        for (const control of seen) {
+          await load();
+          const pre = await state();
+          const started = Date.now(), sequence = [];
+          const grab = async () => {
+            const { data } = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 75 });
+            sequence.push({ at_ms: Date.now() - started, mime: 'image/jpeg', dataUrl: `data:image/jpeg;base64,${data}` });
+          };
+          await grab(); // the page before the press
+          await c.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: control.x, y: control.y, button: 'none' });
+          await c.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: control.x, y: control.y, button: 'left', clickCount: 1 });
+          await c.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: control.x, y: control.y, button: 'left', clickCount: 1 });
+          for (const ms of PRESS_AT.slice(1)) {
+            await new Promise((r) => setTimeout(r, Math.max(0, started + ms - Date.now())));
+            await grab();
+          }
+          await this.settle(c).catch(() => {});
+          const post = await state();
+          if (post === pre) continue; // a control that changed nothing keeps no frames: nothing is claimed for it
+          const after = await this.eval(c, 'document.body.innerText.replace(/\\s+/g, " ").trim().slice(0, 200)').catch(() => null); // what a person reads after the press
+          pressed = { label: control.label, tag: control.tag, changed: true, ...(after && { after }), sequence };
+          frames.push({ id: `click-${width}-before`, width, when: 'before', at_ms: sequence[0].at_ms, mime: 'image/jpeg', dataUrl: sequence[0].dataUrl },
+            { id: `click-${width}-after`, width, when: 'after', at_ms: sequence.at(-1).at_ms, mime: 'image/jpeg', dataUrl: sequence.at(-1).dataUrl });
+          break;
+        }
+        widths.push({ width, controls: seen.length, idle, clicked: pressed });
+      }
+    } catch (e) { this.close(); throw e; }
+    return { clicked: widths.some((w) => w.clicked), widths, frames };
+  }
+
   // The page in motion, for the judge and the board: at 390x844 then 1280x800, in light, with motion allowed, the viewport around the
   // first thing that moves, as a frame at each MOTION_AT. moves: whether any two frames of one width differ.
   async motion(html, at = MOTION_AT) {
@@ -668,6 +745,11 @@ export const renderCheck = (onWarn = () => {}, { dark = false, redesignPages, cl
     motion: async (html, at) => {
       if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to capture the design's motion: ${e.message}`); });
       return render.motion(html, at);
+    },
+    // A real click on the option at 390 and 1280 (clicks()); a browser that cannot start is the failure.
+    clicks: async (html) => {
+      if (!render.client) await render.start().catch((e) => { render.close(); throw new Error(`the headless browser could not start to press the design's controls: ${e.message}`); });
+      return render.clicks(html);
     },
     // The whole page at 1280 and 390 in light and dark, tiled when tall (the judge's eyes); a browser that cannot start is the failure.
     views: async (html, themes) => {

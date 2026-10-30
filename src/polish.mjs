@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { make } from './make.mjs';
+import { writeSource } from './source.mjs';
 import { AXES, openJudge } from './judge.mjs';
 import { ask } from './logo-concepts.mjs';
 import { judgeChain, judgeWithFallback } from './judge-fallback.mjs';
@@ -40,7 +41,8 @@ export async function polish({ file, brief, outDir, maxRounds = 5, feedback = []
       const given = feedbackAt(outDir), page = join(outDir, `round-${round}.html`);
       const prompt = `Polish this chosen design, not a new direction. Preserve its identity, palette, typography, composition, content, motion (its CSS animation and inline script), screens, ids and links except where the following feedback requires a targeted improvement. User feedback is cumulative and takes priority over judge suggestions; never undo an earlier request.\nOriginal brief:\n${brief}\nAll user feedback:\n${given.map((f) => `- ${f.text}`).join('\n') || '(none)'}\nIndependent judge's actionable gaps:\n${gaps.join('\n') || '(initial assessment)'}`;
       const made = round === 0 ? { html: original } : await make({ ...c, seed, prompt, references: optionReferenceImages(reference), referenceBrief: reference?.brief });
-      writeFileSync(page, made.html, { flag: 'wx' }); state.pending = { round, file: page, feedback: given }; save();
+      writeFileSync(page, made.html, { flag: 'wx' });
+      if (made.source_files) writeSource(page, made.source_files); state.pending = { round, file: page, feedback: given }; save();
       const critique = await reviewer.judge({ html: made.html, original, feedback: given });
       const pending = JSON.stringify(given) !== JSON.stringify(feedbackAt(outDir));
       const lost = round > 0 && critique.original_moves && !critique.motion.present; // the chosen option moved and this version does not

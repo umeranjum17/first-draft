@@ -60,6 +60,9 @@ journeys:
   motion:
     command: node journeys/motion.mjs
     timeout: 15m
+  click:
+    command: node journeys/click.mjs
+    timeout: 15m
 
 # Written requirements for the motion journey: an option's own animation, captured as frames (no mock: it is a new capture, not a new screen).
 approved_requirements:
