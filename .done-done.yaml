@@ -8,6 +8,9 @@ journeys:
   references:
     command: node journeys/references.mjs
     timeout: 10m
+  craft:
+    command: node journeys/craft.mjs
+    timeout: 10m
   cli-controls-recapture:
     command: node journeys/cli-controls-capture.mjs
     timeout: 5m

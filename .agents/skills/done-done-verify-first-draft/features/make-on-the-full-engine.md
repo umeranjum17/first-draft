@@ -12,14 +12,23 @@ assets use that host loop too. The per-screen redesign writer keeps its shared
 plan, content locks and screen budget. All use the same pinned OpenDesign OD
 Next design recipe; first-draft still owns transport and every acceptance gate.
 The non-generating Studio/JSX runtime is retained separately for compatibility.
+Make and `--engine` also pass Open Design's `typography` and
+`typography-hierarchy` craft (`CRAFT_SET`) through `designPrompt(context)`, plus
+one host line; logo and the redesign writer pass none. An empty context stays
+the plain recipe byte for byte, and a file the composer's guard refuses is dropped
+with `prompt_warnings` in the make JSON. `done-done run craft` recaptures a retained acceptance comparison.
 
 ## Drive
 
 1. `npm test` runs the unmodified public CLI integration journeys plus
    `test/opendesign.test.mjs`: exact vendored-byte/license checks and a real
    in-memory tool-loop submission that fails the host verifier, repairs, and
-   passes. The path traversal attempt must fail. Native CLI tests use
-   `--import ./test/fixtures/provider-hooks.mjs` when run individually.
+   passes. The path traversal attempt must fail. It also runs the selected craft
+   through the real composer and proves a refused file leaves the plain recipe
+   with a warning; `tests/e2e/onboarding-flow.test.mjs` and
+   `test/public-references.test.mjs` read the craft in the system prompt a real
+   make and engine run send, and its absence from every redesign writer call.
+   Native CLI tests use `--import ./test/fixtures/provider-hooks.mjs` when run individually.
 2. Use an explicitly authorized task-owned FIRST_DRAFT_HOME and a short real
    TMPDIR for Chrome. Keep normal HOME and the signed-in subscription; never
    copy credentials. Initialize `byokit:claude` / `claude-opus-5-5` and an

@@ -17,6 +17,9 @@ gsap-core/LICENSE and SOURCES.md. The MIT notice for GreenSock's skill material
 covers that material only. GSAP's runtime is governed by GSAP's own no-charge
 license (https://gsap.com/standard-license/), NOT MIT or Apache-2.0. No GSAP
 runtime library is bundled by this migration; using one retains its own terms.
+craft/typography.md, which reaches the model on make, says it is
+adapted from referodesign/refero_skill (https://github.com/referodesign/refero_skill),
+Copyright (c) 2026 Refero, MIT License.
 
 Studio preview/export compatibility runtime
 Copyright 2026 OpenCoworkAI Contributors, MIT License.

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { designPrompt, ENGINE_COMMIT } from '../src/design-engine.mjs';
+import { CRAFT_HOST_LINE, CRAFT_SET, designPrompt, ENGINE_COMMIT } from '../src/design-engine.mjs';
 import { generateViaAgent, makeDoneTool } from '../src/engine-host.mjs';
 
 test('the pinned OpenDesign composer and all vendored source bytes are shipped unchanged', () => {
@@ -16,6 +16,20 @@ test('the pinned OpenDesign composer and all vendored source bytes are shipped u
   for (const [path, hash] of Object.entries(manifest.files)) assert.equal(createHash('sha256').update(readFileSync(new URL(path, root))).digest('hex'), hash, path);
   assert.match(readFileSync(new URL('LICENSE', root), 'utf8'), /Apache License/);
   for (const path of ['skills/animate/LICENSE', 'skills/animate/SOURCES.md', 'skills/gsap-core/LICENSE', 'skills/gsap-core/SOURCES.md', 'skills/frontend-design/LICENSE.txt']) assert.ok(manifest.files[path], path);
+});
+
+test('curated craft passes the real composer, and a refused file leaves the plain recipe with a warning', () => {
+  const warnings = [], plain = designPrompt();
+  const crafted = designPrompt({ craft: CRAFT_SET, warn: w => warnings.push(w) });
+  assert.deepEqual(warnings, [], 'every selected file passes the pinned guard');
+  assert.equal(designPrompt({}), plain);
+  assert.match(crafted, /Spacing as hierarchy/);
+  assert.match(crafted, /Letter-spacing — the rule that makes or breaks craft/);
+  assert.ok(crafted.endsWith(`\n\n${CRAFT_HOST_LINE}`), 'the host line answers the verbatim craft text');
+  assert.doesNotMatch(plain, /Spacing as hierarchy/);
+  assert.ok(!plain.includes(CRAFT_HOST_LINE));
+  assert.equal(designPrompt({ craft: ['state-coverage'], warn: w => warnings.push(w) }), plain, 'the guard refuses this file, and the draw carries on');
+  assert.match(warnings[0], /state-coverage dropped: .*forbidden/);
 });
 
 test('OpenDesign generation uses first-draft tools and cannot bypass the host verifier', async () => {
