@@ -41,6 +41,19 @@ provider configuration, credential reader, daemon, native child agent or paid
 route is imported. The host contract explicitly requests first-draft's gates;
 OpenDesign's generator-only ship-on-write default cannot turn them off.
 
+That holds for text: generation, repair, critic, redesign and reference review.
+Two asset routes run outside BYOKit's transport:
+
+- **Codex images** run `codex exec` directly (`src/assets.mjs`, model
+  `gpt-6-luna`), on the account BYOKit resolves through `installedCodex`. The
+  account is BYOKit's; the transport is not. They run for `--assets codex` or
+  `auto`, and for `logo --explore auto`.
+- **Higgsfield images and video** run its own CLI on its own credits. They run
+  only when asked: `--assets higgsfield` with `--allow-asset-spend`, or an
+  explicit `logo --explore higgsfield`. `logo --explore auto` never calls it.
+
+Routing Codex images through BYOKit waits on BYOKit image support.
+
 ## Vendored paths and sync
 
 `vendor/open-design/manifest.json` records SHA-256 for every imported file.
