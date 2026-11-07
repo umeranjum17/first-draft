@@ -43,7 +43,7 @@ test('chosen drawn source survives three independently judged refine rounds; Stu
   assert.ok(inputs.every((s) => s.includes('Revise this App.jsx') && s.includes('Current App.jsx:')));
   assert.equal(readFileSync(file, 'utf8'), original);
   const calls = readFileSync(join(dir, 'polish-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(calls.every((c) => c.model === 'gpt-6.1-sol' && c.images >= 8 && c.system.includes('virtual host-side actions')));
+  assert.ok(calls.every((c) => c.model === 'gpt-6-luna' && c.images >= 8 && c.system.includes('virtual host-side actions')));
   assert.equal(result.rounds.at(-1).round, 3); assert.equal(result.rounds[1].feedback_pending, true);
   assert.ok(result.rounds.slice(2).every((r) => r.feedback.length === 2 && r.critique.feedback.every((f) => f.kept)));
   assert.throws(() => polishFeedback(out, 'late'), /stopped/);

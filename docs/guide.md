@@ -198,7 +198,7 @@ Deterministic coverage: `node --test test/public-references.test.mjs` (native pr
 first-draft-axi refs list
 first-draft-axi refs pull
 # Optional: select a different subscription judge, never an API-key route.
-first-draft-axi init --agent byokit:claude --model claude-sonnet-5-5 --judge byokit:codex --judge-model gpt-6.1-sol
+first-draft-axi init --agent byokit:claude --model claude-sonnet-5-5 --judge byokit:codex --judge-model gpt-6-luna
 # Judge retained output and its retained baseline, without regenerating either:
 first-draft-axi judge option.html "A SaaS landing page" --plain option.critic/plain.html
 ```

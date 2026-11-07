@@ -104,12 +104,12 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { env: base, cwd: project, timeout: 120_000, maxBuffer: 12_000_000 });
   await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5');
 
-  const judgeReady = JSON.parse((await promisify(execFile)(process.execPath, ['--input-type=module','-e',`import {doctor} from ${JSON.stringify(new URL('../src/byokit.mjs', import.meta.url).href)};console.log(JSON.stringify(await doctor('codex','gpt-6.1-sol')));`], {env:base,cwd:project})).stdout);
+  const judgeReady = JSON.parse((await promisify(execFile)(process.execPath, ['--input-type=module','-e',`import {doctor} from ${JSON.stringify(new URL('../src/byokit.mjs', import.meta.url).href)};console.log(JSON.stringify(await doctor('codex','gpt-6-luna')));`], {env:base,cwd:project})).stdout);
   assert.equal(judgeReady.status, 'ok', JSON.stringify(judgeReady));
   const out = join(project, 'rota.html');
   const made = JSON.parse((await run('make', 'A shift-swapping app for hospital nurses', '--options', '1', '--engine', '--inspiration', '--app', 'com.umer.rota', '--device', 'emulator-test', '--out', out)).stdout);
 
-  assert.deepEqual(made.made.judge, {agent:'byokit:codex',model:'gpt-6.1-sol'});
+  assert.deepEqual(made.made.judge, {agent:'byokit:codex',model:'gpt-6-luna'});
   assert.equal(made.made.agent, 'byokit:claude');
   // 1. Search first: both queries over the open web and Hacker News, and the subreddits recorded as refused.
   const sources = JSON.parse(readFileSync(`${out}.sources.json`, 'utf8'));
@@ -162,7 +162,7 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
 
   // Benchmark the same retained captures through the real CLI/adapter: all current/candidates, positive and negative evidence.
   await assert.rejects(run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-sonnet-5-5'), e => /BAD_JUDGE/.test(e.stdout));
-  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:codex', '--judge-model', 'gpt-6.1-sol');
+  await run('init', '--agent', 'byokit:claude', '--model', 'claude-opus-5-5', '--judge', 'byokit:codex', '--judge-model', 'gpt-6-luna');
   const input = join(project, 'screens.json'), sheet = join(project, 'benchmark.html');
   const entries = ['reference', 'counterexample', 'current', 'candidate', 'candidate', 'candidate', 'candidate'].map((role, i) => ({ role, name: `Umer ${role} ${i} <script>`, file: PICTURE, source: 'Local fixture; no remote source', permission: 'Project-owned fixture', captured_at: null, theme: 'light' }));
   entries[1].name = 'current app not captured - counterexamples from the captain';
@@ -171,7 +171,7 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   const report = JSON.parse(readFileSync(`${sheet}.json`, 'utf8')), html = readFileSync(sheet, 'utf8');
   assert.equal(bench.scores.length, 5, 'current and every candidate get their own comparison');
   assert.deepEqual(bench.engine, {agent:'byokit:claude',model:'claude-opus-5-5'});
-  assert.ok(bench.scores.every(s => s.agent === 'byokit:codex' && s.model === 'gpt-6.1-sol'));
+  assert.ok(bench.scores.every(s => s.agent === 'byokit:codex' && s.model === 'gpt-6-luna'));
   assert.match(bench.judge, /^independent: byokit:codex/);
   assert.equal(report.captures.length, 8, 'seven local captures and the permitted public capture');
   assert.ok(report.discovery.queries.every((q) => /AI chat app phone chat/.test(q.query)));
@@ -262,7 +262,7 @@ else { process.stderr.write('unexpected adb call: ' + rest.join(' ') + '\\n'); p
   assert.match(refusedApp.why, /needs adb on PATH/);
   assert.ok(existsSync(join(project, 'again.html')), 'the page is still written when the emulator step refuses');
   assert.ok(second.inspiration.captured >= 1);
-  assert.deepEqual(second.made.judge, {agent:'byokit:codex',model:'gpt-6.1-sol'});
+  assert.deepEqual(second.made.judge, {agent:'byokit:codex',model:'gpt-6-luna'});
 
   // --app without the search it belongs to is refused, with the reason.
   await assert.rejects(run('make', 'A rota app', '--options', '1', '--app', 'com.umer.rota', '--out', join(project, 'third.html')), (e) => /--app captures a mobile competitor.*--inspiration/.test(e.stdout));

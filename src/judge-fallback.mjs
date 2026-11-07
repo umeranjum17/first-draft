@@ -2,7 +2,7 @@
 import { engineOf, resolveEngine } from './byokit.mjs';
 
 // The judges tried after the configured one, in order: Claude Sonnet first, then Codex. Subscriptions only, never an API key.
-export const FALLBACK_JUDGES = [{ agent: 'byokit:claude', model: 'claude-sonnet-5-5' }, { agent: 'byokit:codex', model: 'gpt-6.1-sol' }];
+export const FALLBACK_JUDGES = [{ agent: 'byokit:claude', model: 'claude-sonnet-5-5' }, { agent: 'byokit:codex', model: 'gpt-6-luna' }];
 
 const same = (a, b) => a.agent === b.agent && a.model === b.model;
 const named = (j) => `${j.model} (${j.agent})`;

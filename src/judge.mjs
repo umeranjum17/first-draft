@@ -48,7 +48,7 @@ export const pageKind = (brief) => /\b(docs|documentation|api reference|develope
   : /\b(dashboard|analytics|admin|metrics|kpis?|reporting)\b/i.test(brief) ? 'dashboard'
   : /\b(notes?|notebook|journal|to-?dos?|tasks?|planner)\b/i.test(brief) ? 'notes' : 'app';
 
-export const judgeOf = (c, set) => set ?? { agent: c.agent === 'byokit:codex' ? 'byokit:claude' : 'byokit:codex', model: c.agent === 'byokit:codex' ? 'claude-sonnet-5-5' : 'gpt-6.1-sol' };
+export const judgeOf = (c, set) => set ?? { agent: c.agent === 'byokit:codex' ? 'byokit:claude' : 'byokit:codex', model: c.agent === 'byokit:codex' ? 'claude-sonnet-5-5' : 'gpt-6-luna' };
 
 export async function resolveJudge(c, set) {
   const generator = await engineOf(c.agent);

@@ -59,7 +59,7 @@ const account = (id, folder) => ({ ok: true, v: 1, id, selection_id: id, provide
 const route = (id, provider, model) => ({ ok: true, v: 1, id, selection_id: id, provider, harness: provider, model, set: {}, unset: [], billing: 'plan' });
 const dry = process.env.FD_POOL_LOW === '1'; // every Claude account is under its floor
 if (verb === 'pick') console.log(JSON.stringify(dry ? route('route:cursor/auto', 'cursor', 'auto') : account('pa_umer_a', root + '/a')));
-else if (verb === 'next') console.log(JSON.stringify(dry ? route('route:openai-codex/gpt-6.1-sol', 'codex', 'openai-codex/gpt-6.1-sol') : account('pa_umer_b', root + '/b')));
+else if (verb === 'next') console.log(JSON.stringify(dry ? route('route:openai-codex/gpt-6-luna', 'codex', 'openai-codex/gpt-6-luna') : account('pa_umer_b', root + '/b')));
 else { console.log(JSON.stringify({ ok: false, v: 1, reason: 'unknown verb' })); process.exit(1); }`;
 
 test('pooled model calls: a limit re-picks the account, a dry pool falls over, no credential leaks', async (t) => {

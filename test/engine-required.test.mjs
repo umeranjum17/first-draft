@@ -50,7 +50,7 @@ test('no engine, stale unauthenticated configuration and OpenCode-only credentia
   assert.deepEqual(doctor.engine, { agent: 'byokit:claude', model: 'claude-sonnet-5-5' });
   for (const args of [['make','Notes for Umer','--out',out], ['logo','Umer notes','--out',out], ['redesign',dir,'Clear notes','--out',out], ['benchmark','--product','notes','--screen','notes','--out',out]]) await refuse(args, /No independent AI judge.*Sign in to ChatGPT: codex login/);
   await assert.rejects(run('init', '--agent', 'byokit:claude', '--model', 'claude-sonnet-5-5', '--judge', 'byokit:claude', '--judge-model', 'claude-opus-5-5'), e => /BAD_JUDGE/.test(e.stdout));
-  await assert.rejects(run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini', '--judge', 'byokit:codex', '--judge-model', 'gpt-6.1-sol'), e => /BAD_JUDGE/.test(e.stdout));
+  await assert.rejects(run('init', '--agent', 'byokit:openai:key', '--model', 'gpt-5-mini', '--judge', 'byokit:codex', '--judge-model', 'gpt-6-luna'), e => /BAD_JUDGE/.test(e.stdout));
   await assert.rejects(run('make', 'Notes', '--out', out, '--no-critic'), e => /USAGE/.test(e.stdout));
   assert.equal(readFileSync(seed, 'utf8'), '<!doctype html><html><body>Umer notes</body></html>');
 });

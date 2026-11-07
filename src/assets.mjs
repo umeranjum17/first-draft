@@ -57,7 +57,7 @@ export const assetProviders = {
     styleReference: true,
     use: 'ChatGPT image generation through the signed-in Codex CLI: illustrations, icons, logos, painterly or flat artwork and precise compositions.',
     async detect() {
-      const row = await doctor('codex', 'configured');
+      const row = await doctor('codex', 'gpt-6-luna');
       if (row.status !== 'ok') throw new Error(`Codex needs its subscription login: codex login; ${row.detail}`);
     },
     async estimate() { return { amount: null, unit: 'subscription quota', detail: 'One image-generation request; Codex exposes no price estimate. Quota and any overage are account-dependent, not free.' }; },
