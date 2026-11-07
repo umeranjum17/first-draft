@@ -111,6 +111,8 @@ else {
   assert.equal(redesigned.made.files[0].source,'per-screen HTML');assert.equal(redesigned.made.files[0].tools.define_redesign_plan,1);assert.equal(redesigned.made.files[0].tools.write_redesign_screen,5);assert.deepEqual(redesigned.made.files[0].self_check.screen_attempts.map(p=>p.attempts),[3,2]);assert.equal(redesigned.made.files[0].self_check.screen_reviews.length,2);
   const writerImages=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>['define_redesign_plan','write_redesign_screen'].includes(t.name))).map(r=>r.images);
   assert.deepEqual([...new Set(writerImages)].sort(),[2,4],'the plan sees both screens and each screen writer sees its own phone and desktop source captures');
+  const writerCalls=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>['define_redesign_plan','write_redesign_screen'].includes(t.name)));
+  assert.ok(writerCalls.length&&writerCalls.every(r=>!r.system.includes('Spacing as hierarchy')),'no writer call carries craft: it stays off redesign');
   const third=JSON.parse(readFileSync(join(redesignOut,'writer-option-1/screen-1-attempt-3.json')));for(const p of [/clipped text/,/Redesign semantic metrics/,/Remove diagnostic provenance notes/])assert.ok(third.feedback_sent.some(f=>p.test(f)),'third response gets every earlier finding');
   assert.ok(redesigned.made.files[0].self_check.semantic.every(c=>c.passed));
   assert.match(readFileSync(redesigned.made.files[0].file,'utf8'),/© Umer/,'copyright text is not emoji filler');
@@ -178,7 +180,7 @@ else {
   await run('refine',out,'warmer palette','--out',warm);
   assert.match(readFileSync(warm,'utf8'),/A warm note/);assert.deepEqual(JSON.parse(readFileSync(warm+'.refs.json','utf8')),reference);
   const inputs=readFileSync(join(env.FIRST_DRAFT_HOME,'native-inputs'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.tools.some(t=>t.name==='done')&&!JSON.stringify(r.messages).includes('SOURCE INVENTORY:'));
-  assert.ok(inputs.length>=8&&inputs.every(r=>r.images===2&&r.system.includes('Observed reference visual language')),'capture pixels and observed brief reach every generation turn');
+  assert.ok(inputs.length>=8&&inputs.every(r=>r.images===2&&r.system.includes('Observed reference visual language')&&r.system.includes('Spacing as hierarchy')),'capture pixels, the observed brief and the craft reach every generation turn');
   // Competitor search: from the brief alone, 3-5 real products through the same robots/terms capture path; refusals reported, never filled in.
   const comp=join(project,'market.html');
   await assert.rejects(run('make','A notes app for Umer','--competitors','--no-references','--out',comp),e=>/conflicts/.test(e.stdout));

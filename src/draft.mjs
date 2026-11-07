@@ -15,7 +15,7 @@ import { renderCheck } from './render-check.mjs';
 import { flowOf, flowRule } from './flow.mjs';
 import { directionText } from './styles.mjs';
 import { stopwatch } from './timing.mjs';
-import { designPrompt, HOST_EXECUTION } from './design-engine.mjs';
+import { CRAFT_SET, designPrompt, HOST_EXECUTION } from './design-engine.mjs';
 
 // The skill's own words, unmodified (Apache-2.0, src/taste/LICENSE.txt), without its attribution comment and frontmatter.
 const TASTE = readFileSync(new URL('./taste/frontend-design.md', import.meta.url), 'utf8').replace(/^<!--[\s\S]*?-->\s*---[\s\S]*?\n---\s*/, '');
@@ -45,7 +45,7 @@ export const contractRules = (drawing, human, flow) => [
   { id: 'motion-for-real', text: 'When the brief asks for motion (an animation, a typing terminal, a pulse, a marquee), write that motion for real with CSS animation or inline script, not a still of it, and honour prefers-reduced-motion.' },
 ];
 // What the model is told besides the brief: the vendored guidance, first-draft's own guidance for a company or landing page when the brief is one, then the contract.
-export const systemPrompt = (drawing, human, flow) => `${designPrompt()}\n\n---\n\n${HOST_EXECUTION}\n\n${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human, flow).map((r) => r.text).join(' ')}`;
+export const systemPrompt = (drawing, human, flow, context) => `${designPrompt(context)}\n\n---\n\n${HOST_EXECUTION}\n\n${TASTE}\n\n---\n\n${human ? `${HUMAN}\n\n---\n\n` : ''}${contractRules(drawing, human, flow).map((r) => r.text).join(' ')}`;
 export { HUMAN, TASTE };
 
 // How many options are drawn at once. Every call is the person's one subscription, shared with whatever else is signed into it: in the two live
@@ -58,7 +58,8 @@ export async function draft({ prompt, brief: original, agent, model, timeoutMs, 
   const flow = flowOf(original ?? prompt, screens);
   const render = renderCheck(warn, { pageChecks: true, humanSide: human, flow: Boolean(flow) });
   const media = LANDING.test(prompt) && !references.length && !seed ? projectMedia(prompt) : []; // a landing page about this project gets its own screenshots
-  const system = systemPrompt(render.drawing, human, flow);
+  const prompt_warnings = [];
+  const system = systemPrompt(render.drawing, human, flow, { craft: CRAFT_SET, warn: (w) => prompt_warnings.push(w) });
   const brief = [`Brief: ${prompt}`, ...(direction ? [`Direction: ${directionText(direction)}`] : []),
     ...(screens?.length ? [`Screens: ${screens.join(', ')}. Put each in its own top-level <section id="..." data-oc-screen>, the first being the opening screen, linked with in-page hash links (<a href="#id">), each with a visible way back.`]
       : flow ? [`Screens: the ${flow.count} screens of this flow, each in its own top-level <section id="..." data-oc-screen>, in order, linked with in-page hash links (<a href="#id">), each with a visible way back.`] : []),
@@ -101,6 +102,6 @@ export async function draft({ prompt, brief: original, agent, model, timeoutMs, 
   try {
     const source = restored(await ask(seed ? `${prompt}\n\nThe current page follows; change only what is asked and keep the rest.\nReply with the complete improved HTML document.\n\n${lighter(seed)}` : `${brief}\nReply with the complete HTML document.`, references));
     const { page, remote, repaired, unrepaired, repair_failed } = await checked(source);
-    return { html: page, source: 'index.html', turns: used.calls, tools: {}, truncated: false, remote, ...(repaired && { repaired }), ...(unrepaired && { unrepaired, repair_failed }), tokens_in: used.tokens_in, tokens_out: used.tokens_out, render_check: render.status, timing: seconds() };
+    return { html: page, source: 'index.html', turns: used.calls, tools: {}, truncated: false, remote, ...(repaired && { repaired }), ...(unrepaired && { unrepaired, repair_failed }), ...(prompt_warnings.length && { prompt_warnings }), tokens_in: used.tokens_in, tokens_out: used.tokens_out, render_check: render.status, timing: seconds() };
   } finally { render.close(); }
 }

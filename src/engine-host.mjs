@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { designPrompt, HOST_EXECUTION } from './design-engine.mjs';
-export const composeSystemPrompt = () => `${designPrompt()}\n\n${HOST_EXECUTION}\n\nUse the supplied workspace tools to build the design incrementally. Read a method skill when relevant. Write DESIGN.md recording the design direction, then write the source and call done(path) to submit the complete design to the host gates. A successful done ends the generation; a failed done returns the host's exact findings for a bounded repair.`;
+export const composeSystemPrompt = (context) => `${designPrompt(context)}\n\n${HOST_EXECUTION}\n\nUse the supplied workspace tools to build the design incrementally. Read a method skill when relevant. Write DESIGN.md recording the design direction, then write the source and call done(path) to submit the complete design to the host gates. A successful done ends the generation; a failed done returns the host's exact findings for a bounded repair.`;
 const paths = (root) => existsSync(root) ? readdirSync(root, { withFileTypes: true }).flatMap(e => e.isDirectory() ? paths(join(root, e.name)).map(p => `${e.name}/${p}`) : [e.name]) : [];
 const inside = (root, path) => {
   const file = resolve(root, path), rel = relative(resolve(root), file);

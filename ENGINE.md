@@ -35,6 +35,16 @@ host loop implements the editor, method-skill/scaffold loading, planning,
 image-provider bridge and `done` submission. It is not an alternate design
 brain. The established CLI commands and flags are unchanged.
 
+`designPrompt(context)` composes the recipe. An empty context is the plain
+recipe, byte for byte. `src/draft.mjs` and `src/make.mjs` pass `CRAFT_SET`, so
+craft runs on make and the engine path, which includes refining an option. Logo
+and `src/redesign-writer.mjs` pass none: redesign has no measured comparison
+yet. `CRAFT_SET` is `craft/typography.md` and `craft/typography-hierarchy.md`,
+verbatim through the composer's craft slots, followed by `CRAFT_HOST_LINE`, which
+answers what the verbatim text says about Open Design's own tools. If the composer's guard
+refuses a file, the craft is dropped, the run carries on on the plain recipe and
+`prompt_warnings` in the make JSON says why. The other craft files ship unread.
+
 **Every model call still goes through first-draft's BYOKit adapter.** Claude
 uses only the signed-in Claude subscription. No OpenDesign agent launcher,
 provider configuration, credential reader, daemon, native child agent or paid
@@ -79,8 +89,10 @@ npm test
 The script verifies the clone's HEAD/clean tracked source, resolves the
 composer's dependency graph, and reads exact blobs from Git, not working-file
 copies. Review the new manifest, update both pins above (the upstream mapping
-is the merge base with `upstream/main`), repeat the same-brief blinded old/new/
-plain rendered comparison, and retain every imported skill's legal files.
+is the merge base with `upstream/main`), update the hashes of the
+`opendesign-engine-guidance` and `opendesign-craft-spacing-set` entries in
+`docs/wrapper-allowlist.json`, repeat the same-brief blinded old/new/plain
+rendered comparison, and retain every imported skill's legal files.
 Any change needed in the fork belongs in a thin add-on on its own branch;
 record that branch and the resulting exact fork/upstream commits here.
 

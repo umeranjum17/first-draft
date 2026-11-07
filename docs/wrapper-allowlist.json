@@ -9,7 +9,7 @@
     "id": "opendesign-engine-guidance",
     "source": "src/design-engine.mjs",
     "kind": "quality",
-    "what": "The pinned OpenDesign OD Next text-artifact recipe plus first-draft's static-host bridge, before the unchanged taste/page contract. The SHA-256 is the exact default-make prefix designPrompt() + two newlines + --- + two newlines + HOST_EXECUTION.",
+    "what": "The pinned OpenDesign OD Next text-artifact recipe plus first-draft's static-host bridge, before the unchanged taste/page contract. The SHA-256 is the exact prefix designPrompt() with an empty context + two newlines + --- + two newlines + HOST_EXECUTION; default make now adds opendesign-craft-spacing-set before HOST_EXECUTION.",
     "sha256": "6b798a9a86e89a43b1b9f5234fd80133a3b947dd32ae4a96615c49bef68ac12f",
     "verdict": "provisional",
     "note": "Owner-requested engine replacement, measured as a bundle rather than isolated rules. Blind round one regressed (new 7/7.3 vs old 8/7.7). After the one allowed static-host integration repair, round two scored new 8/8, old 7.5/7 and plain 7/6.5. New also meets the original old scores 8/7.7. All scores remain below nine; no approved-layout match is claimed. Old/plain HTML was frozen, all frames freshly recaptured, and both rounds' blinding and failures retained.",
@@ -19,6 +19,59 @@
       {"brief": "Ledgerline landing (verbatim fd-plain-headtohead brief A)", "model": "claude-opus-5-5", "plain_run": "engine-swap-A-plain", "plain": 7, "with_run": "engine-swap-round2-A-new", "with": 8, "scored_by": "independent blinded byokit:codex / gpt-6.1-sol", "report": "move-first-draft-engine-onto-opendesign-e1 comparative report, round two, 2026-10-29"},
       {"brief": "Regional food-bank operations dashboard (verbatim fd-plain-headtohead brief B)", "model": "claude-opus-5-5", "plain_run": "engine-swap-B-plain", "plain": 6.5, "with_run": "engine-swap-round2-B-new", "with": 8, "scored_by": "independent blinded byokit:codex / gpt-6.1-sol", "report": "move-first-draft-engine-onto-opendesign-e1 comparative report, round two, 2026-10-29"}
     ]
+  },
+  {
+   "id": "opendesign-craft-spacing-set",
+   "source": "src/design-engine.mjs",
+   "kind": "quality",
+   "what": "One bundle, on make and the engine path, not on logo or redesign: Open Design craft/typography.md and craft/typography-hierarchy.md, verbatim through the composer's craft slots at pin 3805d0303285d019185cde25b110e5bba4f21140 (the pin did not move: fork main is still that commit), followed by this host line: The craft notes above are Open Design's. In this run no linter runs, `od.craft` settings do not apply, and no DESIGN.md exists unless one is supplied below. Token names in those notes are examples. Use all caps only where the brief or direction asks for it; when you do, track it as the notes say. The SHA-256 is that host line alone. The craft files' hashes are in vendor/open-design/manifest.json.",
+   "sha256": "82d5037a76e474d7a2f3a3e714b1dcff9e29f761a09161209c1f361b9817b584",
+   "verdict": "provisional",
+   "note": "Section 11 comparison, 2026-11-07, pin 3805d03, generator claude-sonnet-5-5, two draws per arm, two pages per blind call. Make, new against old and plain, 8 pairs: 3 up, 5 level, 0 down, so provisional and the owner's call at review. New against old: Ledgerline 8/8 and 8.5/8, food bank 8.5/7 and 8.5/8. Old against plain, 4 pairs: 1 up, 3 level, 0 down. Shipwright, reported apart, sets no verdict: generator gpt-6-luna, judged by claude-sonnet-5-5, new against old one up one down, new against plain two down, old against plain two level; those numbers are not comparable to the 2026-10-30 run. Redesign: no pair formed, so craft stays off it. Of 5 finished draws 4 made no page, 2 on each arm, and 3 draws never ran; that is untested in effect, not worse. gpt-6-luna stood in for gpt-6.1-sol, which the Codex ChatGPT login now refuses. The built-in make critic fell back to claude-sonnet-5-5 on old and new alike, so its scores are not independent and set nothing. Craft adds 12,632 characters, about 3,160 input tokens, to each make call.",
+   "decided_by": "Owner approved slice 1 of the Open Design discovery report, 2026-11-07; section 8 applied per path, make's call left to the owner at review",
+   "needed": "A redesign comparison that forms pairs (site and board, old and new, two draws each) before craft goes on redesign; arms that separate the two files from the host line.",
+   "evidence": [
+    {
+     "brief": "Ledgerline landing (verbatim fd-plain-headtohead brief A)",
+     "model": "claude-sonnet-5-5",
+     "plain_run": "fd-od-slice1-ledgerline-plain-1",
+     "plain": 8,
+     "with_run": "fd-od-slice1-ledgerline-new-1",
+     "with": 8.5,
+     "scored_by": "independent blinded byokit:codex / gpt-6-luna",
+     "report": "fd-od-slice1-craft acceptance, 2026-11-07"
+    },
+    {
+     "brief": "Ledgerline landing (verbatim fd-plain-headtohead brief A)",
+     "model": "claude-sonnet-5-5",
+     "plain_run": "fd-od-slice1-ledgerline-plain-2",
+     "plain": 7.5,
+     "with_run": "fd-od-slice1-ledgerline-new-2",
+     "with": 8.5,
+     "scored_by": "independent blinded byokit:codex / gpt-6-luna",
+     "report": "fd-od-slice1-craft acceptance, 2026-11-07"
+    },
+    {
+     "brief": "Regional food-bank operations dashboard (verbatim fd-plain-headtohead brief B)",
+     "model": "claude-sonnet-5-5",
+     "plain_run": "fd-od-slice1-foodbank-plain-1",
+     "plain": 7.5,
+     "with_run": "fd-od-slice1-foodbank-new-1",
+     "with": 8,
+     "scored_by": "independent blinded byokit:codex / gpt-6-luna",
+     "report": "fd-od-slice1-craft acceptance, 2026-11-07"
+    },
+    {
+     "brief": "Regional food-bank operations dashboard (verbatim fd-plain-headtohead brief B)",
+     "model": "claude-sonnet-5-5",
+     "plain_run": "fd-od-slice1-foodbank-plain-2",
+     "plain": 6.5,
+     "with_run": "fd-od-slice1-foodbank-new-2",
+     "with": 8,
+     "scored_by": "independent blinded byokit:codex / gpt-6-luna",
+     "report": "fd-od-slice1-craft acceptance, 2026-11-07"
+    }
+   ]
   },
   {
     "id": "frontend-design-guidance",
