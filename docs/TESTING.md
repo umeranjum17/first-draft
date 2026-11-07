@@ -16,7 +16,7 @@ npm ci && npm pack && npm install -g ./first-draft-axi-*.tgz   # pack and instal
 export FIRST_DRAFT_HOME=$(mktemp -d)                            # throwaway config, nothing of yours is touched
 mkdir ~/fd-test && cd ~/fd-test
 
-first-draft-axi init --agent byokit:codex --model gpt-6.1-sol    # ~1 s
+first-draft-axi init --agent byokit:codex --model gpt-6-luna    # ~1 s
 first-draft-axi doctor                                           # 4–20 s, no model call, "ready": true
 first-draft-axi make "A notes app" --out notes.html              # 7–10 min, three options
 first-draft-axi view notes.html --host 127.0.0.1                 # prints a URL within ~15 s; open it; Ctrl+C stops it

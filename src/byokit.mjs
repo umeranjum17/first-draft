@@ -1,6 +1,7 @@
 // BYOKit owns every model call: plan keys, api keys or the user's installed subscription CLI.
 import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
 import { modelPool, poolNext, poolPick } from './model-pool.mjs';
 const CLI_ROUTES = ['claude', 'codex'];
@@ -60,7 +61,11 @@ async function cliAnswer(route, { model, images, timeoutMs, signal }, call) {
   const pool = modelPool();
   if (!pool) {
     const { bin, account } = await launch(route);
-    return call(await backendOn(route, { bin, account, model, timeoutMs }));
+    try { return await call(await backendOn(route, { bin, account, model, timeoutMs })); } catch (e) {
+      // The adapter blames sign-in for any failed turn; ask Codex whether it simply refused the model.
+      const p = e.code === 'process' && route === 'codex' && await probeCodexModel(model.replace(/^openai-codex\//, '')).catch(() => undefined);
+      throw p?.refused ? refusal(route, model, p) : e;
+    }
   }
   const deadline = Math.ceil((Date.now() + timeoutMs) / 1000), attempted = [];
   let selection, cause;
@@ -84,6 +89,24 @@ async function cliAnswer(route, { model, images, timeoutMs, signal }, call) {
     }
   }
 }
+// Does this Codex login serve the model? The adapter reports any failed turn as "check that Codex is signed in", so a refused model reads
+// like a sign-in fault. One tiny turn asks Codex itself: only its own model_not_found answer counts as a refusal; any other failure is inconclusive.
+const probed = new Map();
+export function probeCodexModel(model) {
+  if (!probed.has(model)) probed.set(model, (async () => {
+    const { bin } = await installed('codex'), env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/KEY|TOKEN|SECRET|^NODE_OPTIONS$/i.test(k)));
+    const out = await new Promise((done) => { const child = execFile(bin, ['exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules', '--sandbox', 'read-only', '--model', model, '-c', 'model_reasoning_effort="low"', '-c', 'forced_login_method="chatgpt"', '-'], { env, cwd: tmpdir(), timeout: 60_000, maxBuffer: 4_000_000 }, (_e, stdout) => done(stdout ?? '')); child.stdin.on('error', () => {}); child.stdin.end('Reply with the single word ok.'); });
+    for (const line of out.split('\n')) {
+      let event; try { event = JSON.parse(line); } catch { continue; }
+      if (event?.type !== 'turn.failed') continue;
+      let error; try { error = JSON.parse(event.error?.message)?.error; } catch { continue; }
+      if (error?.code === 'model_not_found') return { refused: true, code: error.code, message: error.message };
+    }
+    return { refused: false, served: out.includes('"turn.completed"') };
+  })());
+  return probed.get(model);
+}
+const refusal = (route, model, p) => Object.assign(new Error(`byokit:${route} / ${model} was refused by Codex (${p.code}): ${p.message} This is not a sign-in fault. Pick a model this login serves: first-draft-axi init --agent byokit:codex --model ${DEFAULT_MODELS.codex}`), { code: p.code });
 const MEMBER = 'first-draft';
 // The most a subscription CLI route lets one reply write (BYOKit's own limit): a page call asks for all of it, never less (wrapper-baseline test).
 export const OUTPUT_CAP = 16_384;
@@ -119,7 +142,7 @@ export async function engineOf(agent) {
   return provider === 'openai' ? 'codex' : provider === 'anthropic' ? 'claude' : provider;
 }
 
-export const DEFAULT_MODELS = { claude: 'claude-sonnet-5-5', codex: 'gpt-6.1-sol' };
+export const DEFAULT_MODELS = { claude: 'claude-sonnet-5-5', codex: 'gpt-6-luna' };
 export const engineInstruction = (route) => route === 'codex' ? 'Sign in to ChatGPT: codex login' : 'Sign in to Claude: claude auth login';
 export const engineRequired = (route, reason = 'No usable AI engine') => Object.assign(new Error(`${reason}. ${engineInstruction(route)}`), { code: 'NO_ENGINE' });
 
@@ -258,7 +281,7 @@ export async function writePage({ route, model, system, prompt, images = [], sig
   return { html: text.match(/<!doctype[\s\S]*<\/html>|<html[\s\S]*<\/html>/i)?.[0] ?? text, tokens_in: message.usage?.input ?? 0, tokens_out: message.usage?.output ?? 0 };
 }
 
-// Local route readiness only: no paid model availability probe.
+// Route readiness; Codex also gets one tiny availability probe so a refused model reads as refused, not as ok.
 export async function doctor(route, model) {
   const label = `byokit:${route}`;
   const problem = await check(route, model).catch((e) => e.message);
@@ -269,7 +292,10 @@ export async function doctor(route, model) {
       let row = await accounts.status(`installed-${route}`);
       if (row.state !== 'ready' || (route === 'claude' && row.method !== 'subscription')) row = await pooledStatus(route, model) ?? row;
       if (row.state === 'ready' && route === 'claude' && row.method !== 'subscription') return { label, status: 'fail', detail: 'Claude must be signed in with a Claude subscription, not an API key or another billing route' };
-      return { label, status: row.state === 'ready' ? 'ok' : 'fail', detail: row.state === 'ready' ? `installed CLI; model ${model} (availability not probed); adapter supports image input` : row.cause || row.state };
+      if (row.state !== 'ready') return { label, status: 'fail', detail: row.cause || row.state };
+      const p = route === 'codex' && !modelPool() ? await probeCodexModel(model.replace(/^openai-codex\//, '')).catch(() => undefined) : undefined;
+      if (p?.refused) return { label, status: 'fail', detail: refusal(route, model, p).message };
+      return { label, status: 'ok', detail: `installed CLI; model ${model} (${route === 'codex' ? (p?.served ? 'availability probed: served' : 'availability probe inconclusive') : 'availability not probed'}); adapter supports image input` };
     } catch (e) { return { label, status: 'fail', detail: e.message }; }
   }
   const key = await planKey(route);

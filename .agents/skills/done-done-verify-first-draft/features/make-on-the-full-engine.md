@@ -32,7 +32,7 @@ with `prompt_warnings` in the make JSON. `done-done run craft` recaptures a reta
 2. Use an explicitly authorized task-owned FIRST_DRAFT_HOME and a short real
    TMPDIR for Chrome. Keep normal HOME and the signed-in subscription; never
    copy credentials. Initialize `byokit:claude` / `claude-opus-5-5` and an
-   independent `byokit:codex` / `gpt-6.1-sol` judge. `doctor` must name the exact
+   independent `byokit:codex` / `gpt-6-luna` judge. `doctor` must name the exact
    OpenDesign pin and make no model request.
 3. Run `first-draft-axi make "<brief>" --options 1 --engine --out <file.html>`.
    Read `source`, `turns`, `tools`, `truncated`, render status and the independent

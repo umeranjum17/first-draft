@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 // done-done sets only DONE_DONE_EVIDENCE_ROOT for a journey command, so the agent defaults to the route this repo documents; FD_DESIGN_AGENT/FD_DESIGN_MODEL still override it.
 const out = process.env.DONE_DONE_EVIDENCE_ROOT, source = process.env.FD_ASSET_SOURCE, providers = process.env.FD_ASSET_PROVIDERS ?? 'codex';
-const agent = process.env.FD_DESIGN_AGENT ?? 'byokit:codex', model = process.env.FD_DESIGN_MODEL ?? 'gpt-6.1-sol';
+const agent = process.env.FD_DESIGN_AGENT ?? 'byokit:codex', model = process.env.FD_DESIGN_MODEL ?? 'gpt-6-luna';
 if ((process.argv.includes('--capture-only') && !source) || !out || (!source && !(agent && model))) throw new Error('Need DONE_DONE_EVIDENCE_ROOT and an approved design agent and model (or FD_ASSET_SOURCE for nonpaid recapture)');
 const root = new URL('..', import.meta.url).pathname, d = mkdtempSync(join(tmpdir(), 'fd-assets-'));
 const env = { ...process.env, FIRST_DRAFT_HOME: join(d, 'home'), CHROME_DEVTOOLS_AXI_SESSION: `fd-assets-${process.pid}`, CHROME_DEVTOOLS_AXI_USER_DATA_DIR: join(d, 'browser') };

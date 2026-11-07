@@ -27,7 +27,7 @@ For developers and coding agents: explore HTML options using your own AI subscri
 npm install -g first-draft-axi
 first-draft-axi init \
   --agent byokit:codex \
-  --model gpt-6.1-sol
+  --model gpt-6-luna
 first-draft-axi make "A notes app" \
   --out notes.html && \
   first-draft-axi view notes.html
@@ -35,7 +35,7 @@ first-draft-axi make "A notes app" \
 
 Requires Node **22.18+**, Chrome/Chromium, a usable AI generator and an independent signed-in subscription judge on a different engine (normally Claude plus Codex). Saved configuration is optional: first-draft resolves ready installed logins and supported BYOKit key routes, then names the chosen generator and judge in the run JSON. Without a usable engine it exits with one exact sign-in command, before generating pages. Open the URL `view` prints; Ctrl+C stops it. Generation uses your subscription quota; viewing makes no model calls.
 
-Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 with your signed-in Claude CLI. `first-draft-axi doctor` checks readiness without a model call and names the resolved engine. [Other routes](#models).
+Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 with your signed-in Claude CLI. `first-draft-axi doctor` checks readiness, sends one tiny Codex turn to confirm the model is served, and names the resolved engine. [Other routes](#models).
 
 ## Why first-draft?
 

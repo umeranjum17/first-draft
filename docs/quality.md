@@ -85,7 +85,7 @@ Both: `claude-sonnet-5-5` through `byokit:claude`, one option each, four turns, 
 Requires a chosen, signed-in subscription model. **This spends your model quota**; it is not part of CI or README rendering.
 
 ```sh
-first-draft-axi init --agent byokit:codex --model gpt-6.1-sol
+first-draft-axi init --agent byokit:codex --model gpt-6-luna
 node scripts/compare.mjs "A notes app" --out /var/tmp/notes-comparison
 ```
 
