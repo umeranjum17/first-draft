@@ -38,8 +38,9 @@ brain. The established CLI commands and flags are unchanged.
 `designPrompt(context)` composes the recipe. An empty context is the plain
 recipe, byte for byte. `src/draft.mjs` and `src/make.mjs` pass `CRAFT_SET`, so
 craft runs on make and the engine path, which includes refining an option. Logo
-and `src/redesign-writer.mjs` pass none: redesign has no measured comparison
-yet. `CRAFT_SET` is `craft/typography.md` and `craft/typography-hierarchy.md`,
+and `src/redesign-writer.mjs` pass none: two redesign comparisons (2026-11-07 and
+2026-11-09) formed no pair, because both arms rarely clear the redesign checks.
+`CRAFT_SET` is `craft/typography.md` and `craft/typography-hierarchy.md`,
 verbatim through the composer's craft slots, followed by `CRAFT_HOST_LINE`, which
 answers what the verbatim text says about Open Design's own tools. If the composer's guard
 refuses a file, the craft is dropped, the run carries on on the plain recipe and
