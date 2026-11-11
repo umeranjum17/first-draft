@@ -17,6 +17,7 @@ import { appEntry, captureSources, readSources, writeSources } from './reference
 import { searchQueries, searchReferences } from './reference-search.mjs';
 import { ReferenceNetwork } from './reference-network.mjs';
 import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
+import { writeDirection } from './direction.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { planDirections } from './direct.mjs';
 import { OPTIONS_AT_ONCE, draft } from './draft.mjs';
@@ -39,7 +40,7 @@ import { benchmark } from './benchmark.mjs';
 import { polish, polishFeedback, roundCap } from './polish.mjs';
 import { startRun, updateRun, finishRun, failRun, loadRun, listRuns, observedRun, recordCount, recordRefine } from './run-record.mjs';
 
-const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
+const DEFAULT_MODEL = { 'byokit:claude': 'claude-sonnet-5-5' };
 const PICK = 'an optional preferred route and model with `first-draft-axi init --agent byokit:<route> --model <model>`';
 const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
@@ -461,6 +462,7 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
       writeFileSync(out, made.html);
       if (made.source_files) writeSource(out, made.source_files); // the source the page was drawn from, readable beside it
       if (film) film.dir = writeMotion(out, film, critique.motion); // the frame series the judge read, beside the option for the view
+      if (planned) writeDirection(out, planned.directions[i]); // the direction for this option, beside it for the view and board
       writeOptionReferences(out,refs.metadata);
       writeCompetitors(out,refs.competitors);
       writeSources(out,refs.sources);

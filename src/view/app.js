@@ -668,7 +668,29 @@ window.addEventListener('message', (e) => {
     }
   }
 });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.querySelector('.menu:popover-open') && !stopCommenting?.()) leaveFull(); });
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.querySelector('.menu:popover-open') && !stopCommenting?.()) return leaveFull();
+  // Keyboard switching (keys 1-N and arrows): ignored in text boxes and with modifiers held.
+  if (!design?.options || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  const focused = document.activeElement;
+  if (focused && ['INPUT', 'TEXTAREA', 'SELECT'].includes(focused.tagName)) return;
+  if (focused?.isContentEditable) return;
+  const route = window.location.hash.match(/^#\/o\/(\d+)(\/|$)/);
+  if (!route) return;
+  const current = parseInt(route[1], 10);
+  let next = null;
+  // Keys 1 through N (both regular and numpad)
+  const num = parseInt(e.key, 10);
+  if (num >= 1 && num <= design.options.length) next = num;
+  // Arrow keys
+  else if (e.key === 'ArrowRight') next = current < design.options.length ? current + 1 : 1;
+  else if (e.key === 'ArrowLeft') next = current > 1 ? current - 1 : design.options.length;
+  if (next !== null && next !== current) {
+    e.preventDefault();
+    const rest = window.location.hash.slice(route[0].length);
+    window.location.hash = `#/o/${next}${rest ? '/' + rest : ''}`;
+  }
+});
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) leaveFull(); });
 window.addEventListener('hashchange', render);
 document.addEventListener('touchstart', () => {}, { passive: true }); // iOS Safari shows :active (the press states) only on a page that listens for touches

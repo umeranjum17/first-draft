@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { viewHost } from './view.mjs';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
+import { readDirection } from './direction.mjs';
 
 const CLI = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const LETTERS = 'abcdef'; // sign-off's design card shows up to 6 options
@@ -76,14 +77,16 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   const dir = join(dirname(boardFile), 'mocks', name);
   if (!evidence) mkdirSync(dir, { recursive: true });
   const options = files.map((file, i) => {
+    const direction = readDirection(file);
+    const defaultLabel = direction?.name || `Option ${i + 1}`;
     const link = `${new URL(view.url).origin}/#/o/${i + 1}/play`;
     const variants = { canvas: `${new URL(view.url).origin}/#/o/${i + 1}`, desktop: `${link}/desktop`, phone: `${link}/phone` };
-    if (evidence) return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, link, ...variants };
+    if (evidence) return { option: LETTERS[i], label: labels[i] || defaultLabel, link, ...variants };
     const copy = join(dir, `option-${i + 1}.html`);
     if (resolve(file) === copy) throw new PostError('USAGE', `${file} is already the board copy; post the original option files`);
     copyFileSync(file, copy);
     writeOptionReferences(copy, readOptionReferences(file));
-    return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link, ...variants };
+    return { option: LETTERS[i], label: labels[i] || defaultLabel, mock: relative(dirname(boardFile), copy), link, ...variants };
   });
   // The canvas url shows phone 390 and desktop 1280 side by side; Play (the Open link under each mock) runs one. The board clips long text, so the one-device urls stay in this command's JSON.
   const open = `Phone and desktop side by side: ${options.map((o) => `${o.label} ${o.canvas}`).join(' · ')}`;
