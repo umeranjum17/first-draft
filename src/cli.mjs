@@ -2,7 +2,7 @@
 // first-draft-axi: authenticated generation and independent AI judgement, never degraded output.
 import { isUtf8 } from 'node:buffer';
 import { checkConsistency } from './consistency-check.mjs';
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -67,6 +67,16 @@ const save = ({ agent, model, judge }) => {
 
 const fail = (code, message, help = []) => {
   console.log(JSON.stringify({ error: { code, message }, help }));
+  process.exit(1);
+};
+// A make that finished fewer options than it was asked for stops here, never as a normal result: the error names each option that was lost and why,
+// the options that were made stay listed, and the same account is kept beside them in <out>.stopped.json so a folder of partial options is not read as complete.
+const stopped = ({ lost, files, count, record }) => {
+  const message = `Only ${files.length} of ${count} options were made. ${lost.map((l) => `Option ${l.option} (${basename(l.file)}) ${l.code}: ${l.message}`).join(' | ')}`;
+  const help = ['Run `first-draft-axi doctor`. If it passes, the model call itself failed: an engine reports any failed call as a sign-in problem, and a page longer than the model\'s 16,384-token output limit fails this way',
+    'Re-run make with fewer options or a shorter brief; the options listed under made.files are complete, the others were not made'];
+  writeFileSync(record, `${JSON.stringify({ stopped: true, requested: count, made: files.map((f) => f.file), failed: lost, message }, null, 2)}\n`);
+  console.log(JSON.stringify({ error: { code: 'OPTIONS_INCOMPLETE', message }, made: { requested: count, files, failed: lost }, record, help }));
   process.exit(1);
 };
 const flags = (args, options) => {
@@ -370,6 +380,8 @@ if (command === 'check') {
     }
   }
   const png = (url) => Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  const record = `${resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '')}.stopped.json`;
+  rmSync(record, { force: true }); // a record left by an earlier stopped run must not describe this one
   const numberedOf = (n) => outPath.includes('{i}') ? outPath.replaceAll('{i}', String(n)) : count > 1 ? outPath.slice(0, -extname(outPath).length || undefined) + `-${n}` + extname(outPath) : outPath;
   // Several options with no direction named: the model plans one direction per option for this brief (direct.mjs), not a style from a fixed list.
   let planned;
@@ -385,6 +397,9 @@ if (command === 'check') {
   // beside them. A logo's options were drawn already; redesign pages, the engine loop (--engine) and generated assets (paid, one budget) keep their order.
   const slots = [], stages = {}; // stages: the seconds each kind of work took, summed over the options (the critic reports its own)
   let logos = 0;
+  // An option that cannot be made or judged ends only that option: the others go on and finish, and the run reports every loss at the end (stopped below).
+  const lossesOf = [];
+  const lost = (i, numbered, code, message) => { lossesOf.push({ option: i + 1, file: resolve(numbered), code, message }); };
   const one = async (i) => {
     let made, written, option;
     const direction = directionOf(i);
@@ -395,14 +410,14 @@ if (command === 'check') {
     const numbered = numberedOf(logo ? ++logos : i + 1);
     const opened = Date.now();
     try { made = option?.made ?? await build(i, numbered); }
-    catch (e) { critic?.close?.(); fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+    catch (e) { return lost(i, numbered, 'MAKE_FAILED', `${c.agent} (${c.model}) did not make the ${logo ? 'logo' : 'design'}: ${e.message}`); }
     for (const [stage, took] of Object.entries(made.timing ?? {})) stages[stage] = (stages[stage] ?? 0) + took;
     let critique, film;
     if (critic?.judge) {
       try { ({ made, critique, film } = await critic.judge(made)); }
       catch (e) {
         // Every judge failed: this option is unscored and flagged (never passed); the other options and every deterministic check go on.
-        if (e.code !== 'JUDGE_ALL_FAILED') { critic.close(); fail('JUDGE_FAILED', e.message); }
+        if (e.code !== 'JUDGE_ALL_FAILED') return lost(i, numbered, 'JUDGE_FAILED', e.message);
         critique = { score: null, passed: false, rounds: 0, error: e.message, code: 'JUDGE_ALL_FAILED', judge_failures: e.failures };
       }
     }
@@ -442,6 +457,7 @@ if (command === 'check') {
   const consistencyFailures = files.filter((f) => f.consistency?.mismatches?.length);
   cut.sort();
   critic?.close?.();
+  if (lossesOf.length) stopped({ lost: lossesOf.sort((x, y) => x.option - y.option), files, count, record });
   if (consistencyFailures.length) {
     console.log(JSON.stringify({ error: { code: 'DATA_MISMATCH', message: 'generated options contradict the supplied structured data' }, made: { files }, help: ['Correct the generated figures/states, or use --skip-check only when the brief has no structured data'] }));
     process.exit(1);
