@@ -37,6 +37,7 @@ import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
 import { polish, polishFeedback, roundCap } from './polish.mjs';
+import { startRun, updateRun, finishRun, failRun, loadRun, listRuns, observedRun } from './run-record.mjs';
 
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const PICK = 'an optional preferred route and model with `first-draft-axi init --agent byokit:<route> --model <model>`';
@@ -65,7 +66,9 @@ const save = ({ agent, model, judge }) => {
   writeFileSync(CONFIG(), `${JSON.stringify(c, null, 2)}\n`);
 };
 
+let activeRun;
 const fail = (code, message, help = []) => {
+  failRun(activeRun, `${code}: ${message}`);
   console.log(JSON.stringify({ error: { code, message }, help }));
   process.exit(1);
 };
@@ -75,6 +78,7 @@ const stopped = ({ lost, files, count, record }) => {
   const message = `Only ${files.length} of ${count} options were made. ${lost.map((l) => `Option ${l.option} (${basename(l.file)}) ${l.code}: ${l.message}`).join(' | ')}`;
   const help = ['Run `first-draft-axi doctor`. If it passes, the model call itself failed: an engine reports any failed call as a sign-in problem, and a page longer than the model\'s 16,384-token output limit fails this way',
     'Re-run make with fewer options or a shorter brief; the options listed under made.files are complete, the others were not made'];
+  failRun(activeRun, message);
   writeFileSync(record, `${JSON.stringify({ stopped: true, requested: count, made: files.map((f) => f.file), failed: lost, message }, null, 2)}\n`);
   console.log(JSON.stringify({ error: { code: 'OPTIONS_INCOMPLETE', message }, made: { requested: count, files, failed: lost }, record, help }));
   process.exit(1);
@@ -177,7 +181,7 @@ const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
 
 const HELP = `first-draft-axi ${VERSION}
 usage: first-draft-axi <command> [flags]
-commands[15]:
+commands:
   benchmark --product <type> --screen <view> --input <captures.json> --out <sheet.html> [--width 390|1280] [--theme light|dark] [--project <folder>]   authenticated engine and independent judge required; publish only complete reference-based assessments
     --no-discovery / --no-judge are test-only plumbing, refused unless FIRST_DRAFT_TEST_BENCHMARK=1; never for user results
   redesign <https-url|html-folder> "<intent>" --out <folder> [--ref <image>] [--max-pages 1-12]   discover linked pages and redesign them (anonymous, scripts disabled; default 6 pages, 1 option)
@@ -209,6 +213,10 @@ commands[15]:
   polish-feedback <run-folder> "<request>"   add cumulative feedback while polish is running
   view <design> [--host H] [--port P]   serve a design's options as a grid, a phone or desktop canvas and fullscreen, until stopped
   post <design> --title "<question>" --recommend <a|1> | --evidence --media <shot>... [--option a=<label>]... [--tradeoff T] [--key K] [--board B|$FIRST_DRAFT_BOARD] [--host H] [--port P]   post a design card to a sign-off board with each option's Play url as a tappable link under it
+  status [run-id]                    inspect a run (default: latest)
+  runs                               list runs in this project
+  logs [run-id]                      show recorded lifecycle events
+  attach [run-id]                    follow a run until it finishes
   doctor                              show whether the configured agent is ready, with no paid call
   init [--harness claude,codex,pi] [--global]   set this repo up: the .first-draft/ work folder and the first-draft-axi skill for claude, codex and pi (safe to re-run; --global links the skill from the home folder)
   init --agent byokit:<route> --model <model> [--judge byokit:codex|byokit:claude --judge-model <model>]   save generator and optional independent subscription judge (default: the other installed subscription engine)
@@ -232,7 +240,20 @@ if (!command || command === '--help' || command === '-h' || rest.includes('--hel
 if (command === '--version' || command === '-v') { console.log(VERSION); process.exit(0); }
 
 try {
-if (command === 'check') {
+if (['status', 'runs', 'logs', 'attach'].includes(command)) {
+  const { positionals } = flags(rest, {});
+  if (positionals.length > 1 || (command === 'runs' && positionals.length)) fail('USAGE', `${command} accepts ${command === 'runs' ? 'no arguments' : 'at most one run id'}`);
+  if (command === 'runs') console.log(JSON.stringify({ runs: listRuns().map(observedRun) }));
+  else {
+    const id = positionals[0] ?? listRuns()[0]?.id;
+    if (!id) fail('NO_RUN', 'No runs in this project');
+    const show = () => observedRun(loadRun(id));
+    if (command === 'attach') {
+      let last = '';
+      for (;;) { const run = show(), line = JSON.stringify(run); if (line !== last) console.log(line); last = line; if (run.health !== 'running') break; await new Promise((r) => setTimeout(r, 500)); }
+    } else { const run = show(); console.log(JSON.stringify(command === 'logs' ? { id, events: run.events } : run)); }
+  }
+} else if (command === 'check') {
   const { values, positionals } = flags(rest, { data: { type: 'string' } });
   if (!values.data || !positionals.length) fail('USAGE', 'check needs one or more HTML pages and --data <file.json>');
   let data;
@@ -333,6 +354,11 @@ if (command === 'check') {
   if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
   if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
   const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
+  if (command === 'make') {
+    activeRun = startRun(prompt);
+    process.on('exit', (code) => { if (activeRun?.health === 'running') failRun(activeRun, `process exited with code ${code}`); });
+    for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { if (activeRun?.health === 'running') updateRun(activeRun, activeRun.state, { health: 'interrupted', error: `interrupted by ${signal}` }); process.exit(signal === 'SIGINT' ? 130 : 143); });
+  }
   const c = await agentOrAsk(values.model);
   c.review = await resolveJudge(c, c.judge);
   const images = await readReferences(values.ref, values.model);
@@ -342,12 +368,13 @@ if (command === 'check') {
   const flow = flowOf(prompt, screens);
   try { assetSession = await prepareAssets(values, count, flow ? (flow.screens.length || flow.count) + 1 : undefined); } catch (e) { fail('ASSETS_FAILED', e.message, [assetHelp]); }
   if (assetSession) {
-    if (!assetSession.preview.approved) { console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
+    if (!assetSession.preview.approved) { if (activeRun) finishRun(activeRun, { note: 'Asset preview only; no design was made' }); console.log(JSON.stringify({ asset_preview: assetSession.preview, help: ['No image or design model call made. Repeat with --allow-asset-spend to approve this asset budget.'] })); process.exit(0); }
     process.stderr.write(`${JSON.stringify({ asset_preview: assetSession.preview })}\n`);
   }
   const started = Date.now();
   let refs;
   try { refs = logo ? { images, tokens_in:0, tokens_out:0 } : await prepareReferences(values,prompt,c,images); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
+  if (activeRun) updateRun(activeRun, 'options');
   const critic = logo || redesign ? null : await openCritic({ c, brief: prompt, references: refs.images, home: HOME(), judgeSet: c.review, firstView: values['first-view'], plainOut: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.critic/plain.html' });
   let inventory;
   if (redesign) {
@@ -459,12 +486,19 @@ if (command === 'check') {
   critic?.close?.();
   if (lossesOf.length) stopped({ lost: lossesOf.sort((x, y) => x.option - y.option), files, count, record });
   if (consistencyFailures.length) {
+    failRun(activeRun, 'DATA_MISMATCH: generated options contradict the supplied structured data');
     console.log(JSON.stringify({ error: { code: 'DATA_MISMATCH', message: 'generated options contradict the supplied structured data' }, made: { files }, help: ['Correct the generated figures/states, or use --skip-check only when the brief has no structured data'] }));
     process.exit(1);
   }
   if (logo && !files.length) fail('MAKE_FAILED', `the concept critique left no concept to draw: ${drawn.concepts.map((k) => `${k.name} (${k.verdict}; ${(k.flaws ?? []).join('; ')})`).join(', ')}`, ['Run logo again, or name a --direction in your own words']);
   if (critic?.used) { tokens_in += critic.used.tokens_in; tokens_out += critic.used.tokens_out; }
   const low = files.filter((f) => f.critique && !f.critique.passed);
+  if (activeRun) {
+    const results = { files: files.map((f) => f.file), scores: files.map((f) => ({ file: f.file, critique: f.critique })) };
+    const unscored = files.filter((f) => f.critique?.code === 'JUDGE_ALL_FAILED');
+    if (unscored.length) { Object.assign(activeRun, results); failRun(activeRun, `${unscored.length} option(s) could not be scored`); }
+    else { updateRun(activeRun, 'critiqued', results); finishRun(activeRun); }
+  }
   console.log(JSON.stringify({ made: { command, at: new Date(started).toISOString(), files, agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in, tokens_out, render_check, ...(Object.keys(stages).length && { timing: { options: stages, ...(critic?.timing && { critic: critic.timing() }) } }),
       judge: { agent: c.review.agent, model: c.review.model }, ...(critic && { critic: { pass: PASS, ...(critic.plainFile() && { plain: critic.plainFile() }), judge: critic.judged } }) },
     ...(drawn && { concepts: conceptSummary(drawn), ...(drawn.dropped.length && { dropped: drawn.dropped }), rounds: drawn.rounds, baseline: drawn.baseline.file ? { file: drawn.baseline.file, logo_dir: drawn.baseline.logo_dir } : { error: drawn.baseline.error }, ...(drawn.kinds_missing && { kinds_missing: drawn.kinds_missing }), ...(drawn.second_round && { second_round: drawn.second_round }),
