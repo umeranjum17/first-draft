@@ -2,7 +2,7 @@
 // option's Play route in the running view (started here when it is not up) as that option's --link (sign-off-axi 0.5.0+, a tappable
 // Open under its mock) and, as the fallback, in the --tradeoff text: the card's iframe sandbox blocks a link inside the mock.
 import { execFile, spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -63,6 +63,14 @@ async function ensureView({ files, host, port }) {
   return { url: r.viewing.url, started: true, pid: child.pid };
 }
 
+// The design card's key as the board stored it: --key when given, else the one sign-off made from the title (the newest design card with it).
+const cardKey = (boardFile, title, given) => {
+  if (given) return given;
+  const item = JSON.parse(readFileSync(boardFile, 'utf8')).items.filter((i) => i.title === title && i.type === 'design').at(-1);
+  if (!item) throw new PostError('POST_FAILED', `sign-off-axi posted, but the board holds no design card titled "${title}"`, ['Run `sign-off-axi answers` to find the card']);
+  return item.key;
+};
+
 // evidence: file the options as an Evidence card (title, note with each Play url, --media), which asks no pick: journeys, tests and demos.
 export async function post({ files, name, title, labels = [], tradeoff, key, recommend, evidence, media = [], board, host: hostFlag, port }) {
   if (files.length > LETTERS.length) throw new PostError('USAGE', `a sign-off design card shows up to ${LETTERS.length} options; ${files.length} found`, ['Post a folder of at most 6 options']);
@@ -95,7 +103,7 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
     ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`, '--link', `${o.option}=${o.link}`])];
   try {
     const { stdout } = await promisify(execFile)('sign-off-axi', args, { maxBuffer: 1e7 });
-    return { board: boardFile, view, options, sign_off: redact(stdout.trim()) };
+    return { board: boardFile, view, options, sign_off: redact(stdout.trim()), key: evidence ? undefined : cardKey(boardFile, title, key) };
   } catch (e) {
     throw new PostError('POST_FAILED', `sign-off-axi post failed: ${redact((e.stderr || e.stdout || e.message).trim())}`, ['Run `sign-off-axi doctor`']);
   }

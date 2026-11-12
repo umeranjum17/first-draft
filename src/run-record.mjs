@@ -14,8 +14,9 @@ const save = (run) => {
   renameSync(temp, path);
 };
 // Loop and refine events are appended separately so concurrent processes do not overwrite the run state or each other.
+const readRun = (id) => JSON.parse(readFileSync(file(id), 'utf8'));
 export function loadRun(id) {
-  const run = JSON.parse(readFileSync(file(id), 'utf8'));
+  const run = readRun(id);
   let lines;
   try { lines = readFileSync(`${file(id)}.counts`, 'utf8').trim().split('\n').filter(Boolean); }
   catch (e) { if (e.code !== 'ENOENT') throw e; lines = []; }
@@ -58,6 +59,18 @@ export function updateRun(run, state, fields = {}) {
   Object.assign(run, fields, { state, updated_at: new Date().toISOString() });
   run.events.push({ at: run.updated_at, state, health: run.health, ...(run.error && { error: run.error }) });
   save(run);
+}
+// `post` and `pick` (machine 14): only a finished, critiqued run moves to posted, and only a posted run moves to picked. Any other run,
+// and any other order, is left as it is. The stored record is read again so the derived counts are never written back into it.
+export function advanceRun(id, from, state, fields) {
+  const run = readRun(id);
+  if (run.state !== from || run.health !== 'finished') return null;
+  updateRun(run, state, fields);
+  return loadRun(id);
+}
+export function recordPosted(path, posted) {
+  const run = listRuns().find((r) => r.files.some((f) => resolve(f) === resolve(path)));
+  return run && advanceRun(run.id, 'critiqued', 'posted', { posted });
 }
 export function finishRun(run, fields = {}) { updateRun(run, run.state, { health: 'finished', ...fields }); }
 export function failRun(run, message) { if (run?.health === 'running') updateRun(run, run.state, { health: 'failed', error: message }); }
