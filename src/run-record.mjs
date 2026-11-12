@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = () => resolve('.first-draft/runs');
@@ -13,7 +13,37 @@ const save = (run) => {
   writeFileSync(temp, `${JSON.stringify(run, null, 2)}\n`);
   renameSync(temp, path);
 };
-export const loadRun = (id) => JSON.parse(readFileSync(file(id), 'utf8'));
+// Loop and refine events are appended separately so concurrent processes do not overwrite the run state or each other.
+export function loadRun(id) {
+  const run = JSON.parse(readFileSync(file(id), 'utf8'));
+  let lines;
+  try { lines = readFileSync(`${file(id)}.counts`, 'utf8').trim().split('\n').filter(Boolean); }
+  catch (e) { if (e.code !== 'ENOENT') throw e; lines = []; }
+  const counts = { limits: { done_followups: 3, plan_tries: 2, screen_tries: 3, logo_concept_tries: 3 }, done_followups: {}, plan_tries: {}, screen_tries: {}, logo_concept_tries: {}, refine_calls: 0 };
+  const loop_events = [];
+  for (const line of lines) {
+    const event = JSON.parse(line);
+    if (event.kind === 'refine') counts.refine_calls++;
+    else if (event.kind === 'file') run.files = [...new Set([...run.files, event.path])];
+    else {
+      const cap = event.kind === 'plan_tries' ? 2 : 3;
+      const label = event.kind === 'done_followups' ? 'follow-up' : event.kind === 'plan_tries' ? 'plan try' : event.kind === 'screen_tries' ? 'screen try' : 'logo concept try';
+      counts[event.kind][event.key] = { count: event.count, cap, display: `${label} ${event.count} of ${cap}` };
+      loop_events.push({ ...event, display: `${label} ${event.count} of ${cap}` });
+    }
+  }
+  return { ...run, counts, loop_events };
+}
+export function recordCount(run, kind, key, count) {
+  if (run) appendFileSync(`${file(run.id)}.counts`, `${JSON.stringify({ kind, key, count })}\n`);
+}
+export function recordRefine(path, output) {
+  const run = listRuns().find((r) => r.files.some((f) => resolve(f) === resolve(path)));
+  if (run) {
+    appendFileSync(`${file(run.id)}.counts`, `${JSON.stringify(output ? { kind: 'file', path: resolve(output) } : { kind: 'refine' })}\n`);
+  }
+  return run;
+}
 export function listRuns() {
   let names;
   try { names = readdirSync(root()); } catch (e) { if (e.code === 'ENOENT') return []; throw e; }

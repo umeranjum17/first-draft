@@ -57,7 +57,7 @@ export function staticExport(html, { script = false } = {}) {
 
 // logo: a logo option (logo.mjs): the engine writes logo/*.svg, logo/palette.json and a brand sheet; logo.idea is the concept's one line
 // and logo.kind its kind of mark, which the host writes into the sheet, and on refine or a redo logo.files are the option's files.
-export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets, references = [], referenceBrief, redesignPages, logo, review }) {
+export async function make({ prompt, agent, model, timeoutMs, direction, seed, screens, assets, references = [], referenceBrief, redesignPages, logo, review, onFollowup }) {
   if (screens?.length) prompt += `\nRequired screens/pages: ${screens.join(', ')}. Include every named screen, with distinct ids and links between them.`;
   const { generateViaAgent, composeSystemPrompt, collectResourceManifest, makeDoneTool, buildStandaloneDocument } = await engine();
   const key = (path) => path.trim().replace(/\\/g, '/').split('/').filter((p) => p && p !== '.').join('/') || '.';
@@ -203,6 +203,7 @@ export async function make({ prompt, agent, model, timeoutMs, direction, seed, s
       const ended = await generateViaAgent({ ...input, prompt: next, history }, deps).then(() => null, (e) => e);
       if (failed.signal.aborted || (ended && ended.code !== 'GENERATION_INCOMPLETE')) return ended ?? used;
       if (current() || again === ASK_AGAIN) return used; // a version passed done and is still the source: the engine's complaint about a later done on another file leaves it as it was
+      onFollowup?.(again + 1);
       const path = (lastErrors && lastDone) || verified?.path || entry;
       history.push({ role: 'user', content: next }, { role: 'assistant', content: [{ type: 'text', text: ended?.message ?? 'I stopped before done passed.' }] });
       next = `${lastErrors ? `done(path="${path}") still fails: ${lastErrors}` : `done(path="${path}") has not passed yet.`}\nThe workspace files are as you left them. Fix this in the files, then call done(path="${path}") again.`;

@@ -37,7 +37,7 @@ import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
 import { polish, polishFeedback, roundCap } from './polish.mjs';
-import { startRun, updateRun, finishRun, failRun, loadRun, listRuns, observedRun } from './run-record.mjs';
+import { startRun, updateRun, finishRun, failRun, loadRun, listRuns, observedRun, recordCount, recordRefine } from './run-record.mjs';
 
 const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
 const PICK = 'an optional preferred route and model with `first-draft-axi init --agent byokit:<route> --model <model>`';
@@ -164,15 +164,20 @@ const prepareReferences = async (values, prompt, c, images = [], inherited = nul
 // A logo option (a sheet with its .logo/ folder) is refined with its logo files, and the new option gets its own folder.
 const refineHtml = async (seed, change, inherited, { from, to } = {}) => {
   const c = await agentOrThrow();
+  const run = from && recordRefine(from);
+  const onFollowup = (n) => recordCount(run, 'done_followups', `refine:${basename(to)}`, n);
   try {
     const logo = from && readLogo(from, seed);
     if (logo) {
-      const made = await make({ prompt:change,...c,seed:logo.seed,logo });
+      const made = await make({ prompt:change,...c,seed:logo.seed,logo,onFollowup });
+      recordRefine(from, to);
       writeLogo(to, made.logo, { brief:change, refined_from:from, concept:logo.concept, agent:c.agent, model:c.model });
       return { html:made.html, reference:null, engine:{ agent:c.agent, model:c.model } };
     }
     const refs = await prepareReferences({},change,c,[],inherited);
-    return { html:(await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief })).html, reference:refs.metadata, engine:{ agent:c.agent, model:c.model } };
+    const html = (await make({ prompt:change,...c,seed,references:refs.images,referenceBrief:refs.metadata?.brief,onFollowup })).html;
+    recordRefine(from, to);
+    return { html, reference:refs.metadata, engine:{ agent:c.agent, model:c.model } };
   } catch (e) {
     const error = `${c.agent} (${c.model}) did not refine the design: ${e.message}`;
     throw Object.assign(new Error(error), { shown: { error, help: ['Run `first-draft-axi doctor` in a terminal to check the agent'] } });
@@ -354,7 +359,7 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
   if (screens && (screens.length > 12 || screens.some((s) => !s || s.length > 100))) fail('USAGE', '--screens needs 1-12 comma-separated names, each 1-100 characters');
   if (values.model && !/^[\w][\w./:@+-]*$/.test(values.model)) fail('USAGE', '--model must be a model id without whitespace');
   const outPath = redesign ? join(values.out, 'option-{i}.html') : values.out ?? join(values['out-dir'], 'option-{i}.html');
-  if (command === 'make') {
+  {
     activeRun = startRun(prompt);
     process.on('exit', (code) => { if (activeRun?.health === 'running') failRun(activeRun, `process exited with code ${code}`); });
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { if (activeRun?.health === 'running') updateRun(activeRun, activeRun.state, { health: 'interrupted', error: `interrupted by ${signal}` }); process.exit(signal === 'SIGINT' ? 130 : 143); });
@@ -396,7 +401,9 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
     try { exploration = await exploreImages({ spec: values.explore, count, brief: prompt, dir: resolve(outPath).replace(/[-_]?\{i\}/, '').replace(/\.html?$/i, '') + '.explore' }); }
     catch (e) { fail('ASSETS_FAILED', e.message, [exploreHelp]); }
     if (exploration.provider) process.stderr.write(`${JSON.stringify({ exploration: { provider: exploration.provider, preview: exploration.preview } })}\n`);
-    try { drawn = await drawLogos({ brief: prompt, direction: values.direction && logoDirection(values.direction), count, references: refs.images, explore: exploration.picture, make, ...c }); }
+    let logoCall = 0;
+    const makeLogo = (args) => { const key = `logo-${++logoCall}`; return make({ ...args, onFollowup: (n) => recordCount(activeRun, 'done_followups', key, n) }); };
+    try { drawn = await drawLogos({ onConceptTry: (key, n) => recordCount(activeRun, 'logo_concept_tries', key, n), brief: prompt, direction: values.direction && logoDirection(values.direction), count, references: refs.images, explore: exploration.picture, make: makeLogo, ...c }); }
     catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not make the logo: ${e.message}`, ['Run `first-draft-axi doctor`']); }
     tokens_in += drawn.tokens_in; tokens_out += drawn.tokens_out;
     // The baseline the critic compared every finished mark with stays beside the options (not one of them) for review.
@@ -419,7 +426,7 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
   const directionOf = (i) => logo ? values.direction ?? null : values.direction ?? values.style ?? planned?.directions[i].text;
   // A new option is one page from one call (draft.mjs); generated images and --engine use the multi-turn engine.
   const engine = assetSession || values.engine;
-  const build = (i, numbered) => (redesign ? makeRedesign : engine ? make : draft)({ prompt, ...c, screens, assets: assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) }, redesignPages: inventory?.pages, sources: inventory && resolve(values.out, 'sources'), screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction: directionOf(i) });
+  const build = (i, numbered) => (redesign ? makeRedesign : engine ? make : draft)({ prompt, ...c, screens, assets: assetSession && { ...assetSession, generate: (request) => assetSession.generate(request, numbered) }, onFollowup: (n) => recordCount(activeRun, 'done_followups', String(i + 1), n), onTry: (kind, key, n) => recordCount(activeRun, kind, `${i + 1}:${key}`, n), redesignPages: inventory?.pages, sources: inventory && resolve(values.out, 'sources'), screenAttemptsUsed:Number(values['used-screen-attempts']??0), planAttemptsUsed:Number(values['used-plan-attempts']??0), references:refs.images, referenceBrief:refs.metadata?.brief, diagnostics:join(dirname(resolve(numbered)),'writer-'+basename(numbered,'.html')), direction: directionOf(i) });
   // The default one-call options are independent, so they are drawn and judged OPTIONS_AT_ONCE at a time, and the critic's plain page is written
   // beside them. A logo's options were drawn already; redesign pages, the engine loop (--engine) and generated assets (paid, one budget) keep their order.
   const slots = [], stages = {}; // stages: the seconds each kind of work took, summed over the options (the critic reports its own)
@@ -553,7 +560,9 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
   let refs, logo;
   try { logo = readLogo(resolve(file), seed); } catch (e) { fail('NO_OPTIONS', `cannot read the logo files of ${file}: ${e.message}`, ['Pass a logo option file made by `first-draft-axi logo`, with its .logo folder beside it']); }
   try { refs = logo ? { images, tokens_in:0, tokens_out:0 } : await prepareReferences(values,change,c,images,readOptionReferences(file)); } catch(e) { fail('REFERENCE_FAILED',e.message,[referenceHelp]); }
-  try { made = await make({ prompt:change,...c,seed:logo?.seed ?? seed,logo,references:refs.images,referenceBrief:refs.metadata?.brief }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
+  const refineRun = recordRefine(file);
+  const onFollowup = (n) => recordCount(refineRun, 'done_followups', `refine:${basename(values.out)}`, n);
+  try { made = await make({ prompt:change,...c,onFollowup,seed:logo?.seed ?? seed,logo,references:refs.images,referenceBrief:refs.metadata?.brief }); } catch (e) { fail('MAKE_FAILED', `${c.agent} (${c.model}) did not refine the design: ${e.message}`, ['Run `first-draft-axi doctor`']); }
   const out = resolve(values.out);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, made.html);
@@ -567,6 +576,7 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
   let competitors = null;
   try { competitors = logo ? null : readCompetitors(file); } catch (e) { fail('REFERENCE_FAILED', `the market comparison of ${file} cannot be read: ${e.message}`, [referenceHelp]); }
   writeCompetitors(out, competitors);
+  recordRefine(file, out);
   const written = logo && writeLogo(out, made.logo, { brief: change, refined_from: resolve(file), concept: logo.concept, agent: c.agent, model: c.model });
   console.log(JSON.stringify({ refined: { from: resolve(file), file: out, bytes: Buffer.byteLength(made.html), agent: c.agent, model: c.model, seconds: Math.round((Date.now() - started) / 1000), tokens_in: made.tokens_in + refs.tokens_in, tokens_out: made.tokens_out + refs.tokens_out, ...(written && { logo_dir: written.dir, checks: written.logo.checks }) },
     ...(made.remote.length && { blocked_remote: made.remote }),

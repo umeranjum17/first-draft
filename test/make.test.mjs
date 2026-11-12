@@ -167,3 +167,18 @@ test('the view sends the Next brief to the person\'s agent and the refined optio
   assert.equal((await send({ option: 1, change: 'again' })).status, 200); // a second send never overwrites the first
   assert.deepEqual(await options(), ['a-1.html', 'a-1-refined.html', 'a-1-refined-2.html']);
 });
+
+test('a make whose done never passes records each follow-up and stops at three', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-counts-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const seen = [], server = await standIn(seen, null, true, 'missing.html');
+  t.after(() => server.close());
+  const env = { ...process.env, HOME: dir, XDG_CONFIG_HOME: dir, XDG_DATA_HOME: dir, TMPDIR: dir, FIRST_DRAFT_HOME: dir, OPENCODE_API_KEY: 'test-key', FIRST_DRAFT_TEST_BYOKIT_BASE: `http://127.0.0.1:${server.address().port}` };
+  const run = (...args) => promisify(execFile)(process.execPath, [CLI, ...args], { cwd: dir, env });
+  await run('init', '--agent', 'byokit:opencode-go', '--model', 'muse-spark-1.3-contributor');
+  await run('make', 'Notes for Umer', '--engine', '--direction', 'calm', '--options', '1', '--out', join(dir, 'notes.html')).catch(() => {});
+  const status = JSON.parse((await run('status')).stdout);
+  assert.deepEqual(status.loop_events.filter((e) => e.kind === 'done_followups').map((e) => e.display), ['follow-up 1 of 3', 'follow-up 2 of 3', 'follow-up 3 of 3']);
+  assert.equal(status.counts.done_followups['1'].count, 3);
+  if (process.env.DONE_DONE_EVIDENCE_ROOT) writeFileSync(join(process.env.DONE_DONE_EVIDENCE_ROOT, 'failing-done-counts.json'), JSON.stringify(status, null, 2));
+});

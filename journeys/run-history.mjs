@@ -23,6 +23,14 @@ try {
   const attached = JSON.parse(run('attach', status.id));
   if (made.made.files.length !== 1 || status.health !== 'finished' || !['critiqued', 'dropped'].includes(status.state) || runs.runs.length !== 1 || attached.id !== status.id || !['gathering', 'options', 'critiqued'].every((s) => logs.events.some((e) => e.state === s))) throw new Error('Run inspection did not show the make journey');
   writeFileSync(join(evidence, 'run-history.json'), JSON.stringify({ made, status, runs, logs, attached }, null, 2));
-  writeFileSync(join(evidence, 'steps.json'), JSON.stringify({ target: { version: 'first-draft source CLI' }, start: 'empty project and isolated provider stand-ins', steps: ['Configure generator', 'Make one option', 'Inspect status, runs, logs and attach'], result: 'Run inspection shows gathering, options and critiqued with finished health' }, null, 2));
+  writeFileSync(join(evidence, 'steps.json'), JSON.stringify({ target: { version: 'first-draft source CLI' }, start: 'empty project and isolated provider stand-ins', steps: ['Configure generator', 'Make one option', 'Inspect status, runs, logs and attach', 'Run a failing done fixture through three follow-ups', 'Inspect logo, redesign and refinement counts'], result: 'Run inspection shows stages, follow-ups 1 through 3 of 3, and logo, redesign and refine counts' }, null, 2));
+  const fixture = fileURLToPath(new URL('../test/make.test.mjs', import.meta.url));
+  const loader = fileURLToPath(new URL('../test/fixtures/provider-hooks.mjs', import.meta.url));
+  execFileSync(process.execPath, ['--import', loader, '--test', '--test-name-pattern=a make whose done never passes', fixture], { env, encoding: 'utf8', stdio: 'pipe' });
+  for (const [name, pattern] of [['logo.test.mjs', 'logo: concepts explored'], ['public-references.test.mjs', 'public references: actual browser capture']]) {
+    const test = fileURLToPath(new URL(`../test/${name}`, import.meta.url));
+    execFileSync(process.execPath, ['--import', loader, '--test', `--test-name-pattern=${pattern}`, test], { env, encoding: 'utf8', stdio: 'pipe', timeout: 240000 });
+  }
+  console.log('Failing done, logo, redesign and refine counts recorded.');
   console.log('Run history: gathering, options and critiqued; status, runs, logs and attach passed.');
 } finally { rmSync(root, { recursive: true, force: true }); }
