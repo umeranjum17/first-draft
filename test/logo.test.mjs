@@ -203,6 +203,8 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   const reference = join(dir, 'reference.png');
   await promisify(execFile)('convert', ['-size', '3x2', 'xc:purple', reference]);
   const result = JSON.parse((await run(['logo', brief, '--out', out, '--options', '3', '--ref', reference])).stdout), { made } = result;
+  const logoStatus = JSON.parse((await run(['status'])).stdout);
+  assert.ok(Object.values(logoStatus.counts.logo_concept_tries).some((x) => x.count === 2 && x.cap === 3));
   assert.equal(made.judge.agent, 'byokit:codex');
   assert.notEqual(made.judge.model, made.model);
   assert.equal(made.files.length, 3);
@@ -345,11 +347,14 @@ test('logo: concepts explored and critiqued at 16 and 32 px become options with 
   assert.ok(!readFileSync(join(dir, 'tea-2.html'), 'utf8').includes(readFileSync(join(dir, 'tea-round.logo', 'mark.svg')).toString('base64')), 'the option it came from is untouched');
 
   // The Studio's brief runs the same refine: the new option joins the design with its own logo folder.
-  view = spawn(process.execPath, [CLI, 'view', out, '--host', '127.0.0.1', '--port', '0'], { env });
+  view = spawn(process.execPath, [CLI, 'view', out, '--host', '127.0.0.1', '--port', '0'], { env, cwd: dir });
   const url = JSON.parse(await new Promise((ok) => view.stdout.once('data', ok))).viewing.url;
   const sent = await fetch(`${url}refine`, { method: 'POST', headers: { 'content-type': 'application/json', origin: new URL(url).origin }, body: JSON.stringify({ option: 2, change: 'a rounder leaf' }) });
   assert.equal(sent.status, 200, await sent.clone().text());
   assert.deepEqual(await sent.json(), { option: { n: 4, label: 'tea-2-refined', file: 'tea-2-refined.html' }, engine: {agent:'byokit:opencode-go',model:'muse-spark-1.3-contributor'} });
   assert.notEqual(readFileSync(join(dir, 'tea-2-refined.logo', 'mark.svg'), 'utf8'), readFileSync(join(dir, 'tea-2.logo', 'mark.svg'), 'utf8'));
   assert.ok(existsSync(join(dir, 'tea-2-refined.logo', 'favicon.ico')));
+  const finalStatus = JSON.parse((await run(['status', logoStatus.id])).stdout);
+  assert.equal(finalStatus.counts.refine_calls, 2);
+  if (process.env.DONE_DONE_EVIDENCE_ROOT) writeFileSync(join(process.env.DONE_DONE_EVIDENCE_ROOT, 'logo-counts.json'), JSON.stringify(finalStatus, null, 2));
 });

@@ -37,6 +37,8 @@ Requires Node **22.18+**, Chrome/Chromium, a usable AI generator and an independ
 
 Prefer Claude? Use `--agent byokit:claude --model claude-sonnet-5-5` in step 2 with your signed-in Claude CLI. `first-draft-axi doctor` checks readiness, sends one tiny Codex turn to confirm the model is served, and names the resolved engine. [Other routes](#models).
 
+Each `make` saves a run in `.first-draft/runs/` in the current project. Run `first-draft-axi status` to see its stage and health, `runs` to list runs, `logs [run-id]` to read stage events, or `attach [run-id]` to follow a running make. These commands default to the latest run; an interrupted or failed run retains its last stage and reports its health separately.
+
 ## Why first-draft?
 
 | Instead of… | You get… |

@@ -2,6 +2,9 @@
 # The app name finds this repo's evidence and receipts from every checkout.
 app: "first-draft"
 journeys:
+  run-history:
+    command: node journeys/run-history.mjs
+    timeout: 5m
   redesign:
     command: node journeys/redesign.mjs
     timeout: 10m

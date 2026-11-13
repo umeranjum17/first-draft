@@ -103,6 +103,7 @@ else {
   for(const shot of manifest.screenshots){const b=readFileSync(join(captured.cache,'..',shot.file));assert.equal(b.readUInt32BE(16),shot.width);assert.equal(b.readUInt32BE(20),shot.height);}
   const redesignOut=join(project,'redesigned');
   const redesigned=JSON.parse((await run('redesign',origin+'/product.html','Make the projects clearer','--no-references','--out',redesignOut,'--max-pages','2')).stdout);
+  const redesignStatus=JSON.parse((await run('status')).stdout);assert.equal(redesignStatus.counts.plan_tries['1:plan'].cap,2);assert.ok(Object.values(redesignStatus.counts.screen_tries).every(x=>x.cap===3));assert.ok(Object.keys(redesignStatus.counts.screen_tries).length);if(process.env.DONE_DONE_EVIDENCE_ROOT)writeFileSync(join(process.env.DONE_DONE_EVIDENCE_ROOT,'redesign-counts.json'),JSON.stringify(redesignStatus,null,2));
   await promisify(execFile)(process.execPath,['--input-type=module','-e',`import assert from 'node:assert/strict';import {checkRedesign} from ${JSON.stringify(new URL('../src/redesign-check.mjs',import.meta.url).href)};await assert.rejects(checkRedesign({html:'<h1>Umer</h1>',agent:'byokit:claude',model:'claude-opus-5-5',timeoutMs:1}),/semantic review timed out after 1 ms/);`],{env,cwd:project,timeout:30000,maxBuffer:100000});
   assert.equal(redesigned.made.judge.agent,'byokit:codex');assert.notEqual(redesigned.made.judge.model,redesigned.made.model);
   assert.equal(redesigned.made.files.length,1);
