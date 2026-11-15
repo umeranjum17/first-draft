@@ -21,7 +21,7 @@ test('post copies the options to the board, links each to its Play route in a vi
   mkdirSync(join(dir, 'proj/.sign-off/mocks'), { recursive: true });
   mkdirSync(join(dir, 'proj/design'));
   for (const n of [1, 2]) writeFileSync(join(dir, `proj/design/x-${n}.html`), MOCK(`Option ${n}`));
-  writeFileSync(join(dir, 'bin/sign-off-axi'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${dir}/args"\n`);
+  writeFileSync(join(dir, 'bin/sign-off-axi'), `#!/bin/sh\nprintf '%s\\n' "$@" > "${dir}/args"\nprintf '{"items":[{"key":"pick-one","title":"Pick one","type":"design"}]}' > "$2"\n`);
   chmodSync(join(dir, 'bin/sign-off-axi'), 0o755);
   const port = await freePort();
   const env = { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, FIRST_DRAFT_VIEW_HOST: '127.0.0.1', FIRST_DRAFT_VIEW_PORT: String(port) };
@@ -62,4 +62,43 @@ test('post copies the options to the board, links each to its Play route in a vi
   assert.ok(evArgs.includes('shot.png') && evArgs[evArgs.indexOf('--about') + 1].includes(`Option 2 http://127.0.0.1:${port}/#/o/2`));
   for (const f of ['--recommend', '--option', '--mock', '--link', '--tradeoff', '--default']) assert.ok(!evArgs.includes(f), `no ${f} on an evidence card`);
   assert.equal(JSON.parse((await run(['post', 'design/x.html', '--title', 'T'], { cwd: join(dir, 'proj'), env })).stdout).error.code, 'USAGE', 'a Decide post still needs --recommend');
+});
+
+test('a board answer moves a posted run to picked, shown by status, runs, logs and attach', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'first-draft-pick-'));
+  let pid;
+  t.after(() => { try { process.kill(pid); } catch {} rmSync(dir, { recursive: true, force: true }); });
+  const proj = join(dir, 'proj');
+  mkdirSync(join(dir, 'bin'));
+  mkdirSync(join(proj, 'design'), { recursive: true });
+  mkdirSync(join(proj, '.first-draft/runs'), { recursive: true });
+  mkdirSync(join(proj, '.sign-off'));
+  for (const n of [1, 2]) writeFileSync(join(proj, `design/x-${n}.html`), MOCK(`Option ${n}`));
+  // The stand-in for sign-off-axi: `post` files the card; `answers --json` prints what the board saved ({} until the user answers).
+  writeFileSync(join(dir, 'bin/sign-off-axi'), `#!${process.execPath}\nimport fs from 'node:fs';\nconst [cmd, board] = process.argv.slice(2), saved = board.replace(/[^/]*$/, 'answers.json');\nif (cmd === 'post') fs.writeFileSync(board, JSON.stringify({ schema: 2, items: [{ key: 'pick-one', title: process.argv[process.argv.indexOf('--title') + 1], type: 'design' }] }));\nelse console.log(fs.existsSync(saved) ? fs.readFileSync(saved, 'utf8') : '{}');\n`);
+  chmodSync(join(dir, 'bin/sign-off-axi'), 0o755);
+  // A make run that has finished and passed its critique, as `make` leaves it.
+  const id = '11111111-2222-3333-4444-555555555555', at = '2026-11-12T10:00:00.000Z';
+  writeFileSync(join(proj, `.first-draft/runs/${id}.json`), JSON.stringify({ id, state: 'critiqued', health: 'finished', pid: 1, started_at: at, brief: 'Notes', files: [join(proj, 'design/x-1.html'), join(proj, 'design/x-2.html')], events: [{ at, state: 'critiqued', health: 'finished' }] }));
+  const port = await freePort();
+  const env = { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, FIRST_DRAFT_VIEW_HOST: '127.0.0.1', FIRST_DRAFT_VIEW_PORT: String(port) };
+  const cli = async (...args) => JSON.parse((await run(args, { cwd: proj, env })).stdout);
+
+  const posted = await cli('post', 'design/x-1.html', 'design/x-2.html', '--title', 'Pick one', '--recommend', 'a', '--board', '.sign-off/decisions.json', '--option', 'a=Calm', '--option', 'b=Bold');
+  pid = posted.posted.view.pid;
+  const waiting = await cli('status', id);
+  assert.equal(waiting.state, 'posted');
+  assert.equal(waiting.posted.key, 'pick-one');
+  assert.equal((await cli('runs')).runs[0].state, 'posted', 'no answer yet: the run keeps waiting');
+
+  writeFileSync(join(proj, '.sign-off/answers.json'), JSON.stringify({ 'pick-one': { answer: 'b', label: 'Bold', close: 'done', at: '2026-11-12T12:00:00.000Z', note: 'Bolder.' } }));
+  const picked = await cli('status', id);
+  assert.equal(picked.state, 'picked');
+  assert.deepEqual(picked.pick, { option: 'b', label: 'Bold', at: '2026-11-12T12:00:00.000Z', note: 'Bolder.' });
+  assert.equal((await cli('runs')).runs[0].pick.option, 'b');
+  assert.deepEqual((await cli('logs', id)).events.map((e) => e.state), ['critiqued', 'posted', 'picked']);
+  assert.equal((await cli('attach', id)).state, 'picked');
+
+  writeFileSync(join(proj, '.sign-off/answers.json'), JSON.stringify({ 'pick-one': { answer: 'z', label: 'Z', close: 'done', at } }));
+  assert.equal((await cli('status', id)).state, 'picked', 'a picked run is final: a later answer does not move it');
 });

@@ -17,6 +17,7 @@ import { appEntry, captureSources, readSources, writeSources } from './reference
 import { searchQueries, searchReferences } from './reference-search.mjs';
 import { ReferenceNetwork } from './reference-network.mjs';
 import { captureReference, optionReferenceImages, readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
+import { writeDirection } from './direction.mjs';
 import { make, engineDoctor } from './make.mjs';
 import { planDirections } from './direct.mjs';
 import { OPTIONS_AT_ONCE, draft } from './draft.mjs';
@@ -37,9 +38,10 @@ import { exploreHelp, exploreImages } from './logo-images.mjs';
 import { VERSION } from './version.mjs';
 import { benchmark } from './benchmark.mjs';
 import { polish, polishFeedback, roundCap } from './polish.mjs';
-import { startRun, updateRun, finishRun, failRun, loadRun, listRuns, observedRun, recordCount, recordRefine } from './run-record.mjs';
+import { startRun, updateRun, finishRun, failRun, loadRun, listRuns, observedRun, recordCount, recordRefine, recordPosted } from './run-record.mjs';
+import { settlePick } from './pick.mjs';
 
-const DEFAULT_MODEL = { 'byokit:minimax:key': 'MiniMax-M3.1-Flash-Preview' };
+const DEFAULT_MODEL = { 'byokit:claude': 'claude-sonnet-5-5' };
 const PICK = 'an optional preferred route and model with `first-draft-axi init --agent byokit:<route> --model <model>`';
 const ASK = `Ask the user ${PICK}`;
 const HOME = () => process.env.FIRST_DRAFT_HOME || join(homedir(), '.first-draft');
@@ -248,15 +250,15 @@ try {
 if (['status', 'runs', 'logs', 'attach'].includes(command)) {
   const { positionals } = flags(rest, {});
   if (positionals.length > 1 || (command === 'runs' && positionals.length)) fail('USAGE', `${command} accepts ${command === 'runs' ? 'no arguments' : 'at most one run id'}`);
-  if (command === 'runs') console.log(JSON.stringify({ runs: listRuns().map(observedRun) }));
+  if (command === 'runs') console.log(JSON.stringify({ runs: await Promise.all(listRuns().map((r) => settlePick(observedRun(r)))) }));
   else {
     const id = positionals[0] ?? listRuns()[0]?.id;
     if (!id) fail('NO_RUN', 'No runs in this project');
-    const show = () => observedRun(loadRun(id));
+    const show = () => settlePick(observedRun(loadRun(id)));
     if (command === 'attach') {
       let last = '';
-      for (;;) { const run = show(), line = JSON.stringify(run); if (line !== last) console.log(line); last = line; if (run.health !== 'running') break; await new Promise((r) => setTimeout(r, 500)); }
-    } else { const run = show(); console.log(JSON.stringify(command === 'logs' ? { id, events: run.events } : run)); }
+      for (;;) { const run = await show(), line = JSON.stringify(run); if (line !== last) console.log(line); last = line; if (run.health !== 'running') break; await new Promise((r) => setTimeout(r, 500)); }
+    } else { const run = await show(); console.log(JSON.stringify(command === 'logs' ? { id, events: run.events } : run)); }
   }
 } else if (command === 'check') {
   const { values, positionals } = flags(rest, { data: { type: 'string' } });
@@ -461,6 +463,7 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
       writeFileSync(out, made.html);
       if (made.source_files) writeSource(out, made.source_files); // the source the page was drawn from, readable beside it
       if (film) film.dir = writeMotion(out, film, critique.motion); // the frame series the judge read, beside the option for the view
+      if (planned) writeDirection(out, planned.directions[i]); // the direction for this option, beside it for the view and board
       writeOptionReferences(out,refs.metadata);
       writeCompetitors(out,refs.competitors);
       writeSources(out,refs.sources);
@@ -528,6 +531,7 @@ if (['status', 'runs', 'logs', 'attach'].includes(command)) {
   const labels = (values.option ?? []).map((o) => o.replace(/^[a-f]=/, ''));
   try {
     const p = await post({ files, name: basename(positionals[0], extname(positionals[0])), title: values.title, labels, tradeoff: values.tradeoff, key: values.key, recommend: values.recommend, evidence: values.evidence, media: values.media, board: values.board, host: values.host, port });
+    if (p.key) recordPosted(files[0], { board: p.board, key: p.key, options: p.options.map(({ option, label }) => ({ option, label })) });
     console.log(JSON.stringify({ posted: { board: p.board, view: p.view, options: p.options }, sign_off: p.sign_off, help: ['Each option card links to its Play route in the first-draft view; the view serves until it is stopped'] }));
   } catch (e) {
     if (!e.code) throw e;
