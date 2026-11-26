@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
 import { readCompetitors, writeCompetitors } from './reference-competitors.mjs';
 import { readSources } from './reference-sources.mjs';
+import { readDirection } from './direction.mjs';
 import { VERSION } from './version.mjs';
 import { polishFeedback, roundCap } from './polish.mjs';
 import { motionDir, readMotion } from './motion.mjs';
@@ -110,7 +111,10 @@ const readBody = (req) => new Promise((ok, fail) => {
 
 // `refine(seed, change)` makes the html of a new option from an option's html; the view runs no model of its own. A failure's `shown` is { error, help } worded for the person.
 export async function serve({ files, name, host, advertise = host, port, framePort, comments, refine, polish }) {
-  const options = files.map((file, i) => ({ n: i + 1, label: basename(file, extname(file)), file }));
+  const options = files.map((file, i) => {
+    const direction = readDirection(file);
+    return { n: i + 1, label: direction?.name ?? basename(file, extname(file)), file, ...(direction && { direction }) };
+  });
   const { buildPreviewDocument } = await import('../dist/engine.mjs');
   let viewOrigin, frameOrigin;
   const send = (res, status, type, body, headers = {}) => { res.writeHead(status, { ...COMMON, 'content-type': type, ...headers }); res.end(body); };

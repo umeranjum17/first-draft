@@ -2,12 +2,13 @@
 // option's Play route in the running view (started here when it is not up) as that option's --link (sign-off-axi 0.5.0+, a tappable
 // Open under its mock) and, as the fallback, in the --tradeoff text: the card's iframe sandbox blocks a link inside the mock.
 import { execFile, spawn } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { viewHost } from './view.mjs';
 import { readOptionReferences, writeOptionReferences } from './reference-capture.mjs';
+import { readDirection } from './direction.mjs';
 
 const CLI = fileURLToPath(new URL('./cli.mjs', import.meta.url));
 const LETTERS = 'abcdef'; // sign-off's design card shows up to 6 options
@@ -62,6 +63,14 @@ async function ensureView({ files, host, port }) {
   return { url: r.viewing.url, started: true, pid: child.pid };
 }
 
+// The design card's key as the board stored it: --key when given, else the one sign-off made from the title (the newest design card with it).
+const cardKey = (boardFile, title, given) => {
+  if (given) return given;
+  const item = JSON.parse(readFileSync(boardFile, 'utf8')).items.filter((i) => i.title === title && i.type === 'design').at(-1);
+  if (!item) throw new PostError('POST_FAILED', `sign-off-axi posted, but the board holds no design card titled "${title}"`, ['Run `sign-off-axi answers` to find the card']);
+  return item.key;
+};
+
 // evidence: file the options as an Evidence card (title, note with each Play url, --media), which asks no pick: journeys, tests and demos.
 export async function post({ files, name, title, labels = [], tradeoff, key, recommend, evidence, media = [], board, host: hostFlag, port }) {
   if (files.length > LETTERS.length) throw new PostError('USAGE', `a sign-off design card shows up to ${LETTERS.length} options; ${files.length} found`, ['Post a folder of at most 6 options']);
@@ -76,14 +85,16 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
   const dir = join(dirname(boardFile), 'mocks', name);
   if (!evidence) mkdirSync(dir, { recursive: true });
   const options = files.map((file, i) => {
+    const direction = readDirection(file);
+    const defaultLabel = direction?.name || `Option ${i + 1}`;
     const link = `${new URL(view.url).origin}/#/o/${i + 1}/play`;
     const variants = { canvas: `${new URL(view.url).origin}/#/o/${i + 1}`, desktop: `${link}/desktop`, phone: `${link}/phone` };
-    if (evidence) return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, link, ...variants };
+    if (evidence) return { option: LETTERS[i], label: labels[i] || defaultLabel, link, ...variants };
     const copy = join(dir, `option-${i + 1}.html`);
     if (resolve(file) === copy) throw new PostError('USAGE', `${file} is already the board copy; post the original option files`);
     copyFileSync(file, copy);
     writeOptionReferences(copy, readOptionReferences(file));
-    return { option: LETTERS[i], label: labels[i] || `Option ${i + 1}`, mock: relative(dirname(boardFile), copy), link, ...variants };
+    return { option: LETTERS[i], label: labels[i] || defaultLabel, mock: relative(dirname(boardFile), copy), link, ...variants };
   });
   // The canvas url shows phone 390 and desktop 1280 side by side; Play (the Open link under each mock) runs one. The board clips long text, so the one-device urls stay in this command's JSON.
   const open = `Phone and desktop side by side: ${options.map((o) => `${o.label} ${o.canvas}`).join(' · ')}`;
@@ -92,7 +103,7 @@ export async function post({ files, name, title, labels = [], tradeoff, key, rec
     ...options.flatMap((o) => ['--option', `${o.option}=${o.label}`, '--mock', `${o.option}=${o.mock}`, '--link', `${o.option}=${o.link}`])];
   try {
     const { stdout } = await promisify(execFile)('sign-off-axi', args, { maxBuffer: 1e7 });
-    return { board: boardFile, view, options, sign_off: redact(stdout.trim()) };
+    return { board: boardFile, view, options, sign_off: redact(stdout.trim()), key: evidence ? undefined : cardKey(boardFile, title, key) };
   } catch (e) {
     throw new PostError('POST_FAILED', `sign-off-axi post failed: ${redact((e.stderr || e.stdout || e.message).trim())}`, ['Run `sign-off-axi doctor`']);
   }

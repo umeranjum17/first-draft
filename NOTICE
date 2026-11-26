@@ -38,3 +38,7 @@ The planned directions and design critic take ideas, not text or code, from
 anthropics/skills frontend-design (https://github.com/anthropics/skills),
 pbakaus/impeccable (https://github.com/pbakaus/impeccable, Apache-2.0) and
 abi/screenshot-to-code (https://github.com/abi/screenshot-to-code, MIT).
+
+The multi-option naming, axis, cost table and keyboard switching take ideas
+from emilkowalski/skills /prototype at 715c1807e08c497cfd1dc4feb450a2a3300ef2a9
+(https://github.com/emilkowalski/skills, MIT License), no text or code copied.
